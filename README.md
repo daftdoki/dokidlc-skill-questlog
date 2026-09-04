@@ -14,6 +14,59 @@ not open, start, close, skip, or abandon anything by itself. Those happen
 only when you ask, and Claude Code prompts you to approve the exact command
 each time.
 
+## How work moves
+
+Three states. The creator moves work between them; the agent works inside
+`active`.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> backlog: quest new
+    backlog --> active: quest start
+    active --> done: quest close ID review
+    backlog --> abandoned: quest abandon
+    active --> abandoned: quest abandon
+    done --> [*]
+    abandoned --> [*]
+```
+
+Inside `active`, a quest walks five stages in order and a chore walks the
+last two. Each stage is drafted by the agent and closed by the creator.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    goal --> research: close
+    research --> design: close or skip
+    design --> implement: close
+    implement --> review: close
+    review --> [*]: close, state becomes done
+    state "chore starts here" as c
+    c --> implement
+```
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    state "one stage" as stage {
+        direction LR
+        [*] --> drafted: agent writes the file, runs quest draft
+        drafted --> closed: creator says so, agent runs quest close
+    }
+```
+
+| Stage | Produces | Who drives it |
+|---|---|---|
+| goal | `goal.md`, what you want and how you'll know | agent interviews you |
+| research | `research.md`, options with a leaning; skippable | agent surveys |
+| design | `design.md`, the plan to build from | agent asks, you decide |
+| implement | commits | agent builds |
+| review | your read against the done-when | you |
+
+Abandoned keeps every file and leaves the log. Done leaves the log too.
+The log shows only `backlog` and `active`.
+
 ## Usage
 
 Talk to the agent. It runs the commands.
@@ -35,66 +88,6 @@ Talk to the agent. It runs the commands.
 - "Abandon the mDNS quest, we're going with the bridge's own discovery."
   `quest abandon 2609041432-7k "we're going with the bridge's own discovery"`.
   The files stay; the entry leaves the log.
-
-### A quest, end to end
-
-One feature, from idea to done, as the conversation and the log would show
-it. You speak; the agent drafts and runs the commands; Claude Code prompts
-you to approve each creator verb.
-
-**Day 1.** You: "Open a quest for discovering the bridge over mDNS."
-The agent asks two questions, what you want and how you'll know, then
-shows and runs:
-
-```
-quest new "Discover the bridge over mDNS" \
-  --goal "Clients find the bridge without being told its address" \
-  --done-when "A fresh client on the LAN connects with no configuration"
-```
-
-You approve. `quest log` now reads:
-
-```
-- [2609051012-k3](2609051012-k3-discover-the-bridge-over-mdns/) quest backlog goal: Discover the bridge over mDNS
-```
-
-You: "Start it." The agent runs `quest start 2609051012-k3`. State: active,
-stage: goal.
-
-You: "Draft the goal." The agent interviews you about outcomes, writes
-`goal.md` with user stories, runs `quest draft 2609051012-k3 goal`, and
-asks whether the stage is complete. You read it, answer two things it got
-wrong, it fixes them. You: "The goal is complete." It runs
-`quest close 2609051012-k3 goal`. Stage: research.
-
-**Day 2.** You: "Skip research, we know the library." The agent runs
-`quest skip 2609051012-k3 research`. Stage: design.
-
-You: "Draft the design." The agent asks the design questions with a
-recommendation each, records your answers, writes `design.md`, runs
-`quest draft 2609051012-k3 design`, and asks. You: "Design is complete."
-`quest close 2609051012-k3 design`. Stage: implement.
-
-**Day 3.** The agent implements from the design, in commits, recording
-deviations in `design.md` as it goes. When it is done it runs
-`quest draft 2609051012-k3 implement` and asks. You review, ask for one
-change, it makes it. You: "Implement is complete."
-`quest close 2609051012-k3 implement`. Stage: review.
-
-You read the result against the done-when. A fresh client on the LAN
-connects with no configuration. You: "Review is complete."
-`quest close 2609051012-k3 review`. State: done. The entry leaves the
-quest log; the directory and its four documents stay.
-
-The same quest, if it had gone wrong on day 2: "Abandon it, the bridge is
-getting its own discovery in the next firmware." The agent runs
-`quest abandon 2609051012-k3 "the bridge is getting its own discovery in the next firmware"`.
-The directory stays for the record, the entry leaves the log, and picking
-the idea up later means a new quest with a new id.
-
-A chore is the short form of the same thing: "Open a chore to fix the
-volume off-by-one," "start it," the agent fixes it and drafts implement,
-"implement is complete," you check the fix, "review is complete."
 
 ### The commands
 
