@@ -19,41 +19,26 @@ each time.
 Three states. The creator moves work between them; the agent works inside
 `active`.
 
-```mermaid
-stateDiagram-v2
-    direction LR
-    [*] --> backlog: quest new
-    backlog --> active: quest start
-    active --> done: quest close ID review
-    backlog --> abandoned: quest abandon
-    active --> abandoned: quest abandon
-    done --> [*]
-    abandoned --> [*]
+```
+                quest start              quest close ID review
+  ( new ) ──▶ backlog ───────▶ active ─────────────────────▶ done
+                 │                │
+                 │ quest abandon  │ quest abandon
+                 ▼                ▼
+              abandoned        abandoned
 ```
 
 Inside `active`, a quest walks five stages in order and a chore walks the
 last two. Each stage is drafted by the agent and closed by the creator.
 
-```mermaid
-stateDiagram-v2
-    direction LR
-    goal --> research: close
-    research --> design: close or skip
-    design --> implement: close
-    implement --> review: close
-    review --> [*]: close, state becomes done
-    state "chore starts here" as c
-    c --> implement
 ```
+  quest:  goal ──▶ research ──▶ design ──▶ implement ──▶ review ──▶ done
+                    (or skip)                  ▲
+  chore:                                       └── starts here
 
-```mermaid
-stateDiagram-v2
-    direction LR
-    state "one stage" as stage {
-        direction LR
-        [*] --> drafted: agent writes the file, runs quest draft
-        drafted --> closed: creator says so, agent runs quest close
-    }
+  one stage:   [not started] ──▶ [drafted] ──▶ [closed]
+                agent writes the file   creator says so, agent runs
+                and runs quest draft    quest close
 ```
 
 | Stage | Produces | Who drives it |
