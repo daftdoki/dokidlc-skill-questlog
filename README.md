@@ -16,41 +16,19 @@ each time.
 
 ## How work moves
 
-Three states. The creator moves work between them; the agent works inside
-`active`.
+You open a quest or chore. It sits in the backlog until you start it. Then
+it moves through its stages, one at a time: the agent drafts each stage
+and you close it. When you close the last stage it is done. At any point
+you can abandon it; the files stay, it just leaves the log.
 
 ```
-                quest start              quest close ID review
-  ( new ) ──▶ backlog ───────▶ active ─────────────────────▶ done
-                 │                │
-                 │ quest abandon  │ quest abandon
-                 ▼                ▼
-              abandoned        abandoned
+  new ──▶ backlog ──▶ active ──▶ done
+                         │
+                         └──▶ abandoned
+
+  quest stages:  goal ▶ research ▶ design ▶ implement ▶ review
+  chore stages:                             implement ▶ review
 ```
-
-Inside `active`, a quest walks five stages in order and a chore walks the
-last two. Each stage is drafted by the agent and closed by the creator.
-
-```
-  quest:  goal ──▶ research ──▶ design ──▶ implement ──▶ review ──▶ done
-                    (or skip)                  ▲
-  chore:                                       └── starts here
-
-  one stage:   [not started] ──▶ [drafted] ──▶ [closed]
-                agent writes the file   creator says so, agent runs
-                and runs quest draft    quest close
-```
-
-| Stage | Produces | Who drives it |
-|---|---|---|
-| goal | `goal.md`, what you want and how you'll know | agent interviews you |
-| research | `research.md`, options with a leaning; skippable | agent surveys |
-| design | `design.md`, the plan to build from | agent asks, you decide |
-| implement | commits | agent builds |
-| review | your read against the done-when | you |
-
-Abandoned keeps every file and leaves the log. Done leaves the log too.
-The log shows only `backlog` and `active`.
 
 ## Usage
 
