@@ -5,8 +5,8 @@
 # ///
 """Quests and chores with staged review.
 
-A quest runs goal, research, design, implement, review. A chore runs
-implement, review. The agent drafts a stage and asks; the creator closes it.
+A quest runs goal, research, design, plan, implement, review. A chore runs
+plan, implement, review. The agent drafts a stage and asks; the creator closes it.
 Every quest or chore is a directory under docs/quests/ holding quest.md and
 its stage files. The quest log, docs/quests/README.md, is generated.
 
@@ -18,6 +18,7 @@ Usage:
   quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]
   quest start ID                    backlog to active
   quest draft ID STAGE              the stage file is written and awaits review
+                                    stages: goal research design plan implement review
   quest close ID STAGE              the creator accepted the stage; review sets done
   quest skip ID research            the creator waived research
   quest abandon ID "reason"         terminal; files stay, entry leaves the log
@@ -39,7 +40,7 @@ from pathlib import Path
 
 import yaml
 
-FORMAT = 1
+FORMAT = 2
 ROOT_NAME = "docs/quests"
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 # Lowercase alphanumerics without the characters that read alike: 0 1 i l o.
@@ -47,7 +48,7 @@ ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz"
 ID_RE = re.compile(r"^\d{10}-[" + ALPHABET + "]{2}$")
 KINDS = ("quest", "chore")
 STATES = ("backlog", "active", "done", "abandoned")
-STAGES = {"quest": ("goal", "research", "design", "implement", "review"), "chore": ("implement", "review")}
+STAGES = {"quest": ("goal", "research", "design", "plan", "implement", "review"), "chore": ("plan", "implement", "review")}
 SLUG_MAX = 40
 GENERATED_HEAD = "# Quest log\n"
 HEADER_RE = re.compile(r"<!-- questlog format (\d+), written by questlog (\S+) on (\S+) -->")
@@ -233,7 +234,16 @@ def check_format(root: Path) -> None:
 
 
 def migrate(root: Path, from_format: int) -> None:
-    """Format 1 is the first. Older only means a missing header, so rewriting the log is the migration."""
+    """Bring every quest.md up to FORMAT, then rewrite the log."""
+    if from_format < 2:
+        # format 2 added the plan stage between design and implement. Work that
+        # had already reached implement never had a plan stage; record it as
+        # skipped so it does not appear to be waiting there.
+        stamp = now_iso()
+        for d, fm in load_quests(quests_dir(root)):
+            reached_implement = any(k.startswith("implement_") for k in fm) or fm.get("state") in ("done", "abandoned")
+            if reached_implement and not any(k.startswith("plan_") for k in fm):
+                update_quest(d, {"plan_skipped": stamp, "plan_note": "predates the plan stage (format 2)"})
     write_log(root)
     print(f"quest: migrated docs/quests from format {from_format} to {FORMAT}", file=sys.stderr)
 
@@ -323,7 +333,7 @@ def cmd_doctor(args: argparse.Namespace) -> None:
 
 # --- transitions ------------------------------------------------------------
 
-STAGE_FILES = {"goal": "goal.md", "research": "research.md", "design": "design.md"}
+STAGE_FILES = {"goal": "goal.md", "research": "research.md", "design": "design.md", "plan": "plan.md"}
 
 
 def update_quest(d: Path, changes: dict) -> dict:

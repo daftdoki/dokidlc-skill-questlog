@@ -65,8 +65,10 @@ def test_page_round_trip():
 def test_current_stage_by_kind():
     assert quest.current_stage({"kind": "quest"}) == "goal"
     assert quest.current_stage({"kind": "quest", "goal_closed": "x", "research_skipped": "x"}) == "design"
-    assert quest.current_stage({"kind": "chore"}) == "implement"
-    assert quest.current_stage({"kind": "chore", "implement_closed": "x", "review_closed": "x"}) is None
+    assert quest.current_stage({"kind": "quest", "goal_closed": "x", "research_skipped": "x", "design_closed": "x"}) == "plan"
+    assert quest.current_stage({"kind": "chore"}) == "plan"
+    assert quest.current_stage({"kind": "chore", "plan_closed": "x"}) == "implement"
+    assert quest.current_stage({"kind": "chore", "plan_closed": "x", "implement_closed": "x", "review_closed": "x"}) is None
 
 
 def _make(qdir, qid, title, kind="quest", state="backlog", **extra):
@@ -88,7 +90,7 @@ def test_log_excludes_terminal_and_sorts_newest_first(tmp_path):
     assert lines[0].startswith("- [2609041432-bb](2609041432-bb-new-active/) quest active research: New active")
     assert lines[1].startswith("- [2609011000-aa](2609011000-aa-old-open/) quest backlog goal: Old open")
     text = quest.render_log(quest.load_quests(qdir), "abc1234", NOW)
-    assert text.startswith("# Quest log\n\n<!-- questlog format 1, written by questlog abc1234 on 2026-09-04 -->")
+    assert text.startswith("# Quest log\n\n<!-- questlog format 2, written by questlog abc1234 on 2026-09-04 -->")
 
 
 def test_log_byte_bound_thirty_items(tmp_path):
@@ -136,7 +138,7 @@ def test_new_log_show_end_to_end(tmp_path, monkeypatch):
     dirs = [d for d in qdir.iterdir() if d.is_dir()]
     assert len(dirs) == 2
     log = (qdir / "README.md").read_text()
-    assert "chore backlog implement: Fix a typo" in log
+    assert "chore backlog plan: Fix a typo" in log
     assert "quest backlog goal: Build the thing" in log
     assert "a working thing" in next(d for d in dirs if "build" in d.name).joinpath("quest.md").read_text()
 
@@ -171,6 +173,11 @@ def test_full_quest_lifecycle(tmp_path, monkeypatch):
     assert quest.current_stage(_fm(d)) == "design"
     (d / "design.md").write_text("# Design\n")
     quest.main(["draft", qid, "design"]); quest.main(["close", qid, "design"])
+    assert quest.current_stage(_fm(d)) == "plan"
+    with pytest.raises(SystemExit):          # plan is not skippable
+        quest.main(["skip", qid, "plan"])
+    (d / "plan.md").write_text("# Plan\n")
+    quest.main(["draft", qid, "plan"]); quest.main(["close", qid, "plan"])
     quest.main(["close", qid, "implement"])
     quest.main(["close", qid, "review"])
     fm = _fm(d)
@@ -183,11 +190,14 @@ def test_full_quest_lifecycle(tmp_path, monkeypatch):
 def test_chore_lifecycle_and_log_stage(tmp_path, monkeypatch):
     qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
     quest.main(["start", qid])
-    assert "chore active implement: Fix" in (qdir / "README.md").read_text()
+    assert "chore active plan: Fix" in (qdir / "README.md").read_text()
     with pytest.raises(SystemExit):          # a chore has no goal stage
         quest.main(["close", qid, "goal"])
     with pytest.raises(SystemExit):          # only research is skippable, and chores lack it
         quest.main(["skip", qid, "research"])
+    (d / "plan.md").write_text("# Plan\n")
+    quest.main(["draft", qid, "plan"]); quest.main(["close", qid, "plan"])
+    assert "chore active implement: Fix" in (qdir / "README.md").read_text()
     quest.main(["close", qid, "implement"]); quest.main(["close", qid, "review"])
     assert _fm(d)["state"] == "done"
 
@@ -228,13 +238,13 @@ def test_format_newer_refuses_older_migrates(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     quest.main(["init"])
     log = tmp_path / "docs/quests/README.md"
-    log.write_text(log.read_text().replace("format 1", "format 2"))
+    log.write_text(log.read_text().replace("format 2", "format 3"))
     with pytest.raises(SystemExit) as e:
         quest.main(["log"])
     assert e.value.code == 2 and "newer questlog" in capsys.readouterr().err
     log.write_text("# Quest log\n\nno header\n")
     quest.main(["log"])
-    assert "format 1" in log.read_text()
+    assert "format 2" in log.read_text()
     assert "migrated" in capsys.readouterr().err
 
 
@@ -270,3 +280,18 @@ def test_doctor_brief(tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit):
         quest.main(["doctor", "--brief"])
     assert "questlog: ok, 1 open" in capsys.readouterr().out
+
+
+def test_migration_to_format_2_marks_plan_skipped_only_past_implement(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    qdir = tmp_path / "docs" / "quests"
+    a = _make(qdir, "2609011000-aa", "At design", state="active", goal_closed="x", research_skipped="x")
+    b = _make(qdir, "2609011001-bb", "Implementing", state="active", goal_closed="x", research_closed="x", design_closed="x", implement_drafted="x")
+    c = _make(qdir, "2609011002-cc", "Finished", state="done", goal_closed="x", research_closed="x", design_closed="x", implement_closed="x", review_closed="x")
+    (qdir / "README.md").write_text("# Quest log\n\n<!-- questlog format 1, written by questlog old on 2026-09-01 -->\n")
+    quest.main(["log"])
+    assert "plan_skipped" not in _fm(a)
+    assert quest.current_stage(_fm(a)) == "design"
+    assert _fm(b)["plan_skipped"] and quest.current_stage(_fm(b)) == "implement"
+    assert _fm(c)["plan_skipped"] and quest.current_stage(_fm(c)) is None
+    assert "format 2" in (qdir / "README.md").read_text()

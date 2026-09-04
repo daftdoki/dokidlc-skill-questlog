@@ -23,7 +23,7 @@ describe in two sentences and hand over. Both get an identifier, a
 directory, and a place in the log. They differ in how many stages they
 pass through.
 
-A quest moves through five stages. Each stage ends with a document the
+A quest moves through six stages. Each stage ends with a document the
 agent has written and you have read, and it does not advance until you say
 so.
 
@@ -38,13 +38,16 @@ so.
    open, one at a time with a recommendation for each. You decide. It
    writes the plan, specific enough to build from, and you review that
    too.
-4. **Build it.** The agent builds it, in commits, and notes where it had
+4. **Plan the work.** The agent writes down what it is about to do: the
+   steps in order, the files it will touch, the tests, and what could go
+   wrong. You read it and adjust it before anything changes.
+5. **Build it.** The agent builds it, in commits, and notes where it had
    to depart from the plan. When it is done it asks you to look.
-5. **Review the result.** You check the result against the goal. When you are
+6. **Review the result.** You check the result against the goal. When you are
    satisfied, the quest is done.
 
-A chore skips the first three. The agent implements from your one-line
-description, then you review.
+A chore skips the first three. The agent plans from your one-line
+description, you read the plan, it builds, you review.
 
 At any stage you can abandon the work. Its files stay for the record; it
 leaves the log.
@@ -64,6 +67,8 @@ Talk to the agent. It runs the commands.
 - "Start the mDNS quest." The agent runs `quest start 2609041432-7k`.
 - "Draft the goal." The agent interviews you, writes `goal.md`, runs
   `quest draft 2609041432-7k goal`, and asks whether the stage is complete.
+- "Plan it." The agent writes `plan.md` and asks you to read it before it
+  builds anything.
 - "Yes, the goal stage is complete." The agent shows and runs
   `quest close 2609041432-7k goal`.
 - "Skip research on this one." `quest skip 2609041432-7k research`.
@@ -78,7 +83,7 @@ The agent runs the first four on its own and the rest only when you ask.
 ```
 quest log                                   what is open, newest first
 quest show 2609041432-7k                    one quest; a unique id prefix works
-quest draft 2609041432-7k goal              the stage file is written, please review
+quest draft 2609041432-7k plan              the stage file is written, please review
 quest doctor --fix                          check the tracker; regenerate a stale log
 quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]
 quest start ID

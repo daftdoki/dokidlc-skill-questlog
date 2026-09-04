@@ -34,8 +34,9 @@ run it. The hook turns every creator verb into an approval prompt.
 
 ## Stages
 
-A quest: goal, research, design, implement, review. A chore: implement,
-review. The current stage is the first one not closed or skipped.
+A quest: goal, research, design, plan, implement, review. A chore: plan,
+implement, review. The current stage is the first one not closed or
+skipped. Only research can be skipped.
 
 - **goal** produces `goal.md`. Interview the creator about outcomes. User
   stories belong here when they fit. Write what success looks like so the
@@ -47,8 +48,13 @@ review. The current stage is the first one not closed or skipped.
   recommendation each, record the answers, then write goal, stories,
   current state, design, test changes, implementation plan, out of scope,
   and a deviations section kept during implementation.
-- **implement** produces commits. Follow the design or, for a chore, the
-  Goal. Record deviations in `design.md` as they happen.
+- **plan** produces `plan.md`: what will happen during implementation,
+  in order, with the files touched, the commits expected, the tests, and
+  what could go wrong. For a chore this is the whole plan for the fix;
+  for a quest it turns the design into steps. The creator reads it before
+  anything is built.
+- **implement** produces commits. Follow the plan. Record deviations in
+  `plan.md` as they happen.
 - **review** is the creator reading the result against Done when. Answer
   questions, fix what the review finds.
 
@@ -66,6 +72,9 @@ we will know. Then show and run `quest new "Title" --goal "..." --done-when
 When the creator says a stage is done, name the stage and summarize in one
 line what they are accepting, then show and run `quest close ID STAGE`.
 
+A chore goes straight to plan: read the Goal, write `plan.md`, draft it,
+and ask before building.
+
 When the creator abandons, take the reason in their words; the script
 refuses an empty one.
 
@@ -74,7 +83,7 @@ refuses an empty one.
 - Search memory before you research, if the project has a memory skill.
 - A chore is for small features, troubleshooting, and other chores. When
   the creator is unsure which to open, recommend a chore if the Goal fits
-  in two sentences and needs no design.
+  in two sentences and needs no design. A chore still gets a plan.
 - Never move an abandoned quest back. Picking the idea up again is a new
   quest with a new id.
 - If `quest` refuses with "newer questlog", stop and tell the creator to

@@ -50,7 +50,8 @@ other non-zero exits as allow, which is why the shim is POSIX sh.
 The quest log header records `questlog format N` and the plugin commit.
 `FORMAT` in `bin/quest` is the version the code understands. Older data is
 migrated in place; newer data is refused with exit 2. Bump `FORMAT` only
-with a migration.
+with a migration. Format 2 added the plan stage; the migration marks
+`plan_skipped` on work that had already reached implement.
 
 ## Release
 
