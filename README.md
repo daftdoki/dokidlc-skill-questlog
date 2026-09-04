@@ -27,20 +27,20 @@ A quest moves through five stages. Each stage ends with a document the
 agent has written and you have read, and it does not advance until you say
 so.
 
-1. **Goal.** The agent asks what you want and how you will know you have
+1. **Define the goal.** The agent asks what you want and how you will know you have
    it. You answer, it writes, you correct it, and the two of you settle the
    text together. Everything that follows is judged against this.
-2. **Research.** Optional. The agent surveys how others have solved the
+2. **Do the research.** Optional. The agent surveys how others have solved the
    problem, measures what can be measured, and lays out the options with a
    recommendation. You read it, push back where you know better, and it
    revises. Skip this stage when the approach is already clear.
-3. **Design.** The agent asks the questions the goal and research left
+3. **Iterate on the design.** The agent asks the questions the goal and research left
    open, one at a time with a recommendation for each. You decide. It
    writes the plan, specific enough to build from, and you review that
    too.
-4. **Implement.** The agent builds it, in commits, and notes where it had
+4. **Build it.** The agent builds it, in commits, and notes where it had
    to depart from the plan. When it is done it asks you to look.
-5. **Review.** You check the result against the goal. When you are
+5. **Review the result.** You check the result against the goal. When you are
    satisfied, the quest is done.
 
 A chore skips the first three. The agent implements from your one-line
