@@ -14,38 +14,40 @@ not open, start, close, skip, or abandon anything by itself. Those happen
 only when you ask, and Claude Code prompts you to approve the exact command
 each time.
 
-## How work moves
+## Process
 
-You open a quest or chore. It sits in the backlog until you start it. Then
-it moves through its stages, one at a time: the agent drafts each stage
-and you close it. When you close the last stage it is done. At any point
-you can abandon it; the files stay, it just leaves the log.
+Work comes in two sizes. A quest is a feature, a redesign, an
+investigation: anything worth thinking through before it is built. A chore
+is a bug fix, a small addition, a bit of upkeep: anything you could
+describe in two sentences and hand over. Both get an identifier, a
+directory, and a place in the log. They differ in how many stages they
+pass through.
 
-```
-  new ──▶ backlog ──▶ active ──▶ done
-                         │
-                         └──▶ abandoned
+A quest moves through five stages. Each stage ends with a document the
+agent has written and you have read, and it does not advance until you say
+so.
 
-  quest stages:  goal ▶ research ▶ design ▶ implement ▶ review
-  chore stages:                             implement ▶ review
-```
-
-The stages, in order. Each one ends with a file you can read, so you
-review the thinking before anything gets built.
-
-1. **Goal.** The agent asks what you want and how you'll know you have it,
-   and writes that down. Everything after this is judged against it.
-2. **Research.** The agent looks at how others have solved it, measures
-   what can be measured, and lays out the options with a recommendation.
-   Skip it when the approach is already obvious.
-3. **Design.** The agent turns the chosen option into a plan specific
-   enough to build from, asking you to decide each open question.
+1. **Goal.** The agent asks what you want and how you will know you have
+   it. You answer, it writes, you correct it, and the two of you settle the
+   text together. Everything that follows is judged against this.
+2. **Research.** Optional. The agent surveys how others have solved the
+   problem, measures what can be measured, and lays out the options with a
+   recommendation. You read it, push back where you know better, and it
+   revises. Skip this stage when the approach is already clear.
+3. **Design.** The agent asks the questions the goal and research left
+   open, one at a time with a recommendation for each. You decide. It
+   writes the plan, specific enough to build from, and you review that
+   too.
 4. **Implement.** The agent builds it, in commits, and notes where it had
-   to depart from the plan.
-5. **Review.** You check the result against the goal. Close it and the
-   work is done.
+   to depart from the plan. When it is done it asks you to look.
+5. **Review.** You check the result against the goal. When you are
+   satisfied, the quest is done.
 
-A chore is small enough to skip the first three.
+A chore skips the first three. The agent implements from your one-line
+description, then you review.
+
+At any stage you can abandon the work. Its files stay for the record; it
+leaves the log.
 
 ## Usage
 
