@@ -36,8 +36,69 @@ Talk to the agent. It runs the commands.
   `quest abandon 2609041432-7k "we're going with the bridge's own discovery"`.
   The files stay; the entry leaves the log.
 
-The commands, for reference. The agent runs the first four on its own and
-the rest only when you ask.
+### A quest, end to end
+
+One feature, from idea to done, as the conversation and the log would show
+it. You speak; the agent drafts and runs the commands; Claude Code prompts
+you to approve each creator verb.
+
+**Day 1.** You: "Open a quest for discovering the bridge over mDNS."
+The agent asks two questions, what you want and how you'll know, then
+shows and runs:
+
+```
+quest new "Discover the bridge over mDNS" \
+  --goal "Clients find the bridge without being told its address" \
+  --done-when "A fresh client on the LAN connects with no configuration"
+```
+
+You approve. `quest log` now reads:
+
+```
+- [2609051012-k3](2609051012-k3-discover-the-bridge-over-mdns/) quest backlog goal: Discover the bridge over mDNS
+```
+
+You: "Start it." The agent runs `quest start 2609051012-k3`. State: active,
+stage: goal.
+
+You: "Draft the goal." The agent interviews you about outcomes, writes
+`goal.md` with user stories, runs `quest draft 2609051012-k3 goal`, and
+asks whether the stage is complete. You read it, answer two things it got
+wrong, it fixes them. You: "The goal is complete." It runs
+`quest close 2609051012-k3 goal`. Stage: research.
+
+**Day 2.** You: "Skip research, we know the library." The agent runs
+`quest skip 2609051012-k3 research`. Stage: design.
+
+You: "Draft the design." The agent asks the design questions with a
+recommendation each, records your answers, writes `design.md`, runs
+`quest draft 2609051012-k3 design`, and asks. You: "Design is complete."
+`quest close 2609051012-k3 design`. Stage: implement.
+
+**Day 3.** The agent implements from the design, in commits, recording
+deviations in `design.md` as it goes. When it is done it runs
+`quest draft 2609051012-k3 implement` and asks. You review, ask for one
+change, it makes it. You: "Implement is complete."
+`quest close 2609051012-k3 implement`. Stage: review.
+
+You read the result against the done-when. A fresh client on the LAN
+connects with no configuration. You: "Review is complete."
+`quest close 2609051012-k3 review`. State: done. The entry leaves the
+quest log; the directory and its four documents stay.
+
+The same quest, if it had gone wrong on day 2: "Abandon it, the bridge is
+getting its own discovery in the next firmware." The agent runs
+`quest abandon 2609051012-k3 "the bridge is getting its own discovery in the next firmware"`.
+The directory stays for the record, the entry leaves the log, and picking
+the idea up later means a new quest with a new id.
+
+A chore is the short form of the same thing: "Open a chore to fix the
+volume off-by-one," "start it," the agent fixes it and drafts implement,
+"implement is complete," you check the fix, "review is complete."
+
+### The commands
+
+The agent runs the first four on its own and the rest only when you ask.
 
 ```
 quest log                                   what is open, newest first
