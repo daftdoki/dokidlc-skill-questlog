@@ -42,9 +42,9 @@ so.
    steps in order, the files it will touch, the tests, and what could go
    wrong. You read it and adjust it before anything changes.
 5. **Build it.** The agent builds it, in commits, and notes where it had
-   to depart from the plan. When it is done it asks you to look.
+   to depart from the plan. When it has finished it asks you to look.
 6. **Review the result.** You check the result against the goal. When you are
-   satisfied, the quest is done.
+   satisfied, the quest is completed.
 
 A chore skips the first three. The agent plans from your one-line
 description, you read the plan, it builds, you review.
@@ -87,7 +87,7 @@ quest draft 2609041432-7k plan              the stage file is written, please re
 quest doctor --fix                          check the tracker; regenerate a stale log
 quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]
 quest start ID
-quest close ID STAGE                        close ID review sets done
+quest close ID STAGE                        close ID review completes it
 quest skip ID research
 quest abandon ID "reason"
 ```
@@ -96,6 +96,64 @@ A hook denies hand edits to the quest log and to `quest.md` frontmatter,
 so the verbs are the only way state changes. Identifiers are
 `YYMMDDHHMM-xx`, a UTC minute plus two random characters, so they sort by
 time and never collide across branches.
+
+### On disk
+
+```
+docs/quests/
+  README.md                          the quest log, generated
+  2609051012-k3-discover-the-bridge/
+    quest.md                         metadata and the goal, owned by the verbs
+    goal.md  research.md  design.md  plan.md      written by the agent, read by you
+```
+
+`quest.md` is frontmatter and a short body:
+
+```
+---
+id: 2609051012-k3
+title: Discover the bridge over mDNS
+kind: quest                # or chore
+state: active              # backlog, active, done, abandoned
+created: '2026-09-05T10:12:00Z'
+started: '2026-09-05T10:20:00Z'
+goal_drafted: '...'        # one pair of keys per stage
+goal_closed: '...'
+research_skipped: '...'
+abandoned_reason: ...      # only when abandoned
+---
+## Goal
+
+What you want.
+
+## Done when
+
+How you will know.
+```
+
+The quest log is a heading, a comment naming the format and the plugin
+version, and one line per open entry: id, kind, state, current stage,
+title. Completed and abandoned entries are not listed. The state key is
+`done` in the file; in this document and in conversation, a quest or
+chore is completed.
+
+**What is guarded.** The log and every `quest.md` frontmatter block are
+written only by the verbs, so the log always matches the directories and
+a stage date is never typed by hand. A `PreToolUse` hook on the Edit,
+Write, and Bash tools enforces it:
+
+| Trigger | Result |
+|---|---|
+| Edit or Write to `docs/quests/README.md` | denied |
+| Edit or Write that touches a `quest.md` frontmatter block | denied; the body below it is fine |
+| Bash that names `docs/quests` and redirects, `sed -i`, `tee`, an inline Python or Perl, or a heredoc into it | denied |
+| Bash that runs `quest init`, `new`, `start`, `close`, `skip`, or `abandon` | you are asked to approve, with the command shown |
+| Anything else, including the agent writing a stage file | allowed |
+
+A `SessionStart` hook runs `quest doctor --brief`, one line telling the
+agent how many entries are open, or that the log was written by a newer
+plugin. If `uv` is missing, guarded actions are refused rather than
+allowed, and everything else proceeds.
 
 ## Requirements
 
