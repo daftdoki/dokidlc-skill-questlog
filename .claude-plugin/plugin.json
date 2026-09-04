@@ -1,0 +1,6 @@
+{
+  "name": "questlog",
+  "description": "Quests and chores with staged review: goal, research, design, implement, review. The creator decides, the agent drafts.",
+  "author": { "name": "DaftDoki" },
+  "license": "MIT"
+}

@@ -1,0 +1,12 @@
+[project]
+name = "dokidlc-skill-questlog"
+version = "0.0.0"
+description = "Test harness for the questlog plugin. The plugin itself is bin/quest and skills/."
+requires-python = ">=3.12"
+
+[dependency-groups]
+dev = ["pytest>=8", "pyyaml>=6"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

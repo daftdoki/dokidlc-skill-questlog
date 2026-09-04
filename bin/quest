@@ -1,0 +1,250 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["pyyaml>=6"]
+# ///
+"""Quests and chores with staged review.
+
+A quest runs goal, research, design, implement, review. A chore runs
+implement, review. The agent drafts a stage and asks; the creator closes it.
+Every quest or chore is a directory under docs/quests/ holding quest.md and
+its stage files. The quest log, docs/quests/README.md, is generated.
+
+Usage:
+  quest log                         what is open, one line each
+  quest show ID                     a quest's metadata and files (id prefix ok)
+  quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import random
+import re
+import subprocess
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+
+import yaml
+
+FORMAT = 1
+ROOT_NAME = "docs/quests"
+PLUGIN_ROOT = Path(__file__).resolve().parents[1]
+# Lowercase alphanumerics without the characters that read alike: 0 1 i l o.
+ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz"
+ID_RE = re.compile(r"^\d{10}-[" + ALPHABET + "]{2}$")
+KINDS = ("quest", "chore")
+STATES = ("backlog", "active", "done", "abandoned")
+STAGES = {"quest": ("goal", "research", "design", "implement", "review"), "chore": ("implement", "review")}
+SLUG_MAX = 40
+GENERATED_HEAD = "# Quest log\n"
+
+
+# --- where ------------------------------------------------------------------
+
+
+def project_root() -> Path:
+    """CLAUDE_PROJECT_DIR when the harness sets it, else the git toplevel of cwd."""
+    env = os.environ.get("CLAUDE_PROJECT_DIR")
+    if env:
+        return Path(env).resolve()
+    try:
+        out = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        die("not inside a git repository and CLAUDE_PROJECT_DIR is unset")
+    return Path(out).resolve()
+
+
+def quests_dir(root: Path) -> Path:
+    return root / ROOT_NAME
+
+
+def plugin_commit() -> str:
+    try:
+        return subprocess.run(["git", "-C", str(PLUGIN_ROOT), "rev-parse", "--short", "HEAD"], capture_output=True, text=True, check=True).stdout.strip() or "unknown"
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "unknown"
+
+
+def die(msg: str, code: int = 1) -> None:
+    print(f"quest: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def now_iso(now: datetime | None = None) -> str:
+    return (now or datetime.now(UTC)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# --- identifiers ------------------------------------------------------------
+
+
+def slugify(title: str, limit: int = SLUG_MAX) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:limit].rstrip("-")
+    return slug or "untitled"
+
+
+def new_id(existing: set[str], now: datetime | None = None, rng: random.Random | None = None) -> str:
+    """UTC minute plus two random characters. Draw again if the id is taken."""
+    stamp = (now or datetime.now(UTC)).strftime("%y%m%d%H%M")
+    rng = rng or random.SystemRandom()
+    for _ in range(len(ALPHABET) ** 2):
+        candidate = f"{stamp}-{rng.choice(ALPHABET)}{rng.choice(ALPHABET)}"
+        if candidate not in existing:
+            return candidate
+    die(f"every suffix for minute {stamp} is taken")
+
+
+def existing_ids(qdir: Path) -> set[str]:
+    return {p.name[:13] for p in qdir.iterdir() if p.is_dir() and ID_RE.match(p.name[:13])} if qdir.is_dir() else set()
+
+
+# --- pages ------------------------------------------------------------------
+
+
+def parse_page(text: str) -> tuple[dict, str]:
+    if not text.startswith("---\n"):
+        return {}, text
+    end = text.find("\n---\n", 4)
+    if end < 0:
+        return {}, text
+    fm = yaml.safe_load(text[4:end]) or {}
+    return (fm if isinstance(fm, dict) else {}), text[end + 5 :]
+
+
+class _Quoted(str):
+    pass
+
+
+yaml.add_representer(_Quoted, lambda d, v: d.represent_scalar("tag:yaml.org,2002:str", str(v), style="'"))
+
+
+def render_page(fm: dict, body: str) -> str:
+    out = {k: (_Quoted(v) if isinstance(v, str) and re.match(r"^\d{4}-\d{2}-\d{2}T", v) else v) for k, v in fm.items()}
+    dumped = yaml.dump(out, sort_keys=False, allow_unicode=True, default_flow_style=False)
+    return f"---\n{dumped}---\n{body if body.endswith(chr(10)) else body + chr(10)}"
+
+
+def quest_body(goal: str, done_when: str) -> str:
+    return f"## Goal\n\n{goal}\n\n## Done when\n\n{done_when}\n"
+
+
+def load_quests(qdir: Path) -> list[tuple[Path, dict]]:
+    out = []
+    if not qdir.is_dir():
+        return out
+    for d in sorted(qdir.iterdir()):
+        page = d / "quest.md"
+        if d.is_dir() and page.is_file():
+            fm, _ = parse_page(page.read_text())
+            if fm.get("id"):
+                out.append((d, fm))
+    return out
+
+
+def current_stage(fm: dict) -> str | None:
+    """First stage not closed or skipped, or None when the quest is finished."""
+    for stage in STAGES.get(fm.get("kind", "quest"), STAGES["quest"]):
+        if not fm.get(f"{stage}_closed") and not fm.get(f"{stage}_skipped"):
+            return stage
+    return None
+
+
+def resolve(qdir: Path, prefix: str) -> tuple[Path, dict]:
+    matches = [(d, fm) for d, fm in load_quests(qdir) if str(fm["id"]).startswith(prefix) or d.name.startswith(prefix)]
+    if not matches:
+        die(f"no quest or chore matches {prefix!r}")
+    if len(matches) > 1:
+        die(f"{prefix!r} matches {len(matches)} entries: " + ", ".join(str(fm["id"]) for _, fm in matches))
+    return matches[0]
+
+
+# --- the quest log ----------------------------------------------------------
+
+
+def header_line(commit: str, now: datetime | None = None) -> str:
+    return f"<!-- questlog format {FORMAT}, written by questlog {commit} on {(now or datetime.now(UTC)):%Y-%m-%d} -->"
+
+
+def log_lines(quests: list[tuple[Path, dict]]) -> list[str]:
+    rows = [(d, fm) for d, fm in quests if fm.get("state") in ("backlog", "active")]
+    rows.sort(key=lambda r: str(r[1]["id"]), reverse=True)
+    lines = []
+    for d, fm in rows:
+        stage = current_stage(fm) or "closed"
+        lines.append(f"- [{fm['id']}]({d.name}/) {fm.get('kind', 'quest')} {fm.get('state')} {stage}: {fm.get('title', '')}")
+    return lines
+
+
+def render_log(quests: list[tuple[Path, dict]], commit: str, now: datetime | None = None) -> str:
+    lines = log_lines(quests)
+    body = "\n".join(lines) if lines else "Nothing open."
+    return f"{GENERATED_HEAD}\n{header_line(commit, now)}\n\nOpen quests and chores, newest first. Generated; do not edit by hand.\n\n{body}\n"
+
+
+def write_log(root: Path) -> Path:
+    qdir = quests_dir(root)
+    qdir.mkdir(parents=True, exist_ok=True)
+    path = qdir / "README.md"
+    path.write_text(render_log(load_quests(qdir), plugin_commit()))
+    return path
+
+
+# --- commands ---------------------------------------------------------------
+
+
+def cmd_new(args: argparse.Namespace) -> None:
+    root = project_root()
+    qdir = quests_dir(root)
+    qdir.mkdir(parents=True, exist_ok=True)
+    kind = "chore" if args.chore else "quest"
+    qid = new_id(existing_ids(qdir))
+    d = qdir / f"{qid}-{slugify(args.title)}"
+    d.mkdir()
+    fm = {"id": qid, "title": args.title, "kind": kind, "state": "backlog", "created": now_iso()}
+    body = quest_body(args.goal or "(what the creator wants to accomplish)", args.done_when or "(how we will know)")
+    (d / "quest.md").write_text(render_page(fm, body))
+    write_log(root)
+    print(f"{kind} {qid} created at {d.relative_to(root)}/")
+
+
+def cmd_log(args: argparse.Namespace) -> None:
+    root = project_root()
+    lines = log_lines(load_quests(quests_dir(root)))
+    print("\n".join(lines) if lines else "Nothing open.")
+
+
+def cmd_show(args: argparse.Namespace) -> None:
+    root = project_root()
+    d, fm = resolve(quests_dir(root), args.id)
+    sys.stdout.write((d / "quest.md").read_text())
+    files = sorted(p.name for p in d.iterdir() if p.is_file() and p.name != "quest.md")
+    print("\nstage files: " + (", ".join(files) if files else "none"))
+    print(f"current stage: {current_stage(fm) or 'none, finished'}")
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(prog="quest", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("new", help="open a quest or chore (creator verb)")
+    p.add_argument("title")
+    p.add_argument("--chore", action="store_true", help="a small piece of work; starts at implement")
+    p.add_argument("--goal", help="what the creator wants to accomplish")
+    p.add_argument("--done-when", help="how we will know it is done")
+    p.set_defaults(func=cmd_new)
+
+    p = sub.add_parser("log", help="what is open, one line each")
+    p.set_defaults(func=cmd_log)
+
+    p = sub.add_parser("show", help="one quest's metadata and files")
+    p.add_argument("id", help="identifier or a unique prefix")
+    p.set_defaults(func=cmd_show)
+
+    args = parser.parse_args(argv)
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
