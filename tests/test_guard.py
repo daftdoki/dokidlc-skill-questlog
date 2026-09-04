@@ -69,7 +69,7 @@ def test_write_quest_md_only_with_same_frontmatter(repo):
 
 
 def test_bash_creator_verbs_ask(repo):
-    for cmd in ("quest new 'A thing'", "quest close 2609041432-7k goal", "cd x && quest abandon 26 'why'", "/plugins/x/bin/quest start 26", "bin/quest skip 26 research"):
+    for cmd in ("quest init", "quest new 'A thing'", "quest close 2609041432-7k goal", "cd x && quest abandon 26 'why'", "/plugins/x/bin/quest start 26", "bin/quest skip 26 research"):
         d, reason = guard.decide(ev("Bash", repo, command=cmd))
         assert d == "ask", cmd
         assert cmd.strip() in reason

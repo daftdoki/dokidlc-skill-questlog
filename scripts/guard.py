@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 ROOT_NAME = "docs/quests"
-CREATOR_VERBS = ("new", "start", "close", "skip", "abandon")
+CREATOR_VERBS = ("init", "new", "start", "close", "skip", "abandon")
 FM_KEYS = ("id", "title", "kind", "state", "created", "started", "abandoned", "abandoned_reason")
 VERB_RE = re.compile(r"(?:^|[\s;&|(]|/)(?:bin/)?quest\s+(" + "|".join(CREATOR_VERBS) + r")\b")
 WRITER_RE = re.compile(r"(?:(?<![<>])>{1,2}(?!&)|\bsed\s+-i|\btee\b|\bpython3?\s+-c|\bperl\s+-|<<-?\s*['\"]?\w+)")

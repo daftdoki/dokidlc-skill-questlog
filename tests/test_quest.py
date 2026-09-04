@@ -210,3 +210,63 @@ def test_start_twice_fails(tmp_path, monkeypatch):
     quest.main(["start", qid])
     with pytest.raises(SystemExit):
         quest.main(["start", qid])
+
+
+def test_init_is_idempotent_and_appends_paragraph(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    (tmp_path / "CLAUDE.md").write_text("# Me\n\nrules\n")
+    quest.main(["init"])
+    text = (tmp_path / "CLAUDE.md").read_text()
+    assert text.startswith("# Me\n\nrules\n") and quest.CLAUDE_MD_MARK in text and "quest log" in text
+    assert (tmp_path / "docs/quests/README.md").is_file()
+    quest.main(["init"])
+    assert (tmp_path / "CLAUDE.md").read_text().count(quest.CLAUDE_MD_MARK) == 1
+    assert "nothing changed" in capsys.readouterr().out
+
+
+def test_format_newer_refuses_older_migrates(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    quest.main(["init"])
+    log = tmp_path / "docs/quests/README.md"
+    log.write_text(log.read_text().replace("format 1", "format 2"))
+    with pytest.raises(SystemExit) as e:
+        quest.main(["log"])
+    assert e.value.code == 2 and "newer questlog" in capsys.readouterr().err
+    log.write_text("# Quest log\n\nno header\n")
+    quest.main(["log"])
+    assert "format 1" in log.read_text()
+    assert "migrated" in capsys.readouterr().err
+
+
+def test_doctor_reports_and_fixes(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    assert e.value.code == 1 and "quest init" in capsys.readouterr().out
+    quest.main(["init"]); quest.main(["new", "Thing"])
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    assert e.value.code == 0
+    log = tmp_path / "docs/quests/README.md"
+    log.write_text(log.read_text().replace("- [", "- x ["))
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    assert e.value.code == 1 and "matches the directories" in capsys.readouterr().out
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor", "--fix"])
+    assert e.value.code == 0
+    d = next(p for p in (tmp_path / "docs/quests").iterdir() if p.is_dir())
+    (d / "quest.md").write_text("---\nid: nope\n---\nbody\n")
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    assert e.value.code == 1 and "frontmatter invalid" in capsys.readouterr().out
+
+
+def test_doctor_brief(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    quest.main(["doctor", "--brief"])
+    assert capsys.readouterr().out == ""
+    quest.main(["init"]); quest.main(["new", "Thing"])
+    with pytest.raises(SystemExit):
+        quest.main(["doctor", "--brief"])
+    assert "questlog: ok, 1 open" in capsys.readouterr().out

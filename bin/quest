@@ -11,6 +11,8 @@ Every quest or chore is a directory under docs/quests/ holding quest.md and
 its stage files. The quest log, docs/quests/README.md, is generated.
 
 Usage:
+  quest init                        create docs/quests and the CLAUDE.md paragraph (creator verb)
+  quest doctor [--fix] [--brief]    check the tracker; --fix regenerates a stale log
   quest log                         what is open, one line each
   quest show ID                     a quest's metadata and files (id prefix ok)
   quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]
@@ -48,6 +50,13 @@ STATES = ("backlog", "active", "done", "abandoned")
 STAGES = {"quest": ("goal", "research", "design", "implement", "review"), "chore": ("implement", "review")}
 SLUG_MAX = 40
 GENERATED_HEAD = "# Quest log\n"
+HEADER_RE = re.compile(r"<!-- questlog format (\d+), written by questlog (\S+) on (\S+) -->")
+CLAUDE_MD_MARK = "<!-- questlog -->"
+CLAUDE_MD_PARAGRAPH = f"""
+## Quests {CLAUDE_MD_MARK}
+
+Work is tracked as quests and chores under `docs/quests/`. Run `quest log` to see what is open and `quest show ID` to read one. The `quest` skill has the stage rules. You draft; the creator decides. Run `quest new`, `start`, `close`, `skip`, or `abandon` only when the creator asks, and show the command first.
+"""
 
 
 # --- where ------------------------------------------------------------------
@@ -199,6 +208,119 @@ def write_log(root: Path) -> Path:
     return path
 
 
+# --- format -----------------------------------------------------------------
+
+
+def read_format(qdir: Path) -> int | None:
+    """The format number in the quest log header. None when there is no log."""
+    path = qdir / "README.md"
+    if not path.is_file():
+        return None
+    m = HEADER_RE.search(path.read_text())
+    return int(m.group(1)) if m else 0
+
+
+def check_format(root: Path) -> None:
+    """Refuse data newer than this script. Migrate data older than it."""
+    qdir = quests_dir(root)
+    found = read_format(qdir)
+    if found is None:
+        return
+    if found > FORMAT:
+        die(f"this repository was last written by a newer questlog (format {found}, this is {FORMAT}); update the plugin", 2)
+    if found < FORMAT:
+        migrate(root, found)
+
+
+def migrate(root: Path, from_format: int) -> None:
+    """Format 1 is the first. Older only means a missing header, so rewriting the log is the migration."""
+    write_log(root)
+    print(f"quest: migrated docs/quests from format {from_format} to {FORMAT}", file=sys.stderr)
+
+
+# --- init and doctor --------------------------------------------------------
+
+
+def cmd_init(args: argparse.Namespace) -> None:
+    root = project_root()
+    qdir = quests_dir(root)
+    made = []
+    if not qdir.is_dir():
+        qdir.mkdir(parents=True)
+        made.append(str(qdir.relative_to(root)) + "/")
+    if not (qdir / "README.md").is_file():
+        write_log(root)
+        made.append(f"{ROOT_NAME}/README.md")
+    claude_md = root / "CLAUDE.md"
+    text = claude_md.read_text() if claude_md.is_file() else ""
+    if CLAUDE_MD_MARK not in text:
+        claude_md.write_text(text.rstrip("\n") + "\n" + CLAUDE_MD_PARAGRAPH if text else CLAUDE_MD_PARAGRAPH.lstrip("\n"))
+        made.append("CLAUDE.md paragraph")
+    print("initialized: " + ", ".join(made) if made else "already initialized; nothing changed")
+
+
+REQUIRED_KEYS = ("id", "title", "kind", "state", "created")
+
+
+def doctor_checks(root: Path) -> list[tuple[bool, str, str]]:
+    """(ok, label, fix) rows. Pure; cmd_doctor prints and fixes."""
+    rows = []
+    qdir = quests_dir(root)
+    if not qdir.is_dir():
+        return [(False, f"{ROOT_NAME}/ exists", "quest init")]
+    found = read_format(qdir)
+    if found is None:
+        rows.append((False, "quest log exists", "quest init"))
+    elif found > FORMAT:
+        rows.append((False, f"quest log format {found} is newer than this plugin's {FORMAT}", "update the plugin"))
+    else:
+        rows.append((True, f"quest log format {found}", ""))
+    bad = 0
+    for d in sorted(p for p in qdir.iterdir() if p.is_dir()):
+        page = d / "quest.md"
+        if not page.is_file():
+            rows.append((False, f"{d.name}/ has no quest.md", "add one or remove the directory")); bad += 1; continue
+        fm, _ = parse_page(page.read_text())
+        missing = [k for k in REQUIRED_KEYS if k not in fm]
+        if missing or fm.get("kind") not in KINDS or fm.get("state") not in STATES or not ID_RE.match(str(fm.get("id", ""))):
+            rows.append((False, f"{d.name}/quest.md frontmatter invalid" + (f", missing {', '.join(missing)}" if missing else ""), "fix the frontmatter")); bad += 1
+        elif not d.name.startswith(str(fm["id"])):
+            rows.append((False, f"{d.name}/ does not start with its id {fm['id']}", "rename the directory")); bad += 1
+    rows.append((bad == 0, f"{len(load_quests(qdir))} quest.md files valid", ""))
+    if found is not None and found <= FORMAT:
+        current = (qdir / "README.md").read_text()
+        expected = render_log(load_quests(qdir), plugin_commit())
+        same = log_lines(load_quests(qdir)) == [l for l in current.splitlines() if l.startswith("- [")]
+        rows.append((same, "quest log matches the directories", "quest doctor --fix"))
+    claude_md = root / "CLAUDE.md"
+    rows.append((claude_md.is_file() and CLAUDE_MD_MARK in claude_md.read_text(), "CLAUDE.md has the quests paragraph", "quest init"))
+    return rows
+
+
+def cmd_doctor(args: argparse.Namespace) -> None:
+    root = project_root()
+    qdir = quests_dir(root)
+    if args.brief and not qdir.is_dir():
+        return
+    rows = doctor_checks(root)
+    if args.fix:
+        for ok, label, fix in rows:
+            if not ok and fix == "quest doctor --fix":
+                write_log(root)
+        rows = doctor_checks(root)
+    failed = [r for r in rows if not r[0]]
+    if args.brief:
+        if failed:
+            print("questlog: " + "; ".join(f"{label} ({fix})" if fix else label for _, label, fix in failed))
+        else:
+            n = len(log_lines(load_quests(qdir)))
+            print(f"questlog: ok, {n} open. Run `quest log`.")
+        sys.exit(0)
+    for ok, label, fix in rows:
+        print(f"{'ok  ' if ok else 'FAIL'} {label}" + (f"  ({fix})" if not ok and fix else ""))
+    sys.exit(1 if failed else 0)
+
+
 # --- transitions ------------------------------------------------------------
 
 STAGE_FILES = {"goal": "goal.md", "research": "research.md", "design": "design.md"}
@@ -229,6 +351,7 @@ def require_stage(fm: dict, stage: str, verb: str) -> None:
 
 def cmd_start(args: argparse.Namespace) -> None:
     root = project_root()
+    check_format(root)
     d, fm = resolve(quests_dir(root), args.id)
     require_open(fm)
     if fm.get("state") != "backlog":
@@ -240,6 +363,7 @@ def cmd_start(args: argparse.Namespace) -> None:
 
 def cmd_draft(args: argparse.Namespace) -> None:
     root = project_root()
+    check_format(root)
     d, fm = resolve(quests_dir(root), args.id)
     require_open(fm)
     require_stage(fm, args.stage, "draft")
@@ -253,6 +377,7 @@ def cmd_draft(args: argparse.Namespace) -> None:
 
 def cmd_close(args: argparse.Namespace) -> None:
     root = project_root()
+    check_format(root)
     d, fm = resolve(quests_dir(root), args.id)
     require_open(fm)
     require_stage(fm, args.stage, "close")
@@ -267,6 +392,7 @@ def cmd_close(args: argparse.Namespace) -> None:
 
 def cmd_skip(args: argparse.Namespace) -> None:
     root = project_root()
+    check_format(root)
     d, fm = resolve(quests_dir(root), args.id)
     require_open(fm)
     if args.stage != "research":
@@ -279,6 +405,7 @@ def cmd_skip(args: argparse.Namespace) -> None:
 
 def cmd_abandon(args: argparse.Namespace) -> None:
     root = project_root()
+    check_format(root)
     d, fm = resolve(quests_dir(root), args.id)
     require_open(fm)
     reason = (args.reason or "").strip()
@@ -294,6 +421,7 @@ def cmd_abandon(args: argparse.Namespace) -> None:
 
 def cmd_new(args: argparse.Namespace) -> None:
     root = project_root()
+    check_format(root)
     qdir = quests_dir(root)
     qdir.mkdir(parents=True, exist_ok=True)
     kind = "chore" if args.chore else "quest"
@@ -309,12 +437,14 @@ def cmd_new(args: argparse.Namespace) -> None:
 
 def cmd_log(args: argparse.Namespace) -> None:
     root = project_root()
+    check_format(root)
     lines = log_lines(load_quests(quests_dir(root)))
     print("\n".join(lines) if lines else "Nothing open.")
 
 
 def cmd_show(args: argparse.Namespace) -> None:
     root = project_root()
+    check_format(root)
     d, fm = resolve(quests_dir(root), args.id)
     sys.stdout.write((d / "quest.md").read_text())
     files = sorted(p.name for p in d.iterdir() if p.is_file() and p.name != "quest.md")
@@ -343,6 +473,12 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("id"); p.add_argument("stage"); p.set_defaults(func=cmd_skip)
     p = sub.add_parser("abandon", help="terminal, with a reason (creator verb)")
     p.add_argument("id"); p.add_argument("reason"); p.set_defaults(func=cmd_abandon)
+
+    p = sub.add_parser("init", help="create docs/quests and the CLAUDE.md paragraph (creator verb)")
+    p.set_defaults(func=cmd_init)
+    p = sub.add_parser("doctor", help="check the tracker; --fix regenerates a stale log")
+    p.add_argument("--fix", action="store_true"); p.add_argument("--brief", action="store_true", help="one line, nothing if no tracker")
+    p.set_defaults(func=cmd_doctor)
 
     p = sub.add_parser("log", help="what is open, one line each")
     p.set_defaults(func=cmd_log)
