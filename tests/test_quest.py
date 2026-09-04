@@ -139,3 +139,74 @@ def test_new_log_show_end_to_end(tmp_path, monkeypatch):
     assert "chore backlog implement: Fix a typo" in log
     assert "quest backlog goal: Build the thing" in log
     assert "a working thing" in next(d for d in dirs if "build" in d.name).joinpath("quest.md").read_text()
+
+
+def _fresh(tmp_path, monkeypatch, title="Build", chore=False):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    quest.main(["new", title] + (["--chore"] if chore else []))
+    qdir = tmp_path / "docs" / "quests"
+    d, fm = quest.load_quests(qdir)[0]
+    return qdir, d, fm["id"]
+
+
+def _fm(d):
+    return quest.parse_page((d / "quest.md").read_text())[0]
+
+
+def test_full_quest_lifecycle(tmp_path, monkeypatch):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch)
+    with pytest.raises(SystemExit):          # cannot draft before start
+        quest.main(["draft", qid, "goal"])
+    quest.main(["start", qid])
+    assert _fm(d)["state"] == "active"
+    with pytest.raises(SystemExit):          # goal.md must exist to draft goal
+        quest.main(["draft", qid, "goal"])
+    (d / "goal.md").write_text("# Goal\n")
+    quest.main(["draft", qid, "goal"])
+    assert "goal_drafted" in _fm(d)
+    with pytest.raises(SystemExit):          # not the current stage
+        quest.main(["close", qid, "design"])
+    quest.main(["close", qid, "goal"])
+    quest.main(["skip", qid, "research"])
+    assert quest.current_stage(_fm(d)) == "design"
+    (d / "design.md").write_text("# Design\n")
+    quest.main(["draft", qid, "design"]); quest.main(["close", qid, "design"])
+    quest.main(["close", qid, "implement"])
+    quest.main(["close", qid, "review"])
+    fm = _fm(d)
+    assert fm["state"] == "done" and quest.current_stage(fm) is None
+    assert qid not in (qdir / "README.md").read_text()
+    with pytest.raises(SystemExit):          # terminal
+        quest.main(["start", qid])
+
+
+def test_chore_lifecycle_and_log_stage(tmp_path, monkeypatch):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
+    quest.main(["start", qid])
+    assert "chore active implement: Fix" in (qdir / "README.md").read_text()
+    with pytest.raises(SystemExit):          # a chore has no goal stage
+        quest.main(["close", qid, "goal"])
+    with pytest.raises(SystemExit):          # only research is skippable, and chores lack it
+        quest.main(["skip", qid, "research"])
+    quest.main(["close", qid, "implement"]); quest.main(["close", qid, "review"])
+    assert _fm(d)["state"] == "done"
+
+
+def test_abandon_requires_reason_and_keeps_files(tmp_path, monkeypatch):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch)
+    with pytest.raises(SystemExit):
+        quest.main(["abandon", qid, "   "])
+    quest.main(["abandon", qid, "superseded by a better idea"])
+    fm = _fm(d)
+    assert fm["state"] == "abandoned" and fm["abandoned_reason"] == "superseded by a better idea"
+    assert (d / "quest.md").is_file()
+    assert qid not in (qdir / "README.md").read_text()
+    with pytest.raises(SystemExit):
+        quest.main(["close", qid, "goal"])
+
+
+def test_start_twice_fails(tmp_path, monkeypatch):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch)
+    quest.main(["start", qid])
+    with pytest.raises(SystemExit):
+        quest.main(["start", qid])

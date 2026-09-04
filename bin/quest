@@ -14,6 +14,14 @@ Usage:
   quest log                         what is open, one line each
   quest show ID                     a quest's metadata and files (id prefix ok)
   quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]
+  quest start ID                    backlog to active
+  quest draft ID STAGE              the stage file is written and awaits review
+  quest close ID STAGE              the creator accepted the stage; review sets done
+  quest skip ID research            the creator waived research
+  quest abandon ID "reason"         terminal; files stay, entry leaves the log
+
+new, start, close, skip, and abandon are creator verbs: run them only when
+the creator asked, and show the command first.
 """
 
 from __future__ import annotations
@@ -191,6 +199,96 @@ def write_log(root: Path) -> Path:
     return path
 
 
+# --- transitions ------------------------------------------------------------
+
+STAGE_FILES = {"goal": "goal.md", "research": "research.md", "design": "design.md"}
+
+
+def update_quest(d: Path, changes: dict) -> dict:
+    page = d / "quest.md"
+    fm, body = parse_page(page.read_text())
+    fm.update(changes)
+    page.write_text(render_page(fm, body))
+    return fm
+
+
+def require_open(fm: dict) -> None:
+    if fm.get("state") in ("done", "abandoned"):
+        die(f"{fm['id']} is {fm['state']}; nothing more happens to it")
+
+
+def require_stage(fm: dict, stage: str, verb: str) -> None:
+    if fm.get("state") != "active":
+        die(f"{fm['id']} is {fm.get('state')}; start it before you {verb} a stage")
+    current = current_stage(fm)
+    if stage not in STAGES[fm.get("kind", "quest")]:
+        die(f"{fm.get('kind')} {fm['id']} has no {stage} stage")
+    if current != stage:
+        die(f"{fm['id']} is at {current}, not {stage}")
+
+
+def cmd_start(args: argparse.Namespace) -> None:
+    root = project_root()
+    d, fm = resolve(quests_dir(root), args.id)
+    require_open(fm)
+    if fm.get("state") != "backlog":
+        die(f"{fm['id']} is already {fm['state']}")
+    update_quest(d, {"state": "active", "started": now_iso()})
+    write_log(root)
+    print(f"{fm['id']} active; current stage {current_stage(fm)}")
+
+
+def cmd_draft(args: argparse.Namespace) -> None:
+    root = project_root()
+    d, fm = resolve(quests_dir(root), args.id)
+    require_open(fm)
+    require_stage(fm, args.stage, "draft")
+    wanted = STAGE_FILES.get(args.stage)
+    if wanted and not (d / wanted).is_file():
+        die(f"write {d.name}/{wanted} before drafting {args.stage}")
+    update_quest(d, {f"{args.stage}_drafted": now_iso()})
+    write_log(root)
+    print(f"{fm['id']} {args.stage} drafted; ask the creator whether the stage is complete")
+
+
+def cmd_close(args: argparse.Namespace) -> None:
+    root = project_root()
+    d, fm = resolve(quests_dir(root), args.id)
+    require_open(fm)
+    require_stage(fm, args.stage, "close")
+    changes = {f"{args.stage}_closed": now_iso()}
+    if args.stage == "review":
+        changes["state"] = "done"
+    fm = update_quest(d, changes)
+    write_log(root)
+    nxt = current_stage(fm)
+    print(f"{fm['id']} {args.stage} closed; " + (f"next stage {nxt}" if nxt else "done"))
+
+
+def cmd_skip(args: argparse.Namespace) -> None:
+    root = project_root()
+    d, fm = resolve(quests_dir(root), args.id)
+    require_open(fm)
+    if args.stage != "research":
+        die("only research can be skipped")
+    require_stage(fm, "research", "skip")
+    update_quest(d, {"research_skipped": now_iso()})
+    write_log(root)
+    print(f"{fm['id']} research skipped; next stage design")
+
+
+def cmd_abandon(args: argparse.Namespace) -> None:
+    root = project_root()
+    d, fm = resolve(quests_dir(root), args.id)
+    require_open(fm)
+    reason = (args.reason or "").strip()
+    if not reason:
+        die("abandon needs a reason, in the creator's words")
+    update_quest(d, {"state": "abandoned", "abandoned": now_iso(), "abandoned_reason": reason})
+    write_log(root)
+    print(f"{fm['id']} abandoned; files stay in {d.name}/")
+
+
 # --- commands ---------------------------------------------------------------
 
 
@@ -234,6 +332,17 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--goal", help="what the creator wants to accomplish")
     p.add_argument("--done-when", help="how we will know it is done")
     p.set_defaults(func=cmd_new)
+
+    for verb, fn, helptext in (("start", cmd_start, "backlog to active (creator verb)"),):
+        p = sub.add_parser(verb, help=helptext); p.add_argument("id"); p.set_defaults(func=fn)
+    p = sub.add_parser("draft", help="record that a stage file is written and awaits review")
+    p.add_argument("id"); p.add_argument("stage", choices=STAGES["quest"]); p.set_defaults(func=cmd_draft)
+    p = sub.add_parser("close", help="the creator accepted the stage (creator verb)")
+    p.add_argument("id"); p.add_argument("stage", choices=STAGES["quest"]); p.set_defaults(func=cmd_close)
+    p = sub.add_parser("skip", help="the creator waived research (creator verb)")
+    p.add_argument("id"); p.add_argument("stage"); p.set_defaults(func=cmd_skip)
+    p = sub.add_parser("abandon", help="terminal, with a reason (creator verb)")
+    p.add_argument("id"); p.add_argument("reason"); p.set_defaults(func=cmd_abandon)
 
     p = sub.add_parser("log", help="what is open, one line each")
     p.set_defaults(func=cmd_log)
