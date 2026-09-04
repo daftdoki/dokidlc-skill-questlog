@@ -30,6 +30,23 @@ you can abandon it; the files stay, it just leaves the log.
   chore stages:                             implement ▶ review
 ```
 
+The stages, in order. Each one ends with a file you can read, so you
+review the thinking before anything gets built.
+
+1. **Goal.** The agent asks what you want and how you'll know you have it,
+   and writes that down. Everything after this is judged against it.
+2. **Research.** The agent looks at how others have solved it, measures
+   what can be measured, and lays out the options with a recommendation.
+   Skip it when the approach is already obvious.
+3. **Design.** The agent turns the chosen option into a plan specific
+   enough to build from, asking you to decide each open question.
+4. **Implement.** The agent builds it, in commits, and notes where it had
+   to depart from the plan.
+5. **Review.** You check the result against the goal. Close it and the
+   work is done.
+
+A chore is small enough to skip the first three.
+
 ## Usage
 
 Talk to the agent. It runs the commands.
