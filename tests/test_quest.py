@@ -256,6 +256,14 @@ def test_doctor_reports_and_fixes(tmp_path, monkeypatch, capsys):
     quest.main(["init"]); quest.main(["new", "Thing"])
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor"])
+    assert e.value.code == 1                      # not a git repo yet, so persistence fails
+    assert "git repository" in capsys.readouterr().out
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / ".claude").mkdir(); (tmp_path / ".claude" / "settings.json").write_text("{}")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "x"], check=True)
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
     assert e.value.code == 0
     log = tmp_path / "docs/quests/README.md"
     log.write_text(log.read_text().replace("- [", "- x ["))
@@ -264,7 +272,7 @@ def test_doctor_reports_and_fixes(tmp_path, monkeypatch, capsys):
     assert e.value.code == 1 and "matches the directories" in capsys.readouterr().out
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor", "--fix"])
-    assert e.value.code == 0
+    assert e.value.code == 0                      # a tracked file that is modified still counts as committed
     d = next(p for p in (tmp_path / "docs/quests").iterdir() if p.is_dir())
     (d / "quest.md").write_text("---\nid: nope\n---\nbody\n")
     with pytest.raises(SystemExit) as e:
@@ -276,7 +284,14 @@ def test_doctor_brief(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     quest.main(["doctor", "--brief"])
     assert "no docs/quests/" in capsys.readouterr().out
-    quest.main(["init"]); quest.main(["new", "Thing"])
+    quest.main(["init"]); quest.main(["new", "Thing"]); capsys.readouterr()
+    with pytest.raises(SystemExit):
+        quest.main(["doctor", "--brief"])
+    assert "git repository" in capsys.readouterr().out          # persistence problem named at session start
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / ".claude").mkdir(); (tmp_path / ".claude" / "settings.json").write_text("{}")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "x"], check=True)
     with pytest.raises(SystemExit):
         quest.main(["doctor", "--brief"])
     assert "questlog: ok, 1 open" in capsys.readouterr().out

@@ -272,10 +272,48 @@ def cmd_init(args: argparse.Namespace) -> None:
     if CLAUDE_MD_MARK not in text:
         claude_md.write_text(text.rstrip("\n") + "\n" + CLAUDE_MD_PARAGRAPH if text else CLAUDE_MD_PARAGRAPH.lstrip("\n"))
         made.append("CLAUDE.md paragraph")
+    git_add(root, [ROOT_NAME, "CLAUDE.md"])
     print("initialized: " + ", ".join(made) if made else "already initialized; nothing changed")
+    for ok, label, fix in git_checks(root):
+        if not ok:
+            print(f"quest: {label} ({fix})")
 
 
 REQUIRED_KEYS = ("id", "title", "kind", "state", "created")
+PERSISTED = (ROOT_NAME, ".claude/settings.json", "CLAUDE.md")
+
+
+def git_status_of(root: Path, path: str) -> str:
+    """'tracked', 'untracked', 'ignored', 'missing', or 'no-git'."""
+    try:
+        subprocess.run(["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"], capture_output=True, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "no-git"
+    if not (root / path).exists():
+        return "missing"
+    if subprocess.run(["git", "-C", str(root), "check-ignore", "-q", path], capture_output=True).returncode == 0:
+        return "ignored"
+    tracked = subprocess.run(["git", "-C", str(root), "ls-files", "--error-unmatch", path], capture_output=True).returncode == 0
+    return "tracked" if tracked else "untracked"
+
+
+def git_checks(root: Path) -> list[tuple[bool, str, str]]:
+    rows = []
+    for path in PERSISTED:
+        state = git_status_of(root, path)
+        if state == "no-git":
+            return [(False, "this directory is a git repository", "git init, then commit docs/quests/ and .claude/settings.json")]
+        label = {"tracked": f"{path} is committed", "untracked": f"{path} is not committed", "ignored": f"{path} is ignored by git", "missing": f"{path} does not exist"}[state]
+        fix = {"tracked": "", "untracked": f"git add {path} && git commit", "ignored": f"remove {path} from .gitignore, then git add it", "missing": "quest init" if path != ".claude/settings.json" else "enable the plugin in project settings so clones get it"}[state]
+        rows.append((state == "tracked", label, fix))
+    return rows
+
+
+def git_add(root: Path, paths: list[str]) -> None:
+    try:
+        subprocess.run(["git", "-C", str(root), "add", "--", *[p for p in paths if (root / p).exists()]], capture_output=True, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
 
 
 def doctor_checks(root: Path) -> list[tuple[bool, str, str]]:
@@ -310,6 +348,7 @@ def doctor_checks(root: Path) -> list[tuple[bool, str, str]]:
         rows.append((same, "quest log matches the directories", "quest doctor --fix"))
     claude_md = root / "CLAUDE.md"
     rows.append((claude_md.is_file() and CLAUDE_MD_MARK in claude_md.read_text(), "CLAUDE.md has the quests paragraph", "quest init"))
+    rows.extend(git_checks(root))
     return rows
 
 
