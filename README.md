@@ -132,8 +132,9 @@ How you will know.
 ```
 
 The quest log is a heading, a comment naming the format and the plugin
-version, and one line per open entry: id, kind, state, current stage,
-title. Completed and abandoned entries are not listed. The state key is
+version, and a table with one row per open entry: id, kind, state,
+current stage, title. `quest log` prints the same table aligned for the
+terminal. Completed and abandoned entries are not listed. The state key is
 `done` in the file; in this document and in conversation, a quest or
 chore is completed.
 

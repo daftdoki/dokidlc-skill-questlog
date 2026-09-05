@@ -87,8 +87,8 @@ def test_log_excludes_terminal_and_sorts_newest_first(tmp_path):
     _make(qdir, "2609021200-dd", "Dropped", state="abandoned")
     lines = quest.log_lines(quest.load_quests(qdir))
     assert len(lines) == 2
-    assert lines[0].startswith("- [2609041432-bb](2609041432-bb-new-active/) quest active research: New active")
-    assert lines[1].startswith("- [2609011000-aa](2609011000-aa-old-open/) quest backlog goal: Old open")
+    assert lines[0] == "| [2609041432-bb](2609041432-bb-new-active/) | quest | active | research | New active |"
+    assert lines[1] == "| [2609011000-aa](2609011000-aa-old-open/) | quest | backlog | goal | Old open |"
     text = quest.render_log(quest.load_quests(qdir), "abc1234", NOW)
     assert text.startswith("# Quest log\n\n<!-- questlog format 2, written by questlog abc1234 on 2026-09-04 -->")
 
@@ -138,8 +138,9 @@ def test_new_log_show_end_to_end(tmp_path, monkeypatch):
     dirs = [d for d in qdir.iterdir() if d.is_dir()]
     assert len(dirs) == 2
     log = (qdir / "README.md").read_text()
-    assert "chore backlog plan: Fix a typo" in log
-    assert "quest backlog goal: Build the thing" in log
+    assert "| chore | backlog | plan | Fix a typo |" in log
+    assert "| quest | backlog | goal | Build the thing |" in log
+    assert "| Id | Kind | State | Stage | Title |" in log
     assert "a working thing" in next(d for d in dirs if "build" in d.name).joinpath("quest.md").read_text()
 
 
@@ -190,14 +191,14 @@ def test_full_quest_lifecycle(tmp_path, monkeypatch):
 def test_chore_lifecycle_and_log_stage(tmp_path, monkeypatch):
     qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
     quest.main(["start", qid])
-    assert "chore active plan: Fix" in (qdir / "README.md").read_text()
+    assert "| chore | active | plan | Fix |" in (qdir / "README.md").read_text()
     with pytest.raises(SystemExit):          # a chore has no goal stage
         quest.main(["close", qid, "goal"])
     with pytest.raises(SystemExit):          # only research is skippable, and chores lack it
         quest.main(["skip", qid, "research"])
     (d / "plan.md").write_text("# Plan\n")
     quest.main(["draft", qid, "plan"]); quest.main(["close", qid, "plan"])
-    assert "chore active implement: Fix" in (qdir / "README.md").read_text()
+    assert "| chore | active | implement | Fix |" in (qdir / "README.md").read_text()
     quest.main(["close", qid, "implement"]); quest.main(["close", qid, "review"])
     assert _fm(d)["state"] == "done"
 
@@ -266,7 +267,7 @@ def test_doctor_reports_and_fixes(tmp_path, monkeypatch, capsys):
         quest.main(["doctor"])
     assert e.value.code == 0
     log = tmp_path / "docs/quests/README.md"
-    log.write_text(log.read_text().replace("- [", "- x ["))
+    log.write_text(log.read_text().replace("| [", "| x ["))
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor"])
     assert e.value.code == 1 and "matches the directories" in capsys.readouterr().out
@@ -319,3 +320,10 @@ def test_memory_hits_fail_open_and_parse(monkeypatch):
     class P: stdout = 'embedding failed: x\n[{"filename": "a.md", "summary": "A"}, {"filename": "b.md", "summary": "B"}]\n'
     monkeypatch.setattr(quest.subprocess, "run", lambda *a, **k: P())
     assert quest.memory_hits("q") == ["`memory read a.md` (A)", "`memory read b.md` (B)"]
+
+
+def test_terminal_table_aligns():
+    rows = [("2609041432-bb", "d", "quest", "active", "research", "New active"), ("2609011000-aa", "d", "chore", "backlog", "plan", "Old")]
+    out = quest.terminal_table(rows).splitlines()
+    assert out[0].startswith("Id             Kind   State    Stage     Title")
+    assert out[2].startswith("2609041432-bb  quest  active   research  New active")

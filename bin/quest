@@ -193,20 +193,35 @@ def header_line(commit: str, now: datetime | None = None) -> str:
     return f"<!-- questlog format {FORMAT}, written by questlog {commit} on {(now or datetime.now(UTC)):%Y-%m-%d} -->"
 
 
-def log_lines(quests: list[tuple[Path, dict]]) -> list[str]:
+def log_rows(quests: list[tuple[Path, dict]]) -> list[tuple[str, str, str, str, str, str]]:
+    """(id, directory, kind, state, stage, title) for open entries, newest first."""
     rows = [(d, fm) for d, fm in quests if fm.get("state") in ("backlog", "active")]
     rows.sort(key=lambda r: str(r[1]["id"]), reverse=True)
-    lines = []
-    for d, fm in rows:
-        stage = current_stage(fm) or "closed"
-        lines.append(f"- [{fm['id']}]({d.name}/) {fm.get('kind', 'quest')} {fm.get('state')} {stage}: {fm.get('title', '')}")
-    return lines
+    return [(str(fm["id"]), d.name, str(fm.get("kind", "quest")), str(fm.get("state")), current_stage(fm) or "closed", str(fm.get("title", ""))) for d, fm in rows]
+
+
+def log_lines(quests: list[tuple[Path, dict]]) -> list[str]:
+    """Markdown table rows, one per open entry. The id links to the directory."""
+    return [f"| [{qid}]({dirname}/) | {kind} | {state} | {stage} | {title} |" for qid, dirname, kind, state, stage, title in log_rows(quests)]
+
+
+LOG_TABLE_HEAD = "| Id | Kind | State | Stage | Title |\n|---|---|---|---|---|"
 
 
 def render_log(quests: list[tuple[Path, dict]], commit: str, now: datetime | None = None) -> str:
     lines = log_lines(quests)
-    body = "\n".join(lines) if lines else "Nothing open."
+    body = LOG_TABLE_HEAD + "\n" + "\n".join(lines) if lines else "Nothing open."
     return f"{GENERATED_HEAD}\n{header_line(commit, now)}\n\nOpen quests and chores, newest first. Generated; do not edit by hand.\n\n{body}\n"
+
+
+def terminal_table(rows: list[tuple[str, str, str, str, str, str]]) -> str:
+    """Aligned columns for the terminal, no directory column."""
+    cells = [(qid, kind, state, stage, title) for qid, _, kind, state, stage, title in rows]
+    heads = ("Id", "Kind", "State", "Stage", "Title")
+    widths = [max(len(h), *(len(c[i]) for c in cells)) for i, h in enumerate(heads[:-1])]
+    def fmt(c):
+        return "  ".join(v.ljust(widths[i]) for i, v in enumerate(c[:-1])) + "  " + c[-1]
+    return "\n".join([fmt(heads), fmt(tuple("-" * w for w in widths) + ("-----",))] + [fmt(c) for c in cells])
 
 
 def write_log(root: Path) -> Path:
@@ -346,7 +361,7 @@ def doctor_checks(root: Path) -> list[tuple[bool, str, str]]:
     if found is not None and found <= FORMAT:
         current = (qdir / "README.md").read_text()
         expected = render_log(load_quests(qdir), plugin_commit())
-        same = log_lines(load_quests(qdir)) == [l for l in current.splitlines() if l.startswith("- [")]
+        same = log_lines(load_quests(qdir)) == [l for l in current.splitlines() if l.startswith("| [")]
         rows.append((same, "quest log matches the directories", "quest doctor --fix"))
     claude_md = root / "CLAUDE.md"
     rows.append((claude_md.is_file() and CLAUDE_MD_MARK in claude_md.read_text(), "CLAUDE.md has the quests paragraph", "quest init"))
@@ -520,8 +535,8 @@ def cmd_new(args: argparse.Namespace) -> None:
 def cmd_log(args: argparse.Namespace) -> None:
     root = project_root()
     check_format(root)
-    lines = log_lines(load_quests(quests_dir(root)))
-    print("\n".join(lines) if lines else "Nothing open.")
+    rows = log_rows(load_quests(quests_dir(root)))
+    print(terminal_table(rows) if rows else "Nothing open.")
 
 
 def cmd_show(args: argparse.Namespace) -> None:
