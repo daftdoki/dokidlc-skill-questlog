@@ -567,6 +567,19 @@ def test_review_sections_state_the_stop_rule():
             assert word in review, f"{stage}.md Review section lacks {word}"
 
 
+def test_agents_exist_with_required_frontmatter():
+    """`claude plugin validate` warns and exits 0 on a malformed agent file, so this parse is the syntax check."""
+    import yaml
+    names = [f"review-{stage}" for stage in quest.STAGES["quest"]] + ["fact-finder"]
+    for name in names:
+        text = (ROOT / "agents" / f"{name}.md").read_text()
+        assert text.startswith("---\n"), name
+        fm = yaml.safe_load(text[4:text.index("\n---\n", 4)])
+        assert fm["name"] == name and fm["description"] and fm["model"], name
+        for banned in ("hooks", "mcpServers", "permissionMode"):
+            assert banned not in fm, f"{name}: plugin agents ignore {banned}"
+
+
 def test_show_prints_guidance_paths(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _fresh(tmp_path, monkeypatch)
     capsys.readouterr()
