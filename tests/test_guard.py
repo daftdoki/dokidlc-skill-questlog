@@ -56,7 +56,7 @@ def test_denies_frontmatter_edits(repo):
     assert guard.decide(ev("Edit", repo, file_path=q, old_string="---\nid:", new_string="---\nid:")) is None   # a no-op edit changes nothing
     d, _ = guard.decide(ev("Edit", repo, file_path=q, old_string="id: 2609041432-7k", new_string="id: 2609041432-7x"))
     assert d == "deny"
-    d, _ = guard.decide(ev("Edit", repo, file_path=q, old_string="g", new_string="goal_closed: now"))
+    d, _ = guard.decide(ev("Edit", repo, file_path=q, old_string="g", new_string="goal_accepted: now"))
     assert d == "deny"
 
 
@@ -70,7 +70,7 @@ def test_write_quest_md_only_with_same_frontmatter(repo):
 
 
 def test_bash_creator_verbs_ask(repo):
-    for cmd in ("quest init", "quest new 'A thing'", "quest close 2609041432-7k goal", "cd x && quest abandon 26 'why'", "/plugins/x/bin/quest start 26", "bin/quest skip 26 research"):
+    for cmd in ("quest init", "quest new 'A thing'", "quest next 2609041432-7k", "cd x && quest abandon 26 'why'", "/plugins/x/bin/quest start 26", "bin/quest skip 26 research"):
         d, reason = guard.decide(ev("Bash", repo, command=cmd))
         assert d == "ask", cmd
         assert cmd.strip() in reason
@@ -105,7 +105,7 @@ def test_shim_guarded_without_uv_exits_two(repo):
 
 
 def test_shim_guarded_with_uv_prints_decision(repo):
-    r = _shim(ev("Bash", repo, command="quest close 2609041432-7k goal"), os.environ["PATH"])
+    r = _shim(ev("Bash", repo, command="quest next 2609041432-7k"), os.environ["PATH"])
     assert r.returncode == 0
     out = json.loads(r.stdout)
     assert out["hookSpecificOutput"]["permissionDecision"] == "ask"
@@ -114,7 +114,7 @@ def test_shim_guarded_with_uv_prints_decision(repo):
 def test_value_only_frontmatter_edit_is_denied(repo):
     q = "docs/quests/2609041432-7k-thing/quest.md"
     assert guard.decide(ev("Edit", repo, file_path=q, old_string="backlog", new_string="active"))[0] == "deny"
-    assert guard.decide(ev("Edit", repo, file_path=q, old_string="g\n", new_string="g\nreview_closed : x\n"))[0] == "deny"
+    assert guard.decide(ev("Edit", repo, file_path=q, old_string="g\n", new_string="g\nreview_accepted : x\n"))[0] == "deny"
     assert guard.decide(ev("Edit", repo, file_path=q, old_string="d\n", new_string="done when it works\n")) is None
     assert guard.decide(ev("Edit", repo, file_path="Docs/Quests/readme.md", old_string="a", new_string="b"))[0] == "deny"
 

@@ -1,6 +1,6 @@
 ---
 name: quest
-description: Track work as quests and chores with staged review. Use when the creator asks to open, start, close, skip, or abandon a quest or chore, when a stage file is ready for review, or when a session needs to know what work is open.
+description: Track work as quests and chores with staged review. Use when the creator asks to open, start, move on from a stage of, skip, or abandon a quest or chore, when a stage file is ready for review, or when a session needs to know what work is open or completed.
 ---
 
 # Quest
@@ -18,13 +18,14 @@ You draft. The creator decides.
 | Verb | Who | Effect |
 |---|---|---|
 | `quest log` | you | one line per open quest or chore |
+| `quest complete [--all] [--limit N]` | you | completed work, newest first, ten by default; `--all` adds abandoned. Run it only when asked; completed work stays out of context otherwise |
 | `quest show ID` | you | a quest's metadata, files, current stage; a unique id prefix works |
 | `quest draft ID STAGE` | you | the stage file is written and awaits the creator's review |
 | `quest doctor [--fix]` | you | checks the tracker; `--fix` regenerates a stale log |
 | `quest init` | creator asks | creates `docs/quests/` and the CLAUDE.md paragraph |
 | `quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]` | creator asks | opens a quest or chore in the backlog |
 | `quest start ID` | creator asks | backlog to active |
-| `quest close ID STAGE` | creator asks | the creator accepted the stage; `close ID review` sets done |
+| `quest next ID` | creator asks | the creator accepted the current stage; the quest moves to the next one, or from review to completed |
 | `quest skip ID research` | creator asks | the creator waived research |
 | `quest abandon ID "reason"` | creator asks | terminal; the files stay, the entry leaves the log |
 
@@ -35,7 +36,7 @@ run it. The hook turns every creator verb into an approval prompt.
 ## Stages
 
 A quest: goal, research, design, plan, implement, review. A chore: plan,
-implement, review. The current stage is the first one not closed or
+implement, review. The current stage is the first one not accepted or
 skipped. Only research can be skipped.
 
 - **goal** produces `goal.md`. Interview the creator about outcomes. User
@@ -58,9 +59,12 @@ skipped. Only research can be skipped.
 - **review** is the creator reading the result against Done when. Answer
   questions, fix what the review finds.
 
-For each stage: write the file, run `quest draft ID STAGE`, then ask the
-creator whether the stage is complete. Wait. A stage is complete only when
-the creator says so and `quest close` has run.
+A stage is a loop, not a gate. Write the file, run `quest draft ID STAGE`,
+then ask the creator one question: keep iterating on this stage, or move
+to the next one? Name the next stage. Wait. If they want changes, revise,
+run `quest draft` again, and ask again. When they say move on, show and
+run `quest next ID`. The quest moves only when the creator says so and
+`quest next` has run.
 
 ## Walk-throughs for creator verbs
 
@@ -69,8 +73,8 @@ quest or chore; the Goal, what they want to accomplish; and Done when, how
 we will know. Then show and run `quest new "Title" --goal "..." --done-when
 "..."`, with `--chore` for a chore.
 
-When the creator says a stage is done, name the stage and summarize in one
-line what they are accepting, then show and run `quest close ID STAGE`.
+When the creator says to move on, name the stage and summarize in one
+line what they are accepting, then show and run `quest next ID`.
 
 A chore goes straight to plan: read the Goal, write `plan.md`, draft it,
 and ask before building.
@@ -86,7 +90,7 @@ refuses an empty one.
   `decision` pages before recommending in design, and each tool the plan
   touches. When you draft research, design, or plan, write one memory
   page per finding you established on your own, citing the stage file
-  with `--ref`, before you ask the creator to close the stage.
+  with `--ref`, before you ask the creator whether to move on.
 - A chore is for small features, troubleshooting, and other chores. When
   the creator is unsure which to open, recommend a chore if the Goal fits
   in two sentences and needs no design. A chore still gets a plan.

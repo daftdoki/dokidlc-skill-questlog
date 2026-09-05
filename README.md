@@ -1,18 +1,19 @@
 # dokidlc-skill-questlog
 
 A Claude Code plugin that lets your agent track work as quests and chores
-with you in charge of every gate. A quest runs goal, research, design,
-implement, review; the agent drafts each stage as a document and you close
-it. A chore skips straight to implement. Each one is a directory under
-`docs/quests/` holding a `quest.md` and its stage files, and the quest log
-at `docs/quests/README.md` lists what is open, one line each.
+with you deciding when each stage is finished. A quest runs goal, research,
+design, plan, implement, review; the agent drafts each stage as a document,
+you iterate on it together, and when you are satisfied the quest moves to
+the next stage. A chore skips straight to plan. Each one is a directory
+under `docs/quests/` holding a `quest.md` and its stage files, and the
+quest log at `docs/quests/README.md` lists what is open, one line each.
 
 With it enabled, the agent will on its own: tell you what is open at the
 start of every session, read a quest before working on it, write the stage
 documents, and mark a stage as drafted when it wants your review. It will
-not open, start, close, skip, or abandon anything by itself. Those happen
-only when you ask, and Claude Code prompts you to approve the exact command
-each time.
+not open, start, move on from, skip, or abandon anything by itself. Those
+happen only when you ask, and Claude Code prompts you to approve the exact
+command each time.
 
 ## Process
 
@@ -23,9 +24,10 @@ describe in two sentences and hand over. Both get an identifier, a
 directory, and a place in the log. They differ in how many stages they
 pass through.
 
-A quest moves through six stages. Each stage ends with a document the
-agent has written and you have read, and it does not advance until you say
-so.
+A quest moves through six stages. Each stage produces a document the agent
+has written and you have read. You iterate on it as long as you like; after
+every draft the agent asks whether to keep going or move on, and the quest
+moves only when you say so.
 
 1. **Define the goal.** The agent asks what you want and how you will know you have
    it. You answer, it writes, you correct it, and the two of you settle the
@@ -58,19 +60,25 @@ Talk to the agent. It runs the commands.
 
 - "What's open?" or "Show me the quest log." The agent runs `quest log`
   and reads you the list.
+- "What have we completed?" The agent runs `quest complete`, the last ten
+  completed newest first. `--all` adds abandoned ones. Completed work
+  stays out of the log and out of the session until you ask.
 - "Open a quest for discovering the bridge over mDNS." The agent asks for
   the goal and how you'll know it is done, shows you `quest new "Discover
   the bridge over mDNS" --goal "..." --done-when "..."`, runs it, and you
   approve the prompt.
 - "Open a chore to fix the volume off-by-one." Same, with `--chore`; the
-  chore starts at implement.
+  chore starts at plan.
 - "Start the mDNS quest." The agent runs `quest start 2609041432-7k`.
 - "Draft the goal." The agent interviews you, writes `goal.md`, runs
-  `quest draft 2609041432-7k goal`, and asks whether the stage is complete.
+  `quest draft 2609041432-7k goal`, and asks: keep iterating on the goal,
+  or move to research?
+- "Change the second story, then draft again." The agent revises and
+  re-runs `quest draft`, as many times as it takes.
 - "Plan it." The agent writes `plan.md` and asks you to read it before it
   builds anything.
-- "Yes, the goal stage is complete." The agent shows and runs
-  `quest close 2609041432-7k goal`.
+- "Move on." The agent shows and runs `quest next 2609041432-7k`. From
+  review, that completes the quest.
 - "Skip research on this one." `quest skip 2609041432-7k research`.
 - "Abandon the mDNS quest, we're going with the bridge's own discovery."
   `quest abandon 2609041432-7k "we're going with the bridge's own discovery"`.
@@ -78,16 +86,17 @@ Talk to the agent. It runs the commands.
 
 ### The commands
 
-The agent runs the first four on its own and the rest only when you ask.
+The agent runs the first five on its own and the rest only when you ask.
 
 ```
 quest log                                   what is open, newest first
+quest complete [--all] [--limit N]          what is completed, newest first, ten by default
 quest show 2609041432-7k                    one quest; a unique id prefix works
 quest draft 2609041432-7k plan              the stage file is written, please review
 quest doctor --fix                          check the tracker; regenerate a stale log
 quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]
 quest start ID
-quest close ID STAGE                        close ID review completes it
+quest next ID                               accept the current stage; from review, completed
 quest skip ID research
 quest abandon ID "reason"
 ```
@@ -114,11 +123,11 @@ docs/quests/
 id: 2609051012-k3
 title: Discover the bridge over mDNS
 kind: quest                # or chore
-state: active              # backlog, active, done, abandoned
+state: active              # backlog, active, completed, abandoned
 created: '2026-09-05T10:12:00Z'
 started: '2026-09-05T10:20:00Z'
 goal_drafted: '...'        # one pair of keys per stage
-goal_closed: '...'
+goal_accepted: '...'
 research_skipped: '...'
 abandoned_reason: ...      # only when abandoned
 ---
@@ -134,9 +143,9 @@ How you will know.
 The quest log is a heading, a comment naming the format and the plugin
 version, and a table with one row per open entry: id, kind, state,
 current stage, title. `quest log` prints the same table aligned for the
-terminal. Completed and abandoned entries are not listed. The state key is
-`done` in the file; in this document and in conversation, a quest or
-chore is completed.
+terminal. Completed and abandoned entries are not listed there, so the log
+stays small however long the project runs; `quest complete` reads them
+from the directories on demand.
 
 **What is guarded.** The log and every `quest.md` frontmatter block are
 written only by the verbs, so the log always matches the directories and
@@ -148,7 +157,7 @@ Write, and Bash tools enforces it:
 | Edit or Write to `docs/quests/README.md` | denied |
 | Edit or Write that touches a `quest.md` frontmatter block | denied; the body below it is fine |
 | Bash that names `docs/quests` and redirects, `sed -i`, `tee`, an inline Python or Perl, or a heredoc into it | denied |
-| Bash that runs `quest init`, `new`, `start`, `close`, `skip`, or `abandon` | you are asked to approve, with the command shown |
+| Bash that runs `quest init`, `new`, `start`, `next`, `skip`, or `abandon` | you are asked to approve, with the command shown |
 | Anything else, including the agent writing a stage file | allowed |
 
 A `SessionStart` hook runs `quest doctor --brief`, one line telling the

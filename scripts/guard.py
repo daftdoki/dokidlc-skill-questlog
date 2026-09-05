@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 ROOT_NAME = "docs/quests"
-CREATOR_VERBS = ("init", "new", "start", "close", "skip", "abandon")
+CREATOR_VERBS = ("init", "new", "start", "next", "skip", "abandon")
 VERB_RE = re.compile(r"(?:^|[\s;&|(]|/)(?:bin/)?quest\s+(" + "|".join(CREATOR_VERBS) + r")\b")
 # ways a shell command writes a file; a habit guard, not an adversary guard (see SKILL.md)
 WRITER_RE = re.compile(r"(?:(?<![<>])>{1,2}(?!&)|\bsed\s+(-i|--in-place)|\btee\b|\b(cp|mv|install|dd|rsync)\b|\b(python3?|perl|ruby|node)\s+-[ce]|\bawk\b.*-i\s*inplace|<<-?\s*['\"]?\w+|\|\s*(sh|bash|zsh)\b)")
