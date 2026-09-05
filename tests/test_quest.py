@@ -156,6 +156,13 @@ def _fm(d):
     return quest.parse_page((d / "quest.md").read_text())[0]
 
 
+def _git_commit_all(tmp_path):
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / ".claude").mkdir(exist_ok=True); (tmp_path / ".claude" / "settings.json").write_text("{}")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "x"], check=True)
+
+
 def test_full_quest_lifecycle(tmp_path, monkeypatch):
     qdir, d, qid = _fresh(tmp_path, monkeypatch)
     with pytest.raises(SystemExit):          # cannot draft before start
@@ -260,10 +267,7 @@ def test_doctor_reports_and_fixes(tmp_path, monkeypatch, capsys):
         quest.main(["doctor"])
     assert e.value.code == 1                      # not a git repo yet, so persistence fails
     assert "git repository" in capsys.readouterr().out
-    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    (tmp_path / ".claude").mkdir(); (tmp_path / ".claude" / "settings.json").write_text("{}")
-    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
-    subprocess.run(["git", "-C", str(tmp_path), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "x"], check=True)
+    _git_commit_all(tmp_path)
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor"])
     assert e.value.code == 0
@@ -290,10 +294,7 @@ def test_doctor_brief(tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit):
         quest.main(["doctor", "--brief"])
     assert "git repository" in capsys.readouterr().out          # persistence problem named at session start
-    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    (tmp_path / ".claude").mkdir(); (tmp_path / ".claude" / "settings.json").write_text("{}")
-    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
-    subprocess.run(["git", "-C", str(tmp_path), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "x"], check=True)
+    _git_commit_all(tmp_path)
     with pytest.raises(SystemExit):
         quest.main(["doctor", "--brief"])
     assert "questlog: ok, 1 open" in capsys.readouterr().out
@@ -392,13 +393,13 @@ def test_complete_lists_finished_newest_first_bounded(tmp_path, capsys, monkeypa
     quest.main(["init"]); capsys.readouterr()
     quest.main(["complete", "--limit", "1"])
     out = capsys.readouterr().out.splitlines()
-    assert out[0].startswith("Id             Kind   State      Finished    Title")
-    assert len(out) == 3 and out[2].startswith("2609011002-cc  quest  completed  2026-09-05  Later finish")
+    assert out[0].split() == ["Id", "Kind", "State", "Finished", "Title"]
+    assert len(out) == 3 and out[2].split() == ["2609011002-cc", "quest", "completed", "2026-09-05", "Later", "finish"]
     quest.main(["complete", "--all"])
     assert "Dropped" in capsys.readouterr().out
     with pytest.raises(SystemExit):
         quest.main(["complete", "--limit", "0"])
-    assert "Nothing completed." not in capsys.readouterr().out
+    assert "at least 1" in capsys.readouterr().err
 
 
 def test_complete_empty_and_log_unchanged(tmp_path, capsys, monkeypatch):
@@ -410,6 +411,11 @@ def test_complete_empty_and_log_unchanged(tmp_path, capsys, monkeypatch):
     assert (tmp_path / "docs/quests/README.md").read_text() == before   # read only
 
 
+def test_draft_prompt_passes_over_skipped_research():
+    fm = {"kind": "quest", "research_skipped": "x"}
+    assert quest.stage_after(fm, "goal") == "design"
+
+
 def test_draft_asks_iterate_or_move(tmp_path, capsys, monkeypatch):
     qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
     quest.main(["start", qid]); (d / "plan.md").write_text("# Plan\n"); capsys.readouterr()
@@ -418,13 +424,6 @@ def test_draft_asks_iterate_or_move(tmp_path, capsys, monkeypatch):
     quest.main(["next", qid]); quest.main(["next", qid]); capsys.readouterr()
     quest.main(["draft", qid, "review"])
     assert "whether the work is complete" in capsys.readouterr().out
-
-
-def _git_commit_all(tmp_path):
-    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    (tmp_path / ".claude").mkdir(exist_ok=True); (tmp_path / ".claude" / "settings.json").write_text("{}")
-    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
-    subprocess.run(["git", "-C", str(tmp_path), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "x"], check=True)
 
 
 def test_doctor_reports_old_format_and_fix_migrates_pages(tmp_path, monkeypatch, capsys):
@@ -497,7 +496,10 @@ def test_next_completes_in_one_write(tmp_path, monkeypatch):
     quest.main(["draft", qid, "plan"]); quest.main(["next", qid]); quest.main(["next", qid])
     writes = []
     real = quest.update_quest
-    monkeypatch.setattr(quest, "update_quest", lambda *a, **k: (writes.append(a), real(*a, **k))[1])
+    def counting(*a, **k):
+        writes.append(a)
+        return real(*a, **k)
+    monkeypatch.setattr(quest, "update_quest", counting)
     quest.main(["next", qid])
     assert len(writes) == 1
     fm = _fm(d)
@@ -506,23 +508,22 @@ def test_next_completes_in_one_write(tmp_path, monkeypatch):
         quest.main(["next", qid])
 
 
-def test_finished_at_normalizes_unquoted_stamps():
-    from datetime import date, datetime, timezone, timedelta
-    quoted = {"review_accepted": "2026-09-05T01:00:00Z"}
-    parsed = {"review_accepted": datetime(2026, 9, 5, 23, 0, tzinfo=timezone.utc)}
-    offset = {"abandoned": datetime(2026, 9, 6, 1, 0, tzinfo=timezone(timedelta(hours=2)))}
-    naive = {"review_accepted": datetime(2026, 9, 5, 12, 0)}
-    day = {"review_accepted": date(2026, 9, 4)}
-    assert quest.finished_at(parsed) == "2026-09-05T23:00:00Z" > quest.finished_at(quoted)
-    assert quest.finished_at(offset) == "2026-09-05T23:00:00Z"
-    assert quest.finished_at(naive) == "2026-09-05T12:00:00Z"
-    assert quest.finished_at(day) == "2026-09-04T00:00:00Z"
+def test_parse_page_normalizes_unquoted_stamps():
+    """A hand-edited page may leave a stamp unquoted; YAML then yields a datetime or date. Every consumer must see the quoted form."""
+    def page(line):
+        return quest.parse_page(f"---\nid: x\n{line}\n---\nbody\n")[0]
+    assert page("review_accepted: '2026-09-05T01:00:00Z'")["review_accepted"] == "2026-09-05T01:00:00Z"
+    assert page("review_accepted: 2026-09-05T23:00:00Z")["review_accepted"] == "2026-09-05T23:00:00Z"
+    assert page("abandoned: 2026-09-06T01:00:00+02:00")["abandoned"] == "2026-09-05T23:00:00Z"
+    assert page("review_accepted: 2026-09-05T12:00:00")["review_accepted"] == "2026-09-05T12:00:00Z"
+    assert page("review_accepted: 2026-09-04")["review_accepted"] == "2026-09-04T00:00:00Z"
+    assert quest.finished_at(page("review_accepted: 2026-09-05T23:00:00Z")) > quest.finished_at(page("review_accepted: '2026-09-05T01:00:00Z'"))
     assert quest.finished_at({}) == ""
 
 
 def test_unknown_kind_falls_back_to_quest_stages_everywhere():
     fm = {"id": "2609011000-aa", "kind": "epic", "state": "active"}
     assert quest.stages_for(fm) == quest.STAGES["quest"]
-    assert quest.current_stage(fm) == "goal" and quest.next_stage(fm, "goal") == "research"
+    assert quest.current_stage(fm) == "goal" and quest.stage_after(fm, "goal") == "research"
     with pytest.raises(SystemExit):
         quest.require_stage(fm, "plan", "draft")   # not current; must not raise KeyError
