@@ -113,10 +113,28 @@ time and never collide across branches.
 ```
 docs/quests/
   README.md                          the quest log, generated
+  guidance/                          optional; your project's own rules per stage
+    research.md  design.md
   2609051012-k3-discover-the-bridge/
     quest.md                         metadata and the goal, owned by the verbs
     goal.md  research.md  design.md  plan.md      written by the agent, read by you
+    goal-review.md  design-review.md ...          one review record per stage, pass by pass
 ```
+
+Before the agent drafts a stage it reads the plugin's guidance for that
+stage, six files under the skill's `references/`, one per stage, each
+with the interview, the document's sections, and a review checklist.
+`quest show` prints the path. A file at `docs/quests/guidance/STAGE.md`
+adds your project's rules for that stage; the agent reads it after the
+plugin's file, and it wins where they differ. `quest doctor` checks that
+the directory holds only files named after a stage.
+
+Each stage file is reviewed before you see it. The agent dispatches a
+fresh-context reviewer, records the findings by tier in
+`STAGE-review.md` beside the file, fixes them, and repeats until a pass
+finds nothing blocking and nothing to clarify, or three passes have run.
+The record shows you how the document converged, and a later session
+picks the loop up from the last pass.
 
 `quest.md` is frontmatter and a short body:
 
@@ -172,6 +190,16 @@ tracker without naming it, through an encoded payload or a variable, gets
 through; `quest doctor` is the check behind it. The script itself never
 writes through a symlink, so a cloned repository cannot point the quest
 log or a quest directory at another file.
+
+### What the agent dispatches
+
+The plugin ships seven subagents, named `questlog:NAME` once it is
+enabled. Six are reviewers, `review-goal` through `review-review`, one
+per stage; each reads only the checklist for its stage and reports. The
+seventh, `fact-finder`, answers a factual question from the code, the
+docs, memory, or the web, so the agent asks you only what you alone know.
+Each agent's model and effort are set in its own file under `agents/`;
+all inherit the session's until you change one.
 
 ## Requirements
 

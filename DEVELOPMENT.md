@@ -5,7 +5,9 @@
 ```
 .claude-plugin/plugin.json   manifest; no version field, the commit is the version
 bin/quest                    the command; Python under uv run --script
-skills/quest/SKILL.md        the agent's rules
+skills/quest/SKILL.md        the agent's rules; short, and points at references/
+skills/quest/references/     one file per stage: the process and the review checklist
+agents/                      six stage reviewers and the fact finder, one markdown file each
 hooks/hooks.json             PreToolUse guard and SessionStart doctor
 scripts/guard.sh             POSIX shim: exits 0 unless the tracker is touched, 2 if uv is missing
 scripts/guard.py             the checker: deny hand edits, ask on creator verbs
@@ -26,6 +28,16 @@ To run the command outside a session, set the project root explicitly:
 ```
 CLAUDE_PROJECT_DIR=/path/to/repo bin/quest log
 ```
+
+## Agents
+
+An agent file's frontmatter sets its `model` and `effort`. Every agent
+ships with `model: inherit` and no `effort`, so it follows the session.
+To give one stage a stronger reviewer, set those two keys in that agent's
+file and nothing else changes. Plugin agents ignore `hooks`,
+`mcpServers`, and `permissionMode`, and a test refuses them. The same
+test parses each frontmatter block as YAML, because `claude plugin
+validate` reports a malformed agent file as a warning and exits 0.
 
 ## Tests
 

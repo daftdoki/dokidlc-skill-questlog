@@ -19,8 +19,8 @@ You draft. The creator decides.
 |---|---|---|
 | `quest log` | you | one line per open quest or chore |
 | `quest complete [--all] [--limit N]` | you | completed work, newest first, ten by default; `--all` adds abandoned. Run it only when asked; completed work stays out of context otherwise |
-| `quest show ID` | you | a quest's metadata, files, current stage; a unique id prefix works |
-| `quest draft ID STAGE` | you | the stage file is written and awaits the creator's review |
+| `quest show ID` | you | a quest's metadata, files, current stage, and the stage's guidance; a unique id prefix works |
+| `quest draft ID STAGE` | you | the stage file is written, reviewed, and awaits the creator |
 | `quest doctor [--fix]` | you | checks the tracker; `--fix` regenerates a stale log |
 | `quest init` | creator asks | creates `docs/quests/` and the CLAUDE.md paragraph |
 | `quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]` | creator asks | opens a quest or chore in the backlog |
@@ -39,32 +39,36 @@ A quest: goal, research, design, plan, implement, review. A chore: plan,
 implement, review. The current stage is the first one not accepted or
 skipped. Only research can be skipped.
 
-- **goal** produces `goal.md`. Interview the creator about outcomes. User
-  stories belong here when they fit. Write what success looks like so the
-  finished work can be judged against it.
-- **research** produces `research.md`. Optional; the creator may `skip`
-  it. Survey existing methods, measure what can be measured, end with
-  design questions, candidate approaches, and a leaning each.
-- **design** produces `design.md`. Ask the design questions with a
-  recommendation each, record the answers, then write goal, stories,
-  current state, design, test changes, implementation plan, out of scope,
-  and a deviations section kept during implementation.
-- **plan** produces `plan.md`: what will happen during implementation,
-  in order, with the files touched, the commits expected, the tests, and
-  what could go wrong. For a chore this is the whole plan for the fix;
-  for a quest it turns the design into steps. The creator reads it before
-  anything is built.
-- **implement** produces commits. Follow the plan. Record deviations in
-  `plan.md` as they happen.
-- **review** is the creator reading the result against Done when. Answer
-  questions, fix what the review finds.
+`guidance:` names the file to read before you draft. `quest show` and
+`quest start` print it for the current stage, with `reviewer:` naming the
+stage's review agent and `overlay:`, when the project has one, naming its
+own rules for the stage, read second and winning where they differ.
 
-A stage is a loop, not a gate. Write the file, run `quest draft ID STAGE`,
-then ask the creator one question: keep iterating on this stage, or move
-to the next one? Name the next stage. Wait. If they want changes, revise,
-run `quest draft` again, and ask again. When they say move on, show and
-run `quest next ID STAGE`. The quest moves only when the creator says so and
-`quest next` has run.
+| Stage | Produces | Guidance | Reviewer |
+|---|---|---|---|
+| goal | `goal.md` | `references/goal.md` | `questlog:review-goal` |
+| research | `research.md`, skippable | `references/research.md` | `questlog:review-research` |
+| design | `design.md` | `references/design.md` | `questlog:review-design` |
+| plan | `plan.md`; a chore's whole plan | `references/plan.md` | `questlog:review-plan` |
+| implement | commits, deviations in `plan.md` | `references/implement.md` | `questlog:review-implement` |
+| review | the result, against Done when | `references/review.md` | `questlog:review-review` |
+
+A stage is a loop, not a gate. Read the guidance, write the file, run the
+review loop, run `quest draft ID STAGE`, and ask the creator one question:
+keep iterating on this stage, or move to the next one? Name the next stage
+and the last verdict. Wait. On changes, revise, loop, draft, and ask
+again. On move on, show and run `quest next ID STAGE`; the quest moves
+only then.
+
+## Review loop
+
+Dispatch the stage's reviewer with the paths its guidance lists. It
+reports findings as blocking, clarification, or polish, and a verdict.
+Record the pass in `STAGE-review.md` beside the stage file, fix what it
+found, and dispatch again. A pass with no blocking and no clarification
+findings is converged. Three passes in one run without one stop the loop,
+and the open findings go to the creator. A converged verdict is a
+recommendation; the creator's `quest next` accepts the stage.
 
 ## Walk-throughs for creator verbs
 
@@ -84,6 +88,9 @@ refuses an empty one.
 
 ## Rules
 
+- A fact that the code, the docs, or memory holds goes to
+  `questlog:fact-finder`, and the creator is asked only what the creator
+  alone knows.
 - If the project has the memory plugin: `quest start` and `quest show`
   name matching memory pages; read them. Search memory again at each
   stage: the title before goal, each design question during research,
