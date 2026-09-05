@@ -317,6 +317,7 @@ def cmd_doctor(args: argparse.Namespace) -> None:
     root = project_root()
     qdir = quests_dir(root)
     if args.brief and not qdir.is_dir():
+        print("questlog: this repository has no docs/quests/. Ask the creator whether to set up quests here; if yes, run `quest init`.")
         return
     rows = doctor_checks(root)
     if args.fix:

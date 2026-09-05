@@ -275,7 +275,7 @@ def test_doctor_reports_and_fixes(tmp_path, monkeypatch, capsys):
 def test_doctor_brief(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     quest.main(["doctor", "--brief"])
-    assert capsys.readouterr().out == ""
+    assert "no docs/quests/" in capsys.readouterr().out
     quest.main(["init"]); quest.main(["new", "Thing"])
     with pytest.raises(SystemExit):
         quest.main(["doctor", "--brief"])

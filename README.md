@@ -170,9 +170,10 @@ From the `dokidlc` marketplace, once per machine:
 claude plugin install questlog@dokidlc
 ```
 
-Then in each repository, ask the agent to run `quest init`, or run it
-yourself. It creates `docs/quests/`, the quest log, and a short paragraph
-in `CLAUDE.md`. Commit the result.
+Then start a session in a repository and say "set up quests." The agent
+runs `quest init`, which creates `docs/quests/`, the quest log, and a
+short paragraph in `CLAUDE.md`, and asks you to approve it. Commit the
+result.
 
 To have a repository declare the plugin for everyone who clones it, add to
 `.claude/settings.json`:
