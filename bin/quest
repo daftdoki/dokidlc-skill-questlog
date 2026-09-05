@@ -42,7 +42,7 @@ from pathlib import Path
 
 import yaml
 
-FORMAT = 2
+FORMAT = 3
 ROOT_NAME = "docs/quests"
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 # Lowercase alphanumerics without the characters that read alike: 0 1 i l o.
@@ -201,8 +201,8 @@ def log_rows(quests: list[tuple[Path, dict]]) -> list[tuple[str, str, str, str, 
 
 
 def log_lines(quests: list[tuple[Path, dict]]) -> list[str]:
-    """Markdown table rows, one per open entry. The id links to the directory."""
-    return [f"| [{qid}]({dirname}/) | {kind} | {state} | {stage} | {title} |" for qid, dirname, kind, state, stage, title in log_rows(quests)]
+    """Markdown table rows, one per open entry. The id links to the directory. A pipe in a title is escaped."""
+    return [f"| [{qid}]({dirname}/) | {kind} | {state} | {stage} | {title.replace('|', chr(92) + '|')} |" for qid, dirname, kind, state, stage, title in log_rows(quests)]
 
 
 LOG_TABLE_HEAD = "| Id | Kind | State | Stage | Title |\n|---|---|---|---|---|"
@@ -258,6 +258,7 @@ def check_format(root: Path) -> None:
 
 def migrate(root: Path, from_format: int) -> None:
     """Bring every quest.md up to FORMAT, then rewrite the log."""
+    # format 3 changed the quest log from list lines to a table; write_log below is the migration.
     if from_format < 2:
         # format 2 added the plan stage between design and implement. Work that
         # had already reached implement never had a plan stage; record it as
@@ -357,11 +358,11 @@ def doctor_checks(root: Path) -> list[tuple[bool, str, str]]:
             rows.append((False, f"{d.name}/quest.md frontmatter invalid" + (f", missing {', '.join(missing)}" if missing else ""), "fix the frontmatter")); bad += 1
         elif not d.name.startswith(str(fm["id"])):
             rows.append((False, f"{d.name}/ does not start with its id {fm['id']}", "rename the directory")); bad += 1
-    rows.append((bad == 0, f"{len(load_quests(qdir))} quest.md files valid", ""))
+    quests = load_quests(qdir)
+    rows.append((bad == 0, f"{len(quests)} quest.md files valid", ""))
     if found is not None and found <= FORMAT:
         current = (qdir / "README.md").read_text()
-        expected = render_log(load_quests(qdir), plugin_commit())
-        same = log_lines(load_quests(qdir)) == [l for l in current.splitlines() if l.startswith("| [")]
+        same = log_lines(quests) == [l for l in current.splitlines() if l.startswith("| [")]
         rows.append((same, "quest log matches the directories", "quest doctor --fix"))
     claude_md = root / "CLAUDE.md"
     rows.append((claude_md.is_file() and CLAUDE_MD_MARK in claude_md.read_text(), "CLAUDE.md has the quests paragraph", "quest init"))

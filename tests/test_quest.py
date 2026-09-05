@@ -90,7 +90,7 @@ def test_log_excludes_terminal_and_sorts_newest_first(tmp_path):
     assert lines[0] == "| [2609041432-bb](2609041432-bb-new-active/) | quest | active | research | New active |"
     assert lines[1] == "| [2609011000-aa](2609011000-aa-old-open/) | quest | backlog | goal | Old open |"
     text = quest.render_log(quest.load_quests(qdir), "abc1234", NOW)
-    assert text.startswith("# Quest log\n\n<!-- questlog format 2, written by questlog abc1234 on 2026-09-04 -->")
+    assert text.startswith("# Quest log\n\n<!-- questlog format 3, written by questlog abc1234 on 2026-09-04 -->")
 
 
 def test_log_byte_bound_thirty_items(tmp_path):
@@ -239,13 +239,13 @@ def test_format_newer_refuses_older_migrates(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     quest.main(["init"])
     log = tmp_path / "docs/quests/README.md"
-    log.write_text(log.read_text().replace("format 2", "format 3"))
+    log.write_text(log.read_text().replace("format 3", "format 4"))
     with pytest.raises(SystemExit) as e:
         quest.main(["log"])
     assert e.value.code == 2 and "newer questlog" in capsys.readouterr().err
     log.write_text("# Quest log\n\nno header\n")
     quest.main(["log"])
-    assert "format 2" in log.read_text()
+    assert "format 3" in log.read_text()
     assert "migrated" in capsys.readouterr().err
 
 
@@ -310,7 +310,7 @@ def test_migration_to_format_2_marks_plan_skipped_only_past_implement(tmp_path, 
     assert quest.current_stage(_fm(a)) == "design"
     assert _fm(b)["plan_skipped"] and quest.current_stage(_fm(b)) == "implement"
     assert _fm(c)["plan_skipped"] and quest.current_stage(_fm(c)) is None
-    assert "format 2" in (qdir / "README.md").read_text()
+    assert "format 3" in (qdir / "README.md").read_text()
 
 
 def test_memory_hits_fail_open_and_parse(monkeypatch):
@@ -327,3 +327,23 @@ def test_terminal_table_aligns():
     out = quest.terminal_table(rows).splitlines()
     assert out[0].startswith("Id             Kind   State    Stage     Title")
     assert out[2].startswith("2609041432-bb  quest  active   research  New active")
+
+
+def test_pipe_in_title_is_escaped_in_the_log(tmp_path):
+    qdir = tmp_path / "docs" / "quests"
+    _make(qdir, "2609041432-bb", "Fix a | b")
+    line = quest.log_lines(quest.load_quests(qdir))[0]
+    assert "Fix a \\| b |" in line and line.count("|") == 7
+
+
+def test_list_style_log_from_format_2_is_migrated(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    qdir = tmp_path / "docs" / "quests"
+    _make(qdir, "2609011000-aa", "Open one", state="active", goal_closed="x")
+    (qdir / "README.md").write_text("# Quest log\n\n<!-- questlog format 2, written by questlog old on 2026-09-04 -->\n\n- [2609011000-aa](2609011000-aa-open-one/) quest active research: Open one\n")
+    quest.main(["log"]); capsys.readouterr()
+    text = (qdir / "README.md").read_text()
+    assert "format 3" in text and "| [2609011000-aa]" in text
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    assert "quest log matches the directories" in capsys.readouterr().out
