@@ -563,7 +563,7 @@ def test_review_sections_state_the_stop_rule():
     for stage in quest.STAGES["quest"]:
         text = (REFERENCES / f"{stage}.md").read_text()
         review = text[text.index("\n## Review\n"):].lower()
-        for word in ("blocking", "clarification", "polish", "converged", f"questlog:review-{stage}", f"{stage}-review.md"):
+        for word in ("blocking", "clarification", "polish", "converged", "three passes", f"questlog:review-{stage}", f"{stage}-review.md"):
             assert word in review, f"{stage}.md Review section lacks {word}"
 
 

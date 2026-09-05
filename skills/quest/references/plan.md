@@ -28,7 +28,9 @@ the package manager, the deploy path.
 
 A fact that lives in the code, the docs, or memory goes to
 `questlog:fact-finder`. A question only the creator can answer goes to
-the creator in one numbered round with a recommended answer each.
+the creator in one numbered round with a recommended answer each. A
+round is one message that asks every question you can ask now and then
+waits.
 
 ## Writing
 
