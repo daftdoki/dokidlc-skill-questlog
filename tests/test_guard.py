@@ -46,14 +46,15 @@ def test_denies_quest_log_edits(repo):
 def test_allows_stage_files_and_quest_body(repo):
     q = "docs/quests/2609041432-7k-thing/"
     assert guard.decide(ev("Write", repo, file_path=q + "goal.md", content="# Goal\n")) is None
-    assert guard.decide(ev("Edit", repo, file_path=q + "quest.md", old_string="g\n", new_string="a better goal\n")) is None
+    assert guard.decide(ev("Edit", repo, file_path=q + "quest.md", old_string="## Goal\n\ng\n", new_string="## Goal\n\na better goal\n")) is None
 
 
 def test_denies_frontmatter_edits(repo):
     q = "docs/quests/2609041432-7k-thing/quest.md"
     d, _ = guard.decide(ev("Edit", repo, file_path=q, old_string="state: backlog", new_string="state: active"))
     assert d == "deny"
-    d, _ = guard.decide(ev("Edit", repo, file_path=q, old_string="---\nid:", new_string="---\nid:"))
+    assert guard.decide(ev("Edit", repo, file_path=q, old_string="---\nid:", new_string="---\nid:")) is None   # a no-op edit changes nothing
+    d, _ = guard.decide(ev("Edit", repo, file_path=q, old_string="id: 2609041432-7k", new_string="id: 2609041432-7x"))
     assert d == "deny"
     d, _ = guard.decide(ev("Edit", repo, file_path=q, old_string="g", new_string="goal_closed: now"))
     assert d == "deny"
@@ -95,7 +96,7 @@ def _shim(event, path_env):
 
 def test_shim_unrelated_exits_zero_without_uv(repo):
     r = _shim(ev("Bash", repo, command="git status"), "/usr/bin:/bin")
-    assert r.returncode == 0 and r.stdout == ""
+    assert r.returncode == 0 and r.stdout == ""      # without uv, only commands that name the tracker are refused
 
 
 def test_shim_guarded_without_uv_exits_two(repo):
@@ -108,3 +109,26 @@ def test_shim_guarded_with_uv_prints_decision(repo):
     assert r.returncode == 0
     out = json.loads(r.stdout)
     assert out["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_value_only_frontmatter_edit_is_denied(repo):
+    q = "docs/quests/2609041432-7k-thing/quest.md"
+    assert guard.decide(ev("Edit", repo, file_path=q, old_string="backlog", new_string="active"))[0] == "deny"
+    assert guard.decide(ev("Edit", repo, file_path=q, old_string="g\n", new_string="g\nreview_closed : x\n"))[0] == "deny"
+    assert guard.decide(ev("Edit", repo, file_path=q, old_string="d\n", new_string="done when it works\n")) is None
+    assert guard.decide(ev("Edit", repo, file_path="Docs/Quests/readme.md", old_string="a", new_string="b"))[0] == "deny"
+
+
+def test_more_bash_writers_and_tracker_forms_are_denied(repo):
+    for cmd in ("cp /tmp/x docs/quests/README.md", "sed --in-place s/a/b/ docs/quests/x/quest.md", "cd docs && cd quests && echo x > README.md", "ruby -e 'File.write(\"docs/quests/README.md\",1)'", "echo eCBkb2NzL3F1ZXN0cw== > docs/quests/README.md | sh"):
+        assert guard.decide(ev("Bash", repo, command=cmd))[0] == "deny", cmd
+    # an encoded payload that never names the tracker is not caught; the guard is for habit, not adversaries (README, SKILL.md)
+    assert guard.decide(ev("Bash", repo, command="echo eCBkb2NzL3F1ZXN0cw== | base64 -d | sh")) is None
+    assert guard.decide(ev("Bash", repo, command="cat docs/quests/README.md")) is None
+
+
+def test_shim_sends_every_bash_to_the_checker(repo):
+    r = _shim(ev("Bash", repo, command="quest\tnew x"), os.environ["PATH"])
+    assert r.returncode == 0 and (r.stdout == "" or "ask" in r.stdout)
+    r = _shim(ev("Edit", repo, file_path="src/x.py", old_string="a", new_string="b"), "/usr/bin:/bin")
+    assert r.returncode == 0 and r.stdout == ""

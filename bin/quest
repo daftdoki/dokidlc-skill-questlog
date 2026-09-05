@@ -81,6 +81,27 @@ def quests_dir(root: Path) -> Path:
     return root / ROOT_NAME
 
 
+def safe_write_path(qdir: Path, path: Path) -> Path:
+    """A path the script may write: inside the tracker, and no symlink on the way.
+
+    A cloned repository can carry a symlink at docs/quests/README.md or at a
+    quest directory. Following it would let a contributor make this script
+    overwrite any file the user can write. Refuse instead.
+    """
+    rel = path.relative_to(qdir) if path.is_relative_to(qdir) else None
+    if rel is None:
+        die(f"refusing to write outside {ROOT_NAME}: {path}")
+    probe = qdir
+    for part in rel.parts:
+        probe = probe / part
+        if probe.is_symlink():
+            die(f"refusing to write through a symlink in {ROOT_NAME}: {probe.relative_to(qdir)}")
+    resolved = path.resolve() if path.exists() else path.parent.resolve() / path.name
+    if not resolved.is_relative_to(qdir.resolve()):
+        die(f"refusing to write outside {ROOT_NAME}: {path}")
+    return path
+
+
 def plugin_commit() -> str:
     """The plugin's commit: from git in a checkout, else from the cache directory name."""
     try:
@@ -162,6 +183,8 @@ def load_quests(qdir: Path) -> list[tuple[Path, dict]]:
         return out
     for d in sorted(qdir.iterdir()):
         page = d / "quest.md"
+        if d.is_symlink() or page.is_symlink():
+            continue
         if d.is_dir() and page.is_file():
             fm, _ = parse_page(page.read_text())
             if fm.get("id"):
@@ -202,7 +225,9 @@ def log_rows(quests: list[tuple[Path, dict]]) -> list[tuple[str, str, str, str, 
 
 def log_lines(quests: list[tuple[Path, dict]]) -> list[str]:
     """Markdown table rows, one per open entry. The id links to the directory. A pipe in a title is escaped."""
-    return [f"| [{qid}]({dirname}/) | {kind} | {state} | {stage} | {title.replace('|', chr(92) + '|')} |" for qid, dirname, kind, state, stage, title in log_rows(quests)]
+    def cell(title: str) -> str:
+        return " ".join(title.split()).replace("|", "\\|")   # one line, pipes escaped
+    return [f"| [{qid}]({dirname}/) | {kind} | {state} | {stage} | {cell(title)} |" for qid, dirname, kind, state, stage, title in log_rows(quests)]
 
 
 LOG_TABLE_HEAD = "| Id | Kind | State | Stage | Title |\n|---|---|---|---|---|"
@@ -226,8 +251,10 @@ def terminal_table(rows: list[tuple[str, str, str, str, str, str]]) -> str:
 
 def write_log(root: Path) -> Path:
     qdir = quests_dir(root)
+    if qdir.is_symlink():
+        die(f"refusing to write: {ROOT_NAME} is a symlink")
     qdir.mkdir(parents=True, exist_ok=True)
-    path = qdir / "README.md"
+    path = safe_write_path(qdir, qdir / "README.md")
     path.write_text(render_log(load_quests(qdir), plugin_commit()))
     return path
 
@@ -236,12 +263,16 @@ def write_log(root: Path) -> Path:
 
 
 def read_format(qdir: Path) -> int | None:
-    """The format number in the quest log header. None when there is no log."""
+    """The format number in the quest log header. None when there is no log, or the file is not a quest log."""
     path = qdir / "README.md"
-    if not path.is_file():
+    if not path.is_file() or path.is_symlink():
         return None
-    m = HEADER_RE.search(path.read_text())
-    return int(m.group(1)) if m else 0
+    text = path.read_text()
+    m = HEADER_RE.search(text)
+    if m:
+        return int(m.group(1))
+    # only a file that is recognisably our log gets migrated; anything else is left alone
+    return 0 if text.lstrip().startswith(GENERATED_HEAD.strip()) else None
 
 
 def check_format(root: Path) -> None:
@@ -315,10 +346,33 @@ def git_status_of(root: Path, path: str) -> str:
     return "tracked" if tracked else "untracked"
 
 
+def git_states(root: Path, paths: tuple[str, ...]) -> dict[str, str]:
+    """One rev-parse, one check-ignore, one ls-files for every path together."""
+    try:
+        subprocess.run(["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"], capture_output=True, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return {p: "no-git" for p in paths}
+    present = [p for p in paths if (root / p).exists()]
+    ignored = set(subprocess.run(["git", "-C", str(root), "check-ignore", "--", *present], capture_output=True, text=True).stdout.split()) if present else set()
+    tracked = set(subprocess.run(["git", "-C", str(root), "ls-files", "--", *present], capture_output=True, text=True).stdout.split()) if present else set()
+    out = {}
+    for p in paths:
+        if p not in present:
+            out[p] = "missing"
+        elif p in ignored or p.rstrip("/") in ignored:
+            out[p] = "ignored"
+        elif any(t == p or t.startswith(p.rstrip("/") + "/") for t in tracked):
+            out[p] = "tracked"
+        else:
+            out[p] = "untracked"
+    return out
+
+
 def git_checks(root: Path) -> list[tuple[bool, str, str]]:
     rows = []
+    states = git_states(root, PERSISTED)
     for path in PERSISTED:
-        state = git_status_of(root, path)
+        state = states[path]
         if state == "no-git":
             return [(False, "this directory is a git repository", "git init, then commit docs/quests/ and .claude/settings.json")]
         label = {"tracked": f"{path} is committed", "untracked": f"{path} is not committed", "ignored": f"{path} is ignored by git", "missing": f"{path} does not exist"}[state]
@@ -348,17 +402,18 @@ def doctor_checks(root: Path) -> list[tuple[bool, str, str]]:
     else:
         rows.append((True, f"quest log format {found}", ""))
     bad = 0
+    quests = load_quests(qdir)
+    loaded = {d: fm for d, fm in quests}
     for d in sorted(p for p in qdir.iterdir() if p.is_dir()):
         page = d / "quest.md"
         if not page.is_file():
             rows.append((False, f"{d.name}/ has no quest.md", "add one or remove the directory")); bad += 1; continue
-        fm, _ = parse_page(page.read_text())
+        fm = loaded.get(d) or parse_page(page.read_text())[0]
         missing = [k for k in REQUIRED_KEYS if k not in fm]
         if missing or fm.get("kind") not in KINDS or fm.get("state") not in STATES or not ID_RE.match(str(fm.get("id", ""))):
             rows.append((False, f"{d.name}/quest.md frontmatter invalid" + (f", missing {', '.join(missing)}" if missing else ""), "fix the frontmatter")); bad += 1
         elif not d.name.startswith(str(fm["id"])):
             rows.append((False, f"{d.name}/ does not start with its id {fm['id']}", "rename the directory")); bad += 1
-    quests = load_quests(qdir)
     rows.append((bad == 0, f"{len(quests)} quest.md files valid", ""))
     if found is not None and found <= FORMAT:
         current = (qdir / "README.md").read_text()
@@ -377,10 +432,8 @@ def cmd_doctor(args: argparse.Namespace) -> None:
         print("questlog: this repository has no docs/quests/. Ask the creator whether to set up quests here; if yes, run `quest init`.")
         return
     rows = doctor_checks(root)
-    if args.fix:
-        for ok, label, fix in rows:
-            if not ok and fix == "quest doctor --fix":
-                write_log(root)
+    if args.fix and any(not ok and fix == "quest doctor --fix" for ok, _, fix in rows):
+        write_log(root)
         rows = doctor_checks(root)
     failed = [r for r in rows if not r[0]]
     if args.brief:
@@ -422,11 +475,19 @@ STAGE_FILES = {"goal": "goal.md", "research": "research.md", "design": "design.m
 
 
 def update_quest(d: Path, changes: dict) -> dict:
-    page = d / "quest.md"
+    page = safe_write_path(d.parent, d / "quest.md")
     fm, body = parse_page(page.read_text())
     fm.update(changes)
     page.write_text(render_page(fm, body))
     return fm
+
+
+def load_entry(prefix: str) -> tuple[Path, Path, dict]:
+    """The prelude every verb shares: project root, format check, resolve the entry."""
+    root = project_root()
+    check_format(root)
+    d, fm = resolve(quests_dir(root), prefix)
+    return root, d, fm
 
 
 def require_open(fm: dict) -> None:
@@ -445,9 +506,7 @@ def require_stage(fm: dict, stage: str, verb: str) -> None:
 
 
 def cmd_start(args: argparse.Namespace) -> None:
-    root = project_root()
-    check_format(root)
-    d, fm = resolve(quests_dir(root), args.id)
+    root, d, fm = load_entry(args.id)
     require_open(fm)
     if fm.get("state") != "backlog":
         die(f"{fm['id']} is already {fm['state']}")
@@ -458,9 +517,7 @@ def cmd_start(args: argparse.Namespace) -> None:
 
 
 def cmd_draft(args: argparse.Namespace) -> None:
-    root = project_root()
-    check_format(root)
-    d, fm = resolve(quests_dir(root), args.id)
+    root, d, fm = load_entry(args.id)
     require_open(fm)
     require_stage(fm, args.stage, "draft")
     wanted = STAGE_FILES.get(args.stage)
@@ -474,37 +531,28 @@ def cmd_draft(args: argparse.Namespace) -> None:
 
 
 def cmd_close(args: argparse.Namespace) -> None:
-    root = project_root()
-    check_format(root)
-    d, fm = resolve(quests_dir(root), args.id)
+    root, d, fm = load_entry(args.id)
     require_open(fm)
     require_stage(fm, args.stage, "close")
-    changes = {f"{args.stage}_closed": now_iso()}
-    if args.stage == "review":
-        changes["state"] = "done"
-    fm = update_quest(d, changes)
-    write_log(root)
+    fm = update_quest(d, {f"{args.stage}_closed": now_iso()})
     nxt = current_stage(fm)
-    print(f"{fm['id']} {args.stage} closed; " + (f"next stage {nxt}" if nxt else "done"))
+    if nxt is None:
+        fm = update_quest(d, {"state": "done"})
+    write_log(root)
+    print(f"{fm['id']} {args.stage} closed; " + (f"next stage {nxt}" if nxt else "completed"))
 
 
 def cmd_skip(args: argparse.Namespace) -> None:
-    root = project_root()
-    check_format(root)
-    d, fm = resolve(quests_dir(root), args.id)
+    root, d, fm = load_entry(args.id)
     require_open(fm)
-    if args.stage != "research":
-        die("only research can be skipped")
     require_stage(fm, "research", "skip")
-    update_quest(d, {"research_skipped": now_iso()})
+    fm = update_quest(d, {"research_skipped": now_iso()})
     write_log(root)
-    print(f"{fm['id']} research skipped; next stage design")
+    print(f"{fm['id']} research skipped; next stage {current_stage(fm)}")
 
 
 def cmd_abandon(args: argparse.Namespace) -> None:
-    root = project_root()
-    check_format(root)
-    d, fm = resolve(quests_dir(root), args.id)
+    root, d, fm = load_entry(args.id)
     require_open(fm)
     reason = (args.reason or "").strip()
     if not reason:
@@ -523,8 +571,9 @@ def cmd_new(args: argparse.Namespace) -> None:
     qdir = quests_dir(root)
     qdir.mkdir(parents=True, exist_ok=True)
     kind = "chore" if args.chore else "quest"
+    safe_write_path(qdir, qdir / "README.md")      # refuse before creating anything if the log cannot be written
     qid = new_id(existing_ids(qdir))
-    d = qdir / f"{qid}-{slugify(args.title)}"
+    d = safe_write_path(qdir, qdir / f"{qid}-{slugify(args.title)}")
     d.mkdir()
     fm = {"id": qid, "title": args.title, "kind": kind, "state": "backlog", "created": now_iso()}
     body = quest_body(args.goal or "(what the creator wants to accomplish)", args.done_when or "(how we will know)")
@@ -541,9 +590,7 @@ def cmd_log(args: argparse.Namespace) -> None:
 
 
 def cmd_show(args: argparse.Namespace) -> None:
-    root = project_root()
-    check_format(root)
-    d, fm = resolve(quests_dir(root), args.id)
+    root, d, fm = load_entry(args.id)
     sys.stdout.write((d / "quest.md").read_text())
     files = sorted(p.name for p in d.iterdir() if p.is_file() and p.name != "quest.md")
     print("\nstage files: " + (", ".join(files) if files else "none"))
@@ -562,14 +609,14 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--done-when", help="how we will know it is done")
     p.set_defaults(func=cmd_new)
 
-    for verb, fn, helptext in (("start", cmd_start, "backlog to active (creator verb)"),):
-        p = sub.add_parser(verb, help=helptext); p.add_argument("id"); p.set_defaults(func=fn)
+    p = sub.add_parser("start", help="backlog to active (creator verb)")
+    p.add_argument("id"); p.set_defaults(func=cmd_start)
     p = sub.add_parser("draft", help="record that a stage file is written and awaits review")
     p.add_argument("id"); p.add_argument("stage", choices=STAGES["quest"]); p.set_defaults(func=cmd_draft)
     p = sub.add_parser("close", help="the creator accepted the stage (creator verb)")
     p.add_argument("id"); p.add_argument("stage", choices=STAGES["quest"]); p.set_defaults(func=cmd_close)
     p = sub.add_parser("skip", help="the creator waived research (creator verb)")
-    p.add_argument("id"); p.add_argument("stage"); p.set_defaults(func=cmd_skip)
+    p.add_argument("id"); p.add_argument("stage", choices=["research"]); p.set_defaults(func=cmd_skip)
     p = sub.add_parser("abandon", help="terminal, with a reason (creator verb)")
     p.add_argument("id"); p.add_argument("reason"); p.set_defaults(func=cmd_abandon)
 

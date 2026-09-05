@@ -194,7 +194,7 @@ def test_chore_lifecycle_and_log_stage(tmp_path, monkeypatch):
     assert "| chore | active | plan | Fix |" in (qdir / "README.md").read_text()
     with pytest.raises(SystemExit):          # a chore has no goal stage
         quest.main(["close", qid, "goal"])
-    with pytest.raises(SystemExit):          # only research is skippable, and chores lack it
+    with pytest.raises(SystemExit):          # chores have no research stage
         quest.main(["skip", qid, "research"])
     (d / "plan.md").write_text("# Plan\n")
     quest.main(["draft", qid, "plan"]); quest.main(["close", qid, "plan"])
@@ -347,3 +347,27 @@ def test_list_style_log_from_format_2_is_migrated(tmp_path, monkeypatch, capsys)
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor"])
     assert "quest log matches the directories" in capsys.readouterr().out
+
+
+def test_symlinked_log_and_quest_are_refused(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    target = tmp_path / "victim.md"; target.write_text("precious\n")
+    qdir = tmp_path / "docs" / "quests"; qdir.mkdir(parents=True)
+    (qdir / "README.md").symlink_to(target)
+    quest.main(["log"]); capsys.readouterr()          # reading never follows the link into a migration
+    assert target.read_text() == "precious\n"
+    with pytest.raises(SystemExit):                    # writing refuses it
+        quest.main(["new", "Anything"])
+    assert target.read_text() == "precious\n"
+    (qdir / "README.md").unlink()
+    (qdir / "README.md").write_text("Not our file\n")
+    quest.main(["log"])                                   # unrecognised file: left alone, no migration
+    assert (qdir / "README.md").read_text() == "Not our file\n"
+    real = _make(qdir, "2609041432-bb", "Real"); link = qdir / "2609041433-cc-link"; link.symlink_to(real)
+    assert [fm["id"] for _, fm in quest.load_quests(qdir)] == ["2609041432-bb"]
+
+
+def test_multiline_title_is_one_log_line(tmp_path):
+    qdir = tmp_path / "docs" / "quests"
+    _make(qdir, "2609041432-bb", "First line\nsecond line")
+    assert "\n" not in quest.log_lines(quest.load_quests(qdir))[0]

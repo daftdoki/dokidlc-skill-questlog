@@ -156,6 +156,12 @@ agent how many entries are open, or that the log was written by a newer
 plugin. If `uv` is missing, guarded actions are refused rather than
 allowed, and everything else proceeds.
 
+The guard is for habit, not for an adversary. A command that reaches the
+tracker without naming it, through an encoded payload or a variable, gets
+through; `quest doctor` is the check behind it. The script itself never
+writes through a symlink, so a cloned repository cannot point the quest
+log or a quest directory at another file.
+
 ## Requirements
 
 - Claude Code 2.1.195 or later

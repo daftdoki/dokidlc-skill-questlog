@@ -19,25 +19,28 @@ from pathlib import Path
 
 ROOT_NAME = "docs/quests"
 CREATOR_VERBS = ("init", "new", "start", "close", "skip", "abandon")
-FM_KEYS = ("id", "title", "kind", "state", "created", "started", "abandoned", "abandoned_reason")
 VERB_RE = re.compile(r"(?:^|[\s;&|(]|/)(?:bin/)?quest\s+(" + "|".join(CREATOR_VERBS) + r")\b")
-WRITER_RE = re.compile(r"(?:(?<![<>])>{1,2}(?!&)|\bsed\s+-i|\btee\b|\bpython3?\s+-c|\bperl\s+-|<<-?\s*['\"]?\w+)")
+# ways a shell command writes a file; a habit guard, not an adversary guard (see SKILL.md)
+WRITER_RE = re.compile(r"(?:(?<![<>])>{1,2}(?!&)|\bsed\s+(-i|--in-place)|\btee\b|\b(cp|mv|install|dd|rsync)\b|\b(python3?|perl|ruby|node)\s+-[ce]|\bawk\b.*-i\s*inplace|<<-?\s*['\"]?\w+|\|\s*(sh|bash|zsh)\b)")
+TRACKER_RE = re.compile(r"docs/quests|\bquests\b")
+FM_DENY = "quest.md frontmatter is owned by the quest verbs. Edit only the body below it."
 
 
 def tracker_path(path: str, cwd: str) -> str | None:
-    """The path relative to the tracker root, or None if outside it."""
+    """The path relative to the tracker root, or None if outside it. Case-insensitive, so Docs/Quests/readme.md counts."""
     p = Path(path)
     if not p.is_absolute():
         p = Path(cwd) / p
     parts = p.resolve().parts
     for i in range(len(parts) - 1):
-        if parts[i] == "docs" and parts[i + 1] == "quests":
+        if parts[i].lower() == "docs" and parts[i + 1].lower() == "quests":
             return "/".join(parts[i + 2 :])
     return None
 
 
-def touches_frontmatter(text: str) -> bool:
-    return "---" in text or any(re.search(rf"^{k}:", text, re.M) for k in FM_KEYS) or bool(re.search(r"^\w+_(drafted|closed|skipped):", text, re.M))
+def apply_edit(text: str, old: str, new: str, replace_all: bool) -> str:
+    return text.replace(old, new) if replace_all else text.replace(old, new, 1)
+
 
 
 def decide(event: dict) -> tuple[str, str] | None:
@@ -50,20 +53,19 @@ def decide(event: dict) -> tuple[str, str] | None:
         rel = tracker_path(str(inp.get("file_path", "")), cwd)
         if rel is None:
             return None
-        if rel == "README.md":
+        if rel.lower() == "readme.md":
             return "deny", "docs/quests/README.md is the generated quest log. Run a quest verb; it regenerates."
-        if rel.endswith("/quest.md"):
+        if rel.lower().endswith("/quest.md"):
+            existing = Path(cwd, ROOT_NAME, rel)
+            if not existing.is_file():
+                return "deny", "quest.md is created by `quest new`, not written by hand."
+            before = existing.read_text()
             if tool == "Write":
-                existing = Path(cwd, ROOT_NAME, rel)
-                if not existing.is_file():
-                    return "deny", "quest.md is created by `quest new`, not written by hand."
-                new_fm = _frontmatter(str(inp.get("content", "")))
-                old_fm = _frontmatter(existing.read_text())
-                if new_fm != old_fm:
-                    return "deny", "quest.md frontmatter is owned by the quest verbs. Edit only the body below it."
-                return None
-            if touches_frontmatter(str(inp.get("old_string", ""))) or touches_frontmatter(str(inp.get("new_string", ""))):
-                return "deny", "quest.md frontmatter is owned by the quest verbs. Edit only the body below it."
+                after = str(inp.get("content", ""))
+            else:
+                after = apply_edit(before, str(inp.get("old_string", "")), str(inp.get("new_string", "")), bool(inp.get("replace_all")))
+            if _frontmatter(before) != _frontmatter(after):
+                return "deny", FM_DENY
         return None
 
     if tool == "Bash":
@@ -71,7 +73,7 @@ def decide(event: dict) -> tuple[str, str] | None:
         m = VERB_RE.search(cmd)
         if m:
             return "ask", f"Creator verb: quest {m.group(1)}. Approve only if you asked for this. Command: {cmd.strip()}"
-        if ROOT_NAME in cmd and WRITER_RE.search(cmd):
+        if TRACKER_RE.search(cmd) and WRITER_RE.search(cmd):
             return "deny", "Writing into docs/quests/ with a redirect or in-place tool bypasses the quest verbs. Use them, or edit a stage file with Edit or Write."
         return None
     return None
