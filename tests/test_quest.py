@@ -565,3 +565,49 @@ def test_review_sections_state_the_stop_rule():
         review = text[text.index("\n## Review\n"):].lower()
         for word in ("blocking", "clarification", "polish", "converged", f"questlog:review-{stage}", f"{stage}-review.md"):
             assert word in review, f"{stage}.md Review section lacks {word}"
+
+
+def test_show_prints_guidance_paths(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch)
+    capsys.readouterr()
+    quest.main(["show", qid])
+    out = capsys.readouterr().out
+    assert f"guidance: {REFERENCES / 'goal.md'}" in out and "reviewer: questlog:review-goal" in out and "overlay:" not in out
+    assert Path(out.split("guidance: ")[1].splitlines()[0]).is_file()
+    quest.main(["start", qid])
+    started = capsys.readouterr().out
+    assert "reviewer: questlog:review-goal" in started and "overlay:" not in started
+    overlay = qdir / "guidance" / "goal.md"
+    overlay.parent.mkdir(); overlay.write_text("# Our goal rules\n")
+    quest.main(["show", qid])
+    assert f"overlay: {overlay}" in capsys.readouterr().out
+    quest.main(["abandon", qid, "done with it"]); capsys.readouterr()
+    quest.main(["show", qid])
+    assert "guidance:" not in capsys.readouterr().out          # a finished entry, even one that still reports a stage
+
+
+def test_guidance_dir_is_not_a_quest(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch)
+    (qdir / "guidance").mkdir(); (qdir / "guidance" / "design.md").write_text("# rules\n")
+    _git_commit_all(tmp_path); capsys.readouterr()
+    quest.main(["log"])
+    assert "guidance" not in capsys.readouterr().out
+    with pytest.raises(SystemExit):          # the fixture has no CLAUDE.md paragraph, so doctor fails on that row alone
+        quest.main(["doctor"])
+    out = capsys.readouterr().out
+    assert "guidance/ has no quest.md" not in out and "ok   guidance/ holds only STAGE.md files" in out
+    (qdir / "guidance" / "notes.txt").write_text("stray\n")
+    with pytest.raises(SystemExit):
+        quest.main(["doctor"])
+    assert "FAIL guidance/ holds only STAGE.md files; stray: notes.txt" in capsys.readouterr().out
+
+
+def test_draft_prints_last_verdict(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch)
+    quest.main(["start", qid])
+    (d / "goal.md").write_text("# Goal\n"); capsys.readouterr()
+    quest.main(["draft", qid, "goal"])
+    assert "last verdict" not in capsys.readouterr().out
+    (d / "goal-review.md").write_text("# Review record: goal\n\n## Pass 1\n\nVerdict: another pass\n\n## Pass 2\n\nVerdict: converged\n")
+    quest.main(["draft", qid, "goal"])
+    assert "last verdict: converged" in capsys.readouterr().out

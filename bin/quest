@@ -509,7 +509,11 @@ def doctor_checks(root: Path) -> list[tuple[bool, str, str]]:
     old = sum(1 for _, fm in quests if predates_format_4(fm))
     if old:
         rows.append((False, f"{plural(old, 'quest.md file')} predate format 4", "quest doctor --fix"))
-    for d in sorted(p for p in qdir.iterdir() if p.is_dir()):
+    overlay_dir = qdir / GUIDANCE_DIR
+    if overlay_dir.is_dir():
+        stray = sorted(p.name for p in overlay_dir.iterdir() if p.name != f"{p.stem}.md" or p.stem not in STAGES["quest"])
+        rows.append((not stray, f"{GUIDANCE_DIR}/ holds only STAGE.md files" + (f"; stray: {', '.join(stray)}" if stray else ""), "name overlays after a stage, or remove them"))
+    for d in sorted(p for p in qdir.iterdir() if p.is_dir() and p.name != GUIDANCE_DIR):
         page = d / "quest.md"
         if not page.is_file():
             rows.append((False, f"{d.name}/ has no quest.md", "add one or remove the directory")); bad += 1; continue
@@ -587,6 +591,35 @@ def print_memory_hits(query: str) -> None:
 # --- transitions ------------------------------------------------------------
 
 STAGE_FILES = {"goal": "goal.md", "research": "research.md", "design": "design.md", "plan": "plan.md"}
+REFERENCES = PLUGIN_ROOT / "skills" / "quest" / "references"
+GUIDANCE_DIR = "guidance"   # docs/quests/guidance/STAGE.md: a project's own rules for a stage, read after the reference file
+
+
+def guidance_paths(stage: str, root: Path) -> list[tuple[str, str]]:
+    """What a session reads before drafting `stage`: the plugin's reference file, the reviewer agent, and the project's overlay when it has one."""
+    rows = [("guidance", str(REFERENCES / f"{stage}.md")), ("reviewer", f"questlog:review-{stage}")]
+    overlay = quests_dir(root) / GUIDANCE_DIR / f"{stage}.md"
+    if overlay.is_file():
+        rows.append(("overlay", str(overlay)))
+    return rows
+
+
+def print_guidance(fm: dict, root: Path) -> None:
+    """The guidance lines for the current stage; nothing for a finished entry. A backlog entry gets its first stage, which is what `start` begins."""
+    stage = current_stage(fm)
+    if fm.get("state") in TERMINAL or stage is None:
+        return
+    for label, value in guidance_paths(stage, root):
+        print(f"{label}: {value}")
+
+
+def last_verdict(d: Path, stage: str) -> str | None:
+    """The verdict line of the last pass in STAGE-review.md, or None when there is no record."""
+    record = d / f"{stage}-review.md"
+    if not record.is_file():
+        return None
+    verdicts = [l.partition(":")[2].strip() for l in record.read_text().splitlines() if l.startswith("Verdict:")]
+    return verdicts[-1] if verdicts else None
 
 
 def update_quest(d: Path, changes: dict, replace: bool = False) -> dict:
@@ -626,9 +659,10 @@ def cmd_start(args: argparse.Namespace) -> None:
     require_open(fm)
     if fm.get("state") != "backlog":
         die(f"{fm['id']} is already {fm['state']}")
-    update_quest(d, {"state": "active", "started": now_iso()})
+    fm = update_quest(d, {"state": "active", "started": now_iso()})
     write_log(root)
     print(f"{fm['id']} active; current stage {current_stage(fm)}")
+    print_guidance(fm, root)
     print_memory_hits(str(fm.get("title", "")))
 
 
@@ -642,6 +676,9 @@ def cmd_draft(args: argparse.Namespace) -> None:
     update_quest(d, {f"{args.stage}_drafted": now_iso()})
     write_log(root)
     nxt = stage_after(fm, args.stage)
+    verdict = last_verdict(d, args.stage)
+    if verdict:
+        print(f"last verdict: {verdict}")
     print(f"{fm['id']} {args.stage} drafted; ask the creator: keep iterating on {args.stage}, or move to {nxt}?" if nxt else f"{fm['id']} {args.stage} drafted; ask the creator whether the work is complete")
     if args.stage in ("research", "design", "plan") and shutil.which("memory"):
         print(f"memory: what did you learn during {args.stage} on your own? One page per finding, `--ref {d.name}/{STAGE_FILES[args.stage]}`, before the creator moves on.")
@@ -727,6 +764,7 @@ def cmd_show(args: argparse.Namespace) -> None:
     files = sorted(p.name for p in d.iterdir() if p.is_file() and p.name != "quest.md")
     print("\nstage files: " + (", ".join(files) if files else "none"))
     print(f"current stage: {current_stage(fm) or 'none, finished'}")
+    print_guidance(fm, root)
     print_memory_hits(str(fm.get("title", "")))
 
 
