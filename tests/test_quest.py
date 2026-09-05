@@ -439,7 +439,7 @@ def test_doctor_reports_old_format_and_fix_migrates_pages(tmp_path, monkeypatch,
         quest.main(["doctor"])
     out = capsys.readouterr().out
     assert e.value.code == 1
-    assert "format 3 is older" in out and "2 quest.md files predate format 4" in out and "quest close" in out
+    assert "format 3 is older" in out and "2 quest.md files predate format 4" in out and "paragraph matches" in out
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor", "--fix"])
     out = capsys.readouterr().out
@@ -527,3 +527,23 @@ def test_unknown_kind_falls_back_to_quest_stages_everywhere():
     assert quest.current_stage(fm) == "goal" and quest.stage_after(fm, "goal") == "research"
     with pytest.raises(SystemExit):
         quest.require_stage(fm, "plan", "draft")   # not current; must not raise KeyError
+
+
+def test_doctor_compares_the_marked_paragraph_with_the_template(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    (tmp_path / "CLAUDE.md").write_text("# Me\n\nrules\n")
+    quest.main(["init"]); _git_commit_all(tmp_path); capsys.readouterr()
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    assert e.value.code == 0 and "FAIL" not in capsys.readouterr().out        # freshly written: matches
+    text = (tmp_path / "CLAUDE.md").read_text()
+    (tmp_path / "CLAUDE.md").write_text(text + "\n## After\n\nunrelated, must not count\n")
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    assert e.value.code == 0                                                   # the section ends at the next heading
+    (tmp_path / "CLAUDE.md").write_text(text.replace("creator verb", "quest close"))
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    out = capsys.readouterr().out
+    assert e.value.code == 1 and "FAIL CLAUDE.md quests paragraph matches" in out and "quest init` writes" in out
+    assert quest.marked_section("no mark here\n") is None

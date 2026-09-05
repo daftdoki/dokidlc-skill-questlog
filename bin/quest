@@ -418,6 +418,16 @@ def cmd_init(args: argparse.Namespace) -> None:
             print(f"quest: {label} ({fix})")
 
 
+def marked_section(text: str) -> str | None:
+    """The CLAUDE.md section that carries the questlog mark: from its heading to the next heading or the end. None when unmarked."""
+    lines = text.splitlines()
+    start = next((i for i, line in enumerate(lines) if CLAUDE_MD_MARK in line), None)
+    if start is None:
+        return None
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+    return "\n".join(line.rstrip() for line in lines[start:end]).strip()
+
+
 REQUIRED_KEYS = ("id", "title", "kind", "state", "created")
 PERSISTED = (ROOT_NAME, ".claude/settings.json", "CLAUDE.md")
 
@@ -516,9 +526,11 @@ def doctor_checks(root: Path) -> list[tuple[bool, str, str]]:
         rows.append((same, "quest log matches the directories", "quest doctor --fix"))
     claude_md = root / "CLAUDE.md"
     claude_text = claude_md.read_text() if claude_md.is_file() else ""
-    rows.append((CLAUDE_MD_MARK in claude_text, "CLAUDE.md has the quests paragraph", "quest init"))
-    if "quest close" in claude_text:
-        rows.append((False, "CLAUDE.md names `quest close`, which format 4 renamed to `quest next`", "edit the paragraph by hand"))
+    section = marked_section(claude_text)
+    rows.append((section is not None, "CLAUDE.md has the quests paragraph", "quest init"))
+    if section is not None:
+        # the paragraph is a copy that only init writes; the plugin's wording moves on without it
+        rows.append((section == marked_section(CLAUDE_MD_PARAGRAPH), "CLAUDE.md quests paragraph matches the plugin's", "review it against the wording `quest init` writes; edit by hand"))
     rows.extend(git_checks(root))
     return rows
 
