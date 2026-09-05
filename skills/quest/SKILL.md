@@ -80,7 +80,13 @@ refuses an empty one.
 
 ## Rules
 
-- Search memory before you research, if the project has a memory skill.
+- If the project has the memory plugin: `quest start` and `quest show`
+  name matching memory pages; read them. Search memory again at each
+  stage: the title before goal, each design question during research,
+  `decision` pages before recommending in design, and each tool the plan
+  touches. When you draft research, design, or plan, write one memory
+  page per finding you established on your own, citing the stage file
+  with `--ref`, before you ask the creator to close the stage.
 - A chore is for small features, troubleshooting, and other chores. When
   the creator is unsure which to open, recommend a chore if the Goal fits
   in two sentences and needs no design. A chore still gets a plan.

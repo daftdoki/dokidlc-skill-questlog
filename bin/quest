@@ -30,7 +30,9 @@ the creator asked, and show the command first.
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import shutil
 import random
 import re
 import subprocess
@@ -377,6 +379,27 @@ def cmd_doctor(args: argparse.Namespace) -> None:
     sys.exit(1 if failed else 0)
 
 
+# --- memory ------------------------------------------------------------------
+
+
+def memory_hits(query: str) -> list[str]:
+    """Top three memory pages for a query, when the memory plugin is on PATH. Fail open."""
+    if not shutil.which("memory"):
+        return []
+    try:
+        proc = subprocess.run(["memory", "search", "--json", query], capture_output=True, text=True, timeout=8)
+        rows = json.loads(proc.stdout[proc.stdout.find("["):]) if "[" in proc.stdout else []
+    except (subprocess.SubprocessError, json.JSONDecodeError, OSError, ValueError):
+        return []
+    return [f"`memory read {r['filename']}` ({str(r.get('summary', ''))[:80]})" for r in rows[:3] if r.get("filename")]
+
+
+def print_memory_hits(query: str) -> None:
+    hits = memory_hits(query)
+    if hits:
+        print("memory: " + " · ".join(hits))
+
+
 # --- transitions ------------------------------------------------------------
 
 STAGE_FILES = {"goal": "goal.md", "research": "research.md", "design": "design.md", "plan": "plan.md"}
@@ -415,6 +438,7 @@ def cmd_start(args: argparse.Namespace) -> None:
     update_quest(d, {"state": "active", "started": now_iso()})
     write_log(root)
     print(f"{fm['id']} active; current stage {current_stage(fm)}")
+    print_memory_hits(str(fm.get("title", "")))
 
 
 def cmd_draft(args: argparse.Namespace) -> None:
@@ -429,6 +453,8 @@ def cmd_draft(args: argparse.Namespace) -> None:
     update_quest(d, {f"{args.stage}_drafted": now_iso()})
     write_log(root)
     print(f"{fm['id']} {args.stage} drafted; ask the creator whether the stage is complete")
+    if args.stage in ("research", "design", "plan") and shutil.which("memory"):
+        print(f"memory: what did you learn during {args.stage} on your own? One page per finding, `--ref {d.name}/{STAGE_FILES[args.stage]}`, before the creator closes it.")
 
 
 def cmd_close(args: argparse.Namespace) -> None:
@@ -506,6 +532,7 @@ def cmd_show(args: argparse.Namespace) -> None:
     files = sorted(p.name for p in d.iterdir() if p.is_file() and p.name != "quest.md")
     print("\nstage files: " + (", ".join(files) if files else "none"))
     print(f"current stage: {current_stage(fm) or 'none, finished'}")
+    print_memory_hits(str(fm.get("title", "")))
 
 
 def main(argv: list[str] | None = None) -> None:

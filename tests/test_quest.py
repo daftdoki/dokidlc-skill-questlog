@@ -310,3 +310,12 @@ def test_migration_to_format_2_marks_plan_skipped_only_past_implement(tmp_path, 
     assert _fm(b)["plan_skipped"] and quest.current_stage(_fm(b)) == "implement"
     assert _fm(c)["plan_skipped"] and quest.current_stage(_fm(c)) is None
     assert "format 2" in (qdir / "README.md").read_text()
+
+
+def test_memory_hits_fail_open_and_parse(monkeypatch):
+    monkeypatch.setattr(quest.shutil, "which", lambda name: None)
+    assert quest.memory_hits("anything") == []
+    monkeypatch.setattr(quest.shutil, "which", lambda name: "/x/memory")
+    class P: stdout = 'embedding failed: x\n[{"filename": "a.md", "summary": "A"}, {"filename": "b.md", "summary": "B"}]\n'
+    monkeypatch.setattr(quest.subprocess, "run", lambda *a, **k: P())
+    assert quest.memory_hits("q") == ["`memory read a.md` (A)", "`memory read b.md` (B)"]
