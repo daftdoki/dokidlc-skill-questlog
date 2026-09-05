@@ -25,7 +25,7 @@ You draft. The creator decides.
 | `quest init` | creator asks | creates `docs/quests/` and the CLAUDE.md paragraph |
 | `quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]` | creator asks | opens a quest or chore in the backlog |
 | `quest start ID` | creator asks | backlog to active |
-| `quest next ID` | creator asks | the creator accepted the current stage; the quest moves to the next one, or from review to completed |
+| `quest next ID STAGE` | creator asks | the creator accepted the current stage; the quest moves to the next one, or from review to completed. Always pass the stage: the script refuses one that is not current, and the approval prompt then names what is being accepted |
 | `quest skip ID research` | creator asks | the creator waived research |
 | `quest abandon ID "reason"` | creator asks | terminal; the files stay, the entry leaves the log |
 
@@ -63,7 +63,7 @@ A stage is a loop, not a gate. Write the file, run `quest draft ID STAGE`,
 then ask the creator one question: keep iterating on this stage, or move
 to the next one? Name the next stage. Wait. If they want changes, revise,
 run `quest draft` again, and ask again. When they say move on, show and
-run `quest next ID`. The quest moves only when the creator says so and
+run `quest next ID STAGE`. The quest moves only when the creator says so and
 `quest next` has run.
 
 ## Walk-throughs for creator verbs
@@ -74,7 +74,7 @@ we will know. Then show and run `quest new "Title" --goal "..." --done-when
 "..."`, with `--chore` for a chore.
 
 When the creator says to move on, name the stage and summarize in one
-line what they are accepting, then show and run `quest next ID`.
+line what they are accepting, then show and run `quest next ID STAGE`.
 
 A chore goes straight to plan: read the Goal, write `plan.md`, draft it,
 and ask before building.

@@ -77,7 +77,9 @@ Talk to the agent. It runs the commands.
   re-runs `quest draft`, as many times as it takes.
 - "Plan it." The agent writes `plan.md` and asks you to read it before it
   builds anything.
-- "Move on." The agent shows and runs `quest next 2609041432-7k`. From
+- "Move on." The agent shows and runs `quest next 2609041432-7k goal`.
+  The stage is optional and must be the current one, so a repeated or
+  stale command is refused instead of accepting the stage after. From
   review, that completes the quest.
 - "Skip research on this one." `quest skip 2609041432-7k research`.
 - "Abandon the mDNS quest, we're going with the bridge's own discovery."
@@ -96,7 +98,7 @@ quest draft 2609041432-7k plan              the stage file is written, please re
 quest doctor --fix                          check the tracker; regenerate a stale log
 quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]
 quest start ID
-quest next ID                               accept the current stage; from review, completed
+quest next ID [STAGE]                       accept the current stage; from review, completed
 quest skip ID research
 quest abandon ID "reason"
 ```

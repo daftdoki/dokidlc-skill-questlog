@@ -418,3 +418,111 @@ def test_draft_asks_iterate_or_move(tmp_path, capsys, monkeypatch):
     quest.main(["next", qid]); quest.main(["next", qid]); capsys.readouterr()
     quest.main(["draft", qid, "review"])
     assert "whether the work is complete" in capsys.readouterr().out
+
+
+def _git_commit_all(tmp_path):
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / ".claude").mkdir(exist_ok=True); (tmp_path / ".claude" / "settings.json").write_text("{}")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "x"], check=True)
+
+
+def test_doctor_reports_old_format_and_fix_migrates_pages(tmp_path, monkeypatch, capsys):
+    """doctor --fix used to stamp a new header without renaming the pages, which stranded them forever."""
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    qdir = tmp_path / "docs" / "quests"
+    a = _make(qdir, "2609011000-aa", "At plan", state="active", goal_closed="x", research_skipped="x", design_closed="x")
+    c = _make(qdir, "2609011001-cc", "Old done", kind="chore", state="done", plan_closed="x", implement_closed="x", review_closed="x")
+    (qdir / "README.md").write_text("# Quest log\n\n<!-- questlog format 3, written by questlog old on 2026-09-04 -->\n")
+    (tmp_path / "CLAUDE.md").write_text("## Quests <!-- questlog -->\n\nRun `quest close` when asked.\n")
+    _git_commit_all(tmp_path)
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    out = capsys.readouterr().out
+    assert e.value.code == 1
+    assert "format 3 is older" in out and "2 quest.md files predate format 4" in out and "quest close" in out
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor", "--fix"])
+    out = capsys.readouterr().out
+    assert e.value.code == 1 and "predate" not in out and "older" not in out      # only the CLAUDE.md wording is left, and that is a hand edit
+    assert _fm(a)["design_accepted"] == "x" and "design_closed" not in _fm(a) and quest.current_stage(_fm(a)) == "plan"
+    assert _fm(c)["state"] == "completed" and _fm(c)["review_accepted"] == "x"
+    assert "format 4" in (qdir / "README.md").read_text()
+    with pytest.raises(SystemExit):
+        quest.main(["abandon", "2609011001-cc", "no"])           # completed stays terminal
+
+
+def test_missing_log_still_renames_old_pages(tmp_path, monkeypatch, capsys):
+    """With no log header the format is unknown, but the page contents say what they need."""
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    qdir = tmp_path / "docs" / "quests"
+    a = _make(qdir, "2609011000-aa", "At plan", state="active", goal_closed="x", research_skipped="x", design_closed="x")
+    quest.main(["new", "Fresh one"])
+    assert "renamed pre-format-4 keys in 1 quest.md file" in capsys.readouterr().err
+    assert _fm(a)["design_accepted"] == "x" and "design_closed" not in _fm(a)
+    text = (qdir / "README.md").read_text()
+    assert "format 4" in text and "| quest | active | plan | At plan |" in text
+
+
+def test_done_page_that_escaped_migration_is_still_terminal(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    qdir = tmp_path / "docs" / "quests"
+    _make(qdir, "2609011000-aa", "Old", state="done")
+    (qdir / "README.md").write_text("Not our file\n")           # unrecognised log: no migration runs
+    with pytest.raises(SystemExit):
+        quest.main(["abandon", "2609011000-aa", "no"])
+    assert _fm(qdir / "2609011000-aa-old")["state"] == "done"
+
+
+def test_next_refuses_wrong_stage_undrafted_stage_and_repeats(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch)
+    quest.main(["start", qid])
+    with pytest.raises(SystemExit):          # goal has a file and was never drafted
+        quest.main(["next", qid])
+    assert "never drafted" in capsys.readouterr().err
+    (d / "goal.md").write_text("# Goal\n"); quest.main(["draft", qid, "goal"])
+    with pytest.raises(SystemExit):          # names a stage that is not current
+        quest.main(["next", qid, "design"])
+    assert "is at goal, not design" in capsys.readouterr().err
+    quest.main(["next", qid, "goal"])
+    assert quest.current_stage(_fm(d)) == "research"
+    with pytest.raises(SystemExit):          # a repeat with the old stage is refused instead of accepting research
+        quest.main(["next", qid, "goal"])
+    assert "research_accepted" not in _fm(d)
+
+
+def test_next_completes_in_one_write(tmp_path, monkeypatch):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
+    quest.main(["start", qid]); (d / "plan.md").write_text("# Plan\n")
+    quest.main(["draft", qid, "plan"]); quest.main(["next", qid]); quest.main(["next", qid])
+    writes = []
+    real = quest.update_quest
+    monkeypatch.setattr(quest, "update_quest", lambda *a, **k: (writes.append(a), real(*a, **k))[1])
+    quest.main(["next", qid])
+    assert len(writes) == 1
+    fm = _fm(d)
+    assert fm["state"] == "completed" and "None_accepted" not in fm
+    with pytest.raises(SystemExit):
+        quest.main(["next", qid])
+
+
+def test_finished_at_normalizes_unquoted_stamps():
+    from datetime import date, datetime, timezone, timedelta
+    quoted = {"review_accepted": "2026-09-05T01:00:00Z"}
+    parsed = {"review_accepted": datetime(2026, 9, 5, 23, 0, tzinfo=timezone.utc)}
+    offset = {"abandoned": datetime(2026, 9, 6, 1, 0, tzinfo=timezone(timedelta(hours=2)))}
+    naive = {"review_accepted": datetime(2026, 9, 5, 12, 0)}
+    day = {"review_accepted": date(2026, 9, 4)}
+    assert quest.finished_at(parsed) == "2026-09-05T23:00:00Z" > quest.finished_at(quoted)
+    assert quest.finished_at(offset) == "2026-09-05T23:00:00Z"
+    assert quest.finished_at(naive) == "2026-09-05T12:00:00Z"
+    assert quest.finished_at(day) == "2026-09-04T00:00:00Z"
+    assert quest.finished_at({}) == ""
+
+
+def test_unknown_kind_falls_back_to_quest_stages_everywhere():
+    fm = {"id": "2609011000-aa", "kind": "epic", "state": "active"}
+    assert quest.stages_for(fm) == quest.STAGES["quest"]
+    assert quest.current_stage(fm) == "goal" and quest.next_stage(fm, "goal") == "research"
+    with pytest.raises(SystemExit):
+        quest.require_stage(fm, "plan", "draft")   # not current; must not raise KeyError

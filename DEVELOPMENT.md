@@ -50,8 +50,25 @@ other non-zero exits as allow, which is why the shim is POSIX sh.
 The quest log header records `questlog format N` and the plugin commit.
 `FORMAT` in `bin/quest` is the version the code understands. Older data is
 migrated in place; newer data is refused with exit 2. Bump `FORMAT` only
-with a migration. Format 2 added the plan stage; the migration marks
-`plan_skipped` on work that had already reached implement.
+with a migration.
+
+- Format 2 added the plan stage; the migration marks `plan_skipped` on
+  work that had already reached implement.
+- Format 3 changed the log from list lines to a table; rewriting the log
+  is the migration.
+- Format 4 renamed the state `done` to `completed` and every `STAGE_closed`
+  key to `STAGE_accepted`. It is the first migration that rewrites whole
+  frontmatter blocks, through `update_quest(..., replace=True)`.
+
+The format number is read from the log header, but the data that changes
+lives in `quest.md`. Two paths used to skip the migration. `quest doctor
+--fix` wrote a new header without touching the pages, and a missing log
+made `check_format` a no-op so the next `quest new` stamped the new format
+over old pages. Both are closed. `rename_to_format_4` keys off the page
+contents, runs whenever the log is absent, and doctor reports pages that
+predate format 4 with `--fix` as the cure. Keep the same shape for the
+next format: a predicate on the frontmatter, a pure rewrite, and a doctor
+row.
 
 ## Release
 
