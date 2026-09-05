@@ -547,3 +547,21 @@ def test_doctor_compares_the_marked_paragraph_with_the_template(tmp_path, monkey
     out = capsys.readouterr().out
     assert e.value.code == 1 and "FAIL CLAUDE.md quests paragraph matches" in out and "quest init` writes" in out
     assert quest.marked_section("no mark here\n") is None
+
+
+REFERENCES = ROOT / "skills" / "quest" / "references"
+
+
+def test_reference_files_exist_for_every_stage():
+    for stage in quest.STAGES["quest"]:
+        text = (REFERENCES / f"{stage}.md").read_text()
+        assert text.strip(), stage
+        assert "\n## Review\n" in text, f"{stage}.md has no Review section"
+
+
+def test_review_sections_state_the_stop_rule():
+    for stage in quest.STAGES["quest"]:
+        text = (REFERENCES / f"{stage}.md").read_text()
+        review = text[text.index("\n## Review\n"):].lower()
+        for word in ("blocking", "clarification", "polish", "converged", f"questlog:review-{stage}", f"{stage}-review.md"):
+            assert word in review, f"{stage}.md Review section lacks {word}"
