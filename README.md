@@ -132,9 +132,9 @@ the directory holds only files named after a stage.
 
 Each stage file is reviewed before you see it. The agent dispatches a
 fresh-context reviewer, records the findings by tier in
-`STAGE-review.md` beside the file (`result-review.md` for the review
-stage), fixes them, and repeats until a pass
+`STAGE-review.md` beside the file, fixes them, and repeats until a pass
 finds nothing blocking and nothing to clarify, or three passes have run.
+The review stage's record is `result-review.md`.
 The record shows you how the document converged, and a later session
 picks the loop up from the last pass.
 
