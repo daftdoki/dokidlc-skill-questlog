@@ -11,8 +11,8 @@ quest log at `docs/quests/README.md` lists what is open, one line each.
 With it enabled, the agent will on its own: tell you what is open at the
 start of every session, read a quest before working on it, write the stage
 documents, and mark a stage as drafted when it wants your review. It will
-not open, start, move on from, skip, or abandon anything by itself. Those
-happen only when you ask, and Claude Code prompts you to approve the exact
+not open, start, park, move on from, skip, or abandon anything by itself.
+Those happen only when you ask, and Claude Code prompts you to approve the exact
 command each time.
 
 ## Process
@@ -70,6 +70,9 @@ Talk to the agent. It runs the commands.
 - "Open a chore to fix the volume off-by-one." Same, with `--chore`; the
   chore starts at plan.
 - "Start the mDNS quest." The agent runs `quest start 2609041432-7k`.
+- "Park the mDNS quest for now." The agent runs `quest defer
+  2609041432-7k`. The quest goes back to the backlog with its stage
+  progress kept, and `quest start` later resumes it at that stage.
 - "Draft the goal." The agent interviews you, writes `goal.md`, runs
   `quest draft 2609041432-7k goal`, and asks: keep iterating on the goal,
   or move to research?
@@ -98,6 +101,7 @@ quest draft 2609041432-7k plan              the stage file is written, please re
 quest doctor --fix                          check the tracker; regenerate a stale log
 quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]
 quest start ID
+quest defer ID                              active back to backlog; stage progress stays
 quest next ID [STAGE]                       accept the current stage; from review, completed
 quest skip ID research
 quest abandon ID "reason"
@@ -148,6 +152,7 @@ kind: quest                # or chore
 state: active              # backlog, active, completed, abandoned
 created: '2026-09-05T10:12:00Z'
 started: '2026-09-05T10:20:00Z'
+deferred: '...'            # only while parked; start removes it
 goal_drafted: '...'        # one pair of keys per stage
 goal_accepted: '...'
 research_skipped: '...'
@@ -179,7 +184,7 @@ Write, and Bash tools enforces it:
 | Edit or Write to `docs/quests/README.md` | denied |
 | Edit or Write that touches a `quest.md` frontmatter block | denied; the body below it is fine |
 | Bash that redirects into `docs/quests`, or runs `sed -i`, `tee`, `cp`, `mv`, `dd`, or an inline script (`python3 -c`, `sh -c`) that names a file there | denied; the redirect's target is what counts, so `2>/dev/null` beside a tracker path passes |
-| Bash that runs `quest init`, `new`, `start`, `next`, `skip`, or `abandon` | you are asked to approve, with the command shown |
+| Bash that runs `quest init`, `new`, `start`, `defer`, `next`, `skip`, or `abandon` | you are asked to approve, with the command shown |
 | Anything else, including the agent writing a stage file | allowed |
 
 A `SessionStart` hook runs `quest doctor --brief`, one line telling the

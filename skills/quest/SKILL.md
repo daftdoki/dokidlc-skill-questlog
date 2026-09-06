@@ -1,6 +1,6 @@
 ---
 name: quest
-description: Track work as quests and chores with staged review. Use when the creator asks to open, start, move on from a stage of, skip, or abandon a quest or chore, when a stage file is ready for review, or when a session needs to know what work is open or completed.
+description: Track work as quests and chores with staged review. Use when the creator asks to open, start, defer, move on from a stage of, skip, or abandon a quest or chore, when a stage file is ready for review, or when a session needs to know what work is open or completed.
 ---
 
 # Quest
@@ -26,7 +26,8 @@ You draft. The creator decides.
 | `quest doctor [--fix]` | you | checks the tracker; `--fix` regenerates a stale log |
 | `quest init` | creator asks | creates `docs/quests/` and the CLAUDE.md paragraph |
 | `quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]` | creator asks | opens a quest or chore in the backlog |
-| `quest start ID` | creator asks | backlog to active |
+| `quest start ID` | creator asks | backlog to active; a deferred entry resumes at its stage |
+| `quest defer ID` | creator asks | active to backlog; stage progress stays, `quest start` resumes it |
 | `quest next ID STAGE` | creator asks | the creator accepted the current stage; the quest moves to the next one, or from review to completed. Always pass the stage: the script refuses one that is not current, and the approval prompt then names what is being accepted |
 | `quest skip ID research` | creator asks | the creator waived research |
 | `quest abandon ID "reason"` | creator asks | terminal; the files stay, the entry leaves the log |
@@ -85,6 +86,10 @@ line what they are accepting, then show and run `quest next ID STAGE`.
 
 A chore goes straight to plan: read the Goal, write `plan.md`, draft it,
 and ask before building.
+
+When the creator asks to park or defer work, show and run `quest defer ID`.
+Nothing is lost; the entry resumes at its current stage on the next
+`quest start`.
 
 When the creator abandons, take the reason in their words; the script
 refuses an empty one.
