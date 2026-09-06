@@ -226,7 +226,8 @@ def test_unbalanced_quote_falls_back_to_the_wide_rule(repo):
 
 
 def test_commands_denied_on_2026_09_05_pass(repo):
-    # the four commands the chore's Goal names, and four witnesses from the same day, each as it ran
+    # the shape of each of the four commands the chore's Goal names, and of four witnesses from the same day;
+    # long bodies and unrelated segments are trimmed, the operators and quoting are kept
     for cmd in (
         "git pull -q && ls -d docs/quests/2609050141-z9-* && grep -c 'quest next' ../dokidlc-skill-questlog/skills/quest/SKILL.md && ls docs/quests/2609050141-2m-*/ && sed -n '1,30p' docs/quests/2609050141-2m-*/goal.md 2>/dev/null",
         "cd ~/Code/agents/dokidlc-skill-questlog && sed -n '724,735p' bin/quest; echo \"== STAGE_FILES\"; grep -n 'STAGE_FILES\\s*=' -A8 bin/quest | head -12; echo \"== guard hook\"; ls hooks; grep -n 'docs/quests\\|stage\\|\\.md' hooks/* | head -20; echo \"== enabled plugins\"; grep -o '\"[a-z-]*@[a-z-]*\": *true' ~/.claude/settings.json ~/Code/agents/agent-builder/.claude/settings.json 2>/dev/null",
