@@ -28,7 +28,7 @@ gap, fix it, commit, and show the fix.
 The completion criterion for this stage: every item in the checklist
 holds. Run the loop before `quest draft`.
 
-The loop. Dispatch `questlog:review-review` with the paths to `quest.md`
+The loop. Dispatch `questlog:review-result` with the paths to `quest.md`
 for the Done when, `plan.md` for the Deviations, this reference file, the
 prior review record `review-review.md` when it exists, and the root of the
 code repository, plus the commit range: from the earliest commit newer
@@ -68,7 +68,7 @@ one section per pass:
 
 ## Pass N, DATE
 
-Reviewer: questlog:review-review
+Reviewer: questlog:review-result
 Document: plan.md at HASH, document changed since pass N-1
 Code: /path/to/repository
 Commits: OLDEST^..HEAD

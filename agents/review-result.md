@@ -1,5 +1,5 @@
 ---
-name: review-review
+name: review-result
 description: Checks a finished quest's or chore's result against its Done when before the creator reads it. Dispatched by the quest skill during the review stage's loop with the paths to quest.md, plan.md, the stage's reference file, any prior review record, the root of the code repository, and a commit range. See "When to invoke" in the body.
 model: inherit
 color: cyan

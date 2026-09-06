@@ -51,7 +51,7 @@ own rules for the stage, read second and winning where they differ.
 | design | `design.md` | `references/design.md` | `questlog:review-design` |
 | plan | `plan.md`; a chore's whole plan | `references/plan.md` | `questlog:review-plan` |
 | implement | commits, deviations in `plan.md` | `references/implement.md` | `questlog:review-implement` |
-| review | the result, against Done when | `references/review.md` | `questlog:review-review` |
+| review | the result, against Done when | `references/review.md` | `questlog:review-result` |
 
 A stage is a loop, not a gate. Read the guidance, write the file, run the
 review loop, run `quest draft ID STAGE`, and ask the creator one question:

@@ -563,14 +563,15 @@ def test_review_sections_state_the_stop_rule():
     for stage in quest.STAGES["quest"]:
         text = (REFERENCES / f"{stage}.md").read_text()
         review = text[text.index("\n## Review\n"):].lower()
-        for word in ("blocking", "clarification", "polish", "converged", "three passes", f"questlog:review-{stage}", f"{stage}-review.md"):
+        for word in ("blocking", "clarification", "polish", "converged", "three passes", f"questlog:{quest.reviewer_for(stage)}", f"{stage}-review.md"):
             assert word in review, f"{stage}.md Review section lacks {word}"
 
 
 def test_agents_exist_with_required_frontmatter():
     """`claude plugin validate` warns and exits 0 on a malformed agent file, so this parse is the syntax check."""
     import yaml
-    names = [f"review-{stage}" for stage in quest.STAGES["quest"]] + ["fact-finder"]
+    names = [quest.reviewer_for(stage) for stage in quest.STAGES["quest"]] + ["fact-finder"]
+    assert "review-result" in names and "review-review" not in names
     for name in names:
         text = (ROOT / "agents" / f"{name}.md").read_text()
         assert text.startswith("---\n"), name

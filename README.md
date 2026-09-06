@@ -194,7 +194,7 @@ log or a quest directory at another file.
 ### What the agent dispatches
 
 The plugin ships seven subagents, named `questlog:NAME` once it is
-enabled. Six are reviewers, `review-goal` through `review-review`, one
+enabled. Six are reviewers, `review-goal` through `review-plan`, `review-implement`, and `review-result`, one
 per stage; each reads only the checklist for its stage and reports. The
 seventh, `fact-finder`, answers a factual question from the code, the
 docs, memory, or the web, so the agent asks you only what you alone know.

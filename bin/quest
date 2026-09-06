@@ -595,9 +595,14 @@ REFERENCES = PLUGIN_ROOT / "skills" / "quest" / "references"
 GUIDANCE_DIR = "guidance"   # docs/quests/guidance/STAGE.md: a project's own rules for a stage, read after the reference file
 
 
+def reviewer_for(stage: str) -> str:
+    """The reviewer agent for a stage: review-STAGE, except the review stage's own, which checks the result."""
+    return "review-result" if stage == "review" else f"review-{stage}"
+
+
 def guidance_paths(stage: str, root: Path) -> list[tuple[str, str]]:
     """What a session reads before drafting `stage`: the plugin's reference file, the reviewer agent, and the project's overlay when it has one."""
-    rows = [("guidance", str(REFERENCES / f"{stage}.md")), ("reviewer", f"questlog:review-{stage}")]
+    rows = [("guidance", str(REFERENCES / f"{stage}.md")), ("reviewer", f"questlog:{reviewer_for(stage)}")]
     overlay = quests_dir(root) / GUIDANCE_DIR / f"{stage}.md"
     if overlay.is_file():
         rows.append(("overlay", str(overlay)))
