@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 ROOT_NAME = "docs/quests"
-CREATOR_VERBS = ("init", "new", "start", "next", "skip", "abandon")
+CREATOR_VERBS = ("init", "new", "start", "defer", "next", "skip", "abandon")
 VERB_RE = re.compile(r"(?:^|[\s;&|(]|/)(?:bin/)?quest\s+(" + "|".join(CREATOR_VERBS) + r")\b")
 # the wide rule: any writer near any tracker mention. Kept only for a command shlex cannot parse.
 WRITER_RE = re.compile(r"(?:(?<![<>])>{1,2}(?!&)|\bsed\s+(-i|--in-place)|\btee\b|\b(cp|mv|install|dd|rsync)\b|\b(python3?|perl|ruby|node)\s+-[ce]|\bawk\b.*-i\s*inplace|<<-?\s*['\"]?\w+|\|\s*(sh|bash|zsh)\b)")
