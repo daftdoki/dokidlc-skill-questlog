@@ -9,7 +9,9 @@ Work lives under `docs/quests/`, one directory per quest or chore, named
 `<id>-<slug>`. `quest.md` holds the metadata and the Goal and Done when.
 Stage files sit beside it. The quest log at `docs/quests/README.md` is
 generated; never edit it, or any `quest.md` frontmatter, by hand. The
-command is `quest`, on PATH while this plugin is enabled.
+command is `quest`, on PATH while this plugin is enabled. Read tracker
+files with Read and write stage files with Write or Edit; Bash that
+redirects into `docs/quests/` is denied.
 
 ## Who does what
 

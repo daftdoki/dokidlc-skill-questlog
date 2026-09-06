@@ -178,7 +178,7 @@ Write, and Bash tools enforces it:
 |---|---|
 | Edit or Write to `docs/quests/README.md` | denied |
 | Edit or Write that touches a `quest.md` frontmatter block | denied; the body below it is fine |
-| Bash that names `docs/quests` and redirects, `sed -i`, `tee`, an inline Python or Perl, or a heredoc into it | denied |
+| Bash that redirects into `docs/quests`, or runs `sed -i`, `tee`, `cp`, `mv`, `dd`, or an inline script on a file there | denied; the redirect's target is what counts, so `2>/dev/null` beside a tracker path passes |
 | Bash that runs `quest init`, `new`, `start`, `next`, `skip`, or `abandon` | you are asked to approve, with the command shown |
 | Anything else, including the agent writing a stage file | allowed |
 
@@ -188,8 +188,9 @@ plugin. If `uv` is missing, guarded actions are refused rather than
 allowed, and everything else proceeds.
 
 The guard is for habit, not for an adversary. A command that reaches the
-tracker without naming it, through an encoded payload or a variable, gets
-through; `quest doctor` is the check behind it. The script itself never
+tracker without naming it, through an encoded payload, a variable, or a
+script body on stdin, gets through; `quest doctor` is the check behind
+it. The script itself never
 writes through a symlink, so a cloned repository cannot point the quest
 log or a quest directory at another file.
 
