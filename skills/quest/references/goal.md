@@ -29,7 +29,7 @@ show. A fact that lives in the code, the docs, or memory goes to
 `questlog:fact-finder`, and the round does not wait for it; only the
 questions downstream of that fact wait.
 
-The interview is complete when nothing pivotal is assumed: no decision
+The interview is complete when no decisive assumption is left: no decision
 that would change every downstream option is left unasked.
 
 ## Writing
@@ -83,7 +83,7 @@ Checklist for goal:
   what the creator said.
 - Every item under Success looks like can be judged true or false against
   the finished work.
-- Nothing pivotal is assumed.
+- No decision that would change every downstream option is assumed.
 - Background names what exists and cites where it is shown.
 - Where the creator drew a line, out of scope says so.
 

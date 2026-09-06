@@ -27,8 +27,8 @@ change every downstream option if guessed wrong. A round is one message
 that asks every question you can ask now and then waits. Number the
 questions and give each a recommended answer. A fact that lives in the
 code, the docs, or memory goes to `questlog:fact-finder`, and the round
-does not wait for it. The round is complete when nothing pivotal is
-assumed.
+does not wait for it. The round is complete when no decision that would
+change every downstream option is left assumed.
 
 Catalog what already exists that the change must fit with: the features,
 data structures, and conventions it will touch. Every approach you write
