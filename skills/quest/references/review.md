@@ -29,7 +29,8 @@ The completion criterion for this stage: every item in the checklist
 holds. Run the loop before `quest draft`.
 
 The loop. Dispatch `questlog:review-result` with the paths to `quest.md`
-for the Done when, `plan.md` for the Deviations, this reference file, the
+for the Done when, `goal.md` for Success looks like, `plan.md` for the
+Deviations, this reference file, the
 prior review record `result-review.md` when it exists, and the root of the
 code repository, plus the commit range: from the earliest commit newer
 than the plan's `plan_accepted` time in `quest.md` to HEAD, found with

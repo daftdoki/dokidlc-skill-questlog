@@ -119,6 +119,7 @@ docs/quests/
     quest.md                         metadata and the goal, owned by the verbs
     goal.md  research.md  design.md  plan.md      written by the agent, read by you
     goal-review.md  design-review.md ...          one review record per stage, pass by pass
+    result-review.md                 the review stage's record
 ```
 
 Before the agent drafts a stage it reads the plugin's guidance for that
@@ -131,7 +132,8 @@ the directory holds only files named after a stage.
 
 Each stage file is reviewed before you see it. The agent dispatches a
 fresh-context reviewer, records the findings by tier in
-`STAGE-review.md` beside the file, fixes them, and repeats until a pass
+`STAGE-review.md` beside the file (`result-review.md` for the review
+stage), fixes them, and repeats until a pass
 finds nothing blocking and nothing to clarify, or three passes have run.
 The record shows you how the document converged, and a later session
 picks the loop up from the last pass.
