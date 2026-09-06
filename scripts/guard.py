@@ -34,7 +34,6 @@ INPUTS = {"<", "<<", "<&"}
 COPIERS = ("cp", "mv", "install", "rsync")   # the last positional is the destination
 SCRIPTERS = ("python", "python3", "perl", "ruby", "node")
 SHELLS = ("sh", "bash", "zsh")
-HEREDOC_RE = re.compile(r"<<(-?)\s*(['\"]?)(\w+)\2")
 
 
 def tracker_path(path: str, cwd: str) -> str | None:
@@ -62,10 +61,11 @@ def strip_heredocs(cmd: str) -> str:
         line = lines[i]
         kept.append(line)
         i += 1
-        m = HEREDOC_RE.search(line)
-        if not m or not _opens_heredoc(line):
+        delim = _heredoc_delimiter(line)
+        if delim is None:
             continue
-        strip_tabs, delim = m.group(1) == "-", m.group(3)
+        strip_tabs = delim.startswith("-")
+        delim = delim.lstrip("-")
         while i < len(lines):
             body = lines[i]
             i += 1
@@ -74,13 +74,16 @@ def strip_heredocs(cmd: str) -> str:
     return "\n".join(kept)
 
 
-def _opens_heredoc(line: str) -> bool:
-    """True when `<<` is an operator on the line, not text inside quotes."""
+def _heredoc_delimiter(line: str) -> str | None:
+    """The word after the first `<<` operator on the line, or None. `<<-EOF` gives `-EOF`; quotes are already gone."""
     try:
         tokens = _tokens(line)
     except ValueError:
-        return False
-    return any(t == "<<" and i + 1 < len(tokens) for i, t in enumerate(tokens))
+        return None
+    for i, t in enumerate(tokens):
+        if t == "<<" and i + 1 < len(tokens):
+            return tokens[i + 1]
+    return None
 
 
 def _tokens(cmd: str) -> list[str]:

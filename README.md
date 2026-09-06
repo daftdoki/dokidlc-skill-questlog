@@ -178,7 +178,7 @@ Write, and Bash tools enforces it:
 |---|---|
 | Edit or Write to `docs/quests/README.md` | denied |
 | Edit or Write that touches a `quest.md` frontmatter block | denied; the body below it is fine |
-| Bash that redirects into `docs/quests`, or runs `sed -i`, `tee`, `cp`, `mv`, `dd`, or an inline script on a file there | denied; the redirect's target is what counts, so `2>/dev/null` beside a tracker path passes |
+| Bash that redirects into `docs/quests`, or runs `sed -i`, `tee`, `cp`, `mv`, `dd`, or an inline script (`python3 -c`, `sh -c`) that names a file there | denied; the redirect's target is what counts, so `2>/dev/null` beside a tracker path passes |
 | Bash that runs `quest init`, `new`, `start`, `next`, `skip`, or `abandon` | you are asked to approve, with the command shown |
 | Anything else, including the agent writing a stage file | allowed |
 

@@ -180,6 +180,7 @@ def test_heredocs_are_not_writers(repo):
     assert _bash(repo, "cat <<-EOF\n\techo x > docs/quests/README.md\n\tEOF\necho done") is None
     # a << inside quotes opens nothing, so the next line is still a command
     assert _bash(repo, 'echo "a <<b"\necho x > docs/quests/README.md')[0] == "deny"
+    assert _bash(repo, 'echo "a <<b"; cat <<EOF\nbody\nEOF\necho x > docs/quests/README.md')[0] == "deny"
 
 
 def test_in_place_tools_check_their_arguments(repo):
