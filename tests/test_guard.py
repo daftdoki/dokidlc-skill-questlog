@@ -178,6 +178,8 @@ def test_heredocs_are_not_writers(repo):
     assert _bash(repo, "cat <<EOF > docs/quests/x/goal.md\nhi\nEOF")[0] == "deny"
     assert _bash(repo, "cat <<-EOF > docs/quests/x/goal.md\n\thi\n\tEOF")[0] == "deny"
     assert _bash(repo, "cat <<-EOF\n\techo x > docs/quests/README.md\n\tEOF\necho done") is None
+    # a << inside quotes opens nothing, so the next line is still a command
+    assert _bash(repo, 'echo "a <<b"\necho x > docs/quests/README.md')[0] == "deny"
 
 
 def test_in_place_tools_check_their_arguments(repo):
@@ -194,6 +196,14 @@ def test_in_place_tools_check_their_arguments(repo):
         ("ruby -e 'File.write(\"docs/quests/README.md\",1)'", "a ruby -e script"),
         ("echo eCBkb2NzL3F1ZXN0cw== > docs/quests/README.md | sh", "a redirect"),
         ("echo 'x docs/quests/README.md' | base64 | base64 -d | sh", "a pipe into sh"),
+        ("sh -c 'echo x > docs/quests/README.md'", "a sh -c script"),
+        ("bash -c 'echo x > docs/quests/README.md'", "a bash -c script"),
+        # the descriptor digit belongs to the operator, not to the tool's arguments
+        ("cp /tmp/x docs/quests/README.md 2>/dev/null", "cp"),
+        ("mv docs/quests/a/x.md docs/quests/a/y.md 2>&1", "mv"),
+        ("rsync -a src/ docs/quests/ 2>/dev/null", "rsync"),
+        ("install /tmp/x docs/quests/README.md 2>/dev/null", "install"),
+        ("make &>> docs/quests/a/log.md", "a redirect"),
     ):
         d, reason = _bash(repo, cmd)
         assert d == "deny", cmd

@@ -29,7 +29,7 @@ FM_DENY = "quest.md frontmatter is owned by the quest verbs. Edit only the body 
 BASH_DENY = "Bash writes to {where} with {how}. Write a stage file with Write or Edit; the log and quest.md frontmatter belong to the quest verbs."
 
 PUNCTUATION = ";&|<>()\n"
-REDIRECTS = {">", ">>", "&>", ">|", ">&"}
+REDIRECTS = {">", ">>", "&>", "&>>", ">|", ">&"}
 INPUTS = {"<", "<<", "<&"}
 COPIERS = ("cp", "mv", "install", "rsync")   # the last positional is the destination
 SCRIPTERS = ("python", "python3", "perl", "ruby", "node")
@@ -63,7 +63,7 @@ def strip_heredocs(cmd: str) -> str:
         kept.append(line)
         i += 1
         m = HEREDOC_RE.search(line)
-        if not m:
+        if not m or not _opens_heredoc(line):
             continue
         strip_tabs, delim = m.group(1) == "-", m.group(3)
         while i < len(lines):
@@ -72,6 +72,15 @@ def strip_heredocs(cmd: str) -> str:
             if (body.lstrip("\t") if strip_tabs else body).rstrip() == delim:
                 break
     return "\n".join(kept)
+
+
+def _opens_heredoc(line: str) -> bool:
+    """True when `<<` is an operator on the line, not text inside quotes."""
+    try:
+        tokens = _tokens(line)
+    except ValueError:
+        return False
+    return any(t == "<<" and i + 1 < len(tokens) for i, t in enumerate(tokens))
 
 
 def _tokens(cmd: str) -> list[str]:
@@ -130,6 +139,8 @@ def bash_write_target(cmd: str, cwd: str) -> tuple[str, str] | None:
             if t in REDIRECTS or t in INPUTS:
                 target = seg[i + 1] if i + 1 < len(seg) else ""
                 i += 2
+                if words and words[-1].isdigit():
+                    words.pop()   # the descriptor in 2>/dev/null is part of the operator
                 if t in INPUTS or (t == ">&" and target.isdigit()):
                     continue
                 where = _inside(target, vcwd)
@@ -164,7 +175,7 @@ def bash_write_target(cmd: str, cwd: str) -> tuple[str, str] | None:
             checked, how = positional, "sed -i"
         elif name == "awk" and "-i" in args and "inplace" in args:
             checked, how = [a for a in positional if a != "inplace"], "awk -i inplace"
-        elif name in SCRIPTERS and any(a in ("-c", "-e") for a in args):
+        elif (name in SCRIPTERS and any(a in ("-c", "-e") for a in args)) or (name in SHELLS and "-c" in args):
             flag = "-c" if "-c" in args else "-e"
             for a in args:
                 m = TRACKER_RE.search(a)
