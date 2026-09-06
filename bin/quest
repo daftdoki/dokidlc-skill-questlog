@@ -600,6 +600,11 @@ def reviewer_for(stage: str) -> str:
     return "review-result" if stage == "review" else f"review-{stage}"
 
 
+def record_for(stage: str) -> str:
+    """The review record beside the stage file: STAGE-review.md, with the same exception as the agent."""
+    return "result-review.md" if stage == "review" else f"{stage}-review.md"
+
+
 def guidance_paths(stage: str, root: Path) -> list[tuple[str, str]]:
     """What a session reads before drafting `stage`: the plugin's reference file, the reviewer agent, and the project's overlay when it has one."""
     rows = [("guidance", str(REFERENCES / f"{stage}.md")), ("reviewer", f"questlog:{reviewer_for(stage)}")]
@@ -620,7 +625,7 @@ def print_guidance(fm: dict, root: Path) -> None:
 
 def last_verdict(d: Path, stage: str) -> str | None:
     """The verdict line of the last pass in STAGE-review.md, or None when there is no record."""
-    record = d / f"{stage}-review.md"
+    record = d / record_for(stage)
     if not record.is_file():
         return None
     verdicts = [l.partition(":")[2].strip() for l in record.read_text().splitlines() if l.startswith("Verdict:")]

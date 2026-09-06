@@ -64,8 +64,9 @@ only then.
 
 Dispatch the stage's reviewer with the paths its guidance lists. It
 reports findings as blocking, clarification, or polish, and a verdict.
-Record the pass in `STAGE-review.md` beside the stage file, fix what it
-found, and dispatch again. A pass with no blocking and no clarification
+Record the pass in `STAGE-review.md` beside the stage file, or
+`result-review.md` for the review stage, fix what it found, and dispatch
+again. A pass with no blocking and no clarification
 findings is converged. Three passes in one run without one stop the loop,
 and the open findings go to the creator. A converged verdict is a
 recommendation; the creator's `quest next` accepts the stage.

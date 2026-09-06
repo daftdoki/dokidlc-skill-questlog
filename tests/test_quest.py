@@ -563,7 +563,7 @@ def test_review_sections_state_the_stop_rule():
     for stage in quest.STAGES["quest"]:
         text = (REFERENCES / f"{stage}.md").read_text()
         review = text[text.index("\n## Review\n"):].lower()
-        for word in ("blocking", "clarification", "polish", "converged", "three passes", f"questlog:{quest.reviewer_for(stage)}", f"{stage}-review.md"):
+        for word in ("blocking", "clarification", "polish", "converged", "three passes", f"questlog:{quest.reviewer_for(stage)}", quest.record_for(stage)):
             assert word in review, f"{stage}.md Review section lacks {word}"
 
 
@@ -572,6 +572,7 @@ def test_agents_exist_with_required_frontmatter():
     import yaml
     names = [quest.reviewer_for(stage) for stage in quest.STAGES["quest"]] + ["fact-finder"]
     assert "review-result" in names and "review-review" not in names
+    assert quest.record_for("review") == "result-review.md" and quest.record_for("goal") == "goal-review.md"
     for name in names:
         text = (ROOT / "agents" / f"{name}.md").read_text()
         assert text.startswith("---\n"), name

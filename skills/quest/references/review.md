@@ -30,13 +30,13 @@ holds. Run the loop before `quest draft`.
 
 The loop. Dispatch `questlog:review-result` with the paths to `quest.md`
 for the Done when, `plan.md` for the Deviations, this reference file, the
-prior review record `review-review.md` when it exists, and the root of the
+prior review record `result-review.md` when it exists, and the root of the
 code repository, plus the commit range: from the earliest commit newer
 than the plan's `plan_accepted` time in `quest.md` to HEAD, found with
 `git log --since=TIME` on the working branch. The reviewer reads this
 section, the Done when, the Deviations, the record, and the commits, and
 returns findings by tier with a verdict. You record the pass in
-`review-review.md`, fix what it found, and dispatch again. A pass that
+`result-review.md`, fix what it found, and dispatch again. A pass that
 reports no blocking and no clarification findings is converged, and the
 loop stops. Three passes in one run that each report another pass also
 stop the loop, and the open findings go to the creator. A run begins
@@ -60,7 +60,7 @@ Checklist for review:
 - Every deviation is recorded, and none hides an unmet line.
 - The documentation the work changed reads as current.
 
-The record. `review-review.md` in the quest directory, written by you,
+The record. `result-review.md` in the quest directory, written by you,
 one section per pass:
 
 ```
