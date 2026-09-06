@@ -18,7 +18,8 @@ Usage:
   quest complete [--all] [--limit N]  list completed work, newest first; --all adds abandoned
   quest show ID                     a quest's metadata and files (id prefix ok)
   quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]
-  quest start ID                    backlog to active
+  quest start ID                    backlog to active; resumes a deferred entry at its stage
+  quest defer ID                    active to backlog; stage progress stays
   quest draft ID STAGE              the stage file is written and awaits review
                                     stages: goal research design plan implement review
   quest next ID [STAGE]             the creator accepted the current stage; from review, completed
@@ -26,8 +27,8 @@ Usage:
   quest skip ID research            the creator waived research
   quest abandon ID "reason"         terminal; files stay, entry leaves the log
 
-new, start, next, skip, and abandon are creator verbs: run them only when
-the creator asked, and show the command first.
+new, start, defer, next, skip, and abandon are creator verbs: run them only
+when the creator asked, and show the command first.
 """
 
 from __future__ import annotations
@@ -633,10 +634,16 @@ def last_verdict(d: Path, stage: str) -> str | None:
 
 
 def update_quest(d: Path, changes: dict, replace: bool = False) -> dict:
-    """Merge `changes` into the frontmatter, or with replace=True make `changes` the whole frontmatter. The body is kept."""
+    """Merge `changes` into the frontmatter, or with replace=True make `changes` the whole frontmatter. The body is kept.
+
+    In merge mode a None value in `changes` deletes that key. Replace mode keeps None as a value: the format
+    migration passes a dict loaded from the page, where an empty key such as `abandoned_reason:` is None."""
     page = safe_write_path(d.parent, d / "quest.md")
     fm, body = parse_page(page.read_text())
-    fm = dict(changes) if replace else {**fm, **changes}
+    if replace:
+        fm = dict(changes)
+    else:
+        fm = {k: v for k, v in {**fm, **changes}.items() if not (k in changes and v is None)}
     page.write_text(render_page(fm, body))
     return fm
 
@@ -669,11 +676,22 @@ def cmd_start(args: argparse.Namespace) -> None:
     require_open(fm)
     if fm.get("state") != "backlog":
         die(f"{fm['id']} is already {fm['state']}")
-    fm = update_quest(d, {"state": "active", "started": now_iso()})
+    fm = update_quest(d, {"state": "active", "started": now_iso(), "deferred": None})
     write_log(root)
     print(f"{fm['id']} active; current stage {current_stage(fm)}")
     print_guidance(fm, root)
     print_memory_hits(str(fm.get("title", "")))
+
+
+def cmd_defer(args: argparse.Namespace) -> None:
+    """The reverse of start. The stage keys stay, so `quest start` resumes the entry where it was."""
+    root, d, fm = load_entry(args.id)
+    require_open(fm)
+    if fm.get("state") != "active":
+        die(f"{fm['id']} is already {fm['state']}")
+    fm = update_quest(d, {"state": "backlog", "deferred": now_iso()})
+    write_log(root)
+    print(f"{fm['id']} backlog; current stage {current_stage(fm)}")
 
 
 def cmd_draft(args: argparse.Namespace) -> None:
@@ -791,6 +809,8 @@ def main(argv: list[str] | None = None) -> None:
 
     p = sub.add_parser("start", help="backlog to active (creator verb)")
     p.add_argument("id"); p.set_defaults(func=cmd_start)
+    p = sub.add_parser("defer", help="active to backlog (creator verb)")
+    p.add_argument("id"); p.set_defaults(func=cmd_defer)
     p = sub.add_parser("draft", help="record that a stage file is written and awaits review")
     p.add_argument("id"); p.add_argument("stage", choices=STAGES["quest"]); p.set_defaults(func=cmd_draft)
     p = sub.add_parser("next", help="the creator accepted the current stage; move to the next, or complete from review (creator verb)")

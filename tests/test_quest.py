@@ -231,6 +231,40 @@ def test_start_twice_fails(tmp_path, monkeypatch):
         quest.main(["start", qid])
 
 
+def test_defer_returns_to_backlog_and_start_resumes(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch, "Park", chore=True)
+    quest.main(["start", qid])
+    (d / "plan.md").write_text("# Plan\n")
+    quest.main(["draft", qid, "plan"])
+    started = _fm(d)["started"]
+    capsys.readouterr()
+    quest.main(["defer", qid])
+    assert f"{qid} backlog; current stage plan" in capsys.readouterr().out
+    fm = _fm(d)
+    assert fm["state"] == "backlog" and fm["deferred"]
+    assert fm["started"] == started and fm["plan_drafted"]      # progress is kept
+    assert "| chore | backlog | plan | Park |" in (qdir / "README.md").read_text()
+    for argv in (["draft", qid, "plan"], ["next", qid, "plan"], ["defer", qid]):
+        with pytest.raises(SystemExit):
+            quest.main(argv)
+    quest.main(["start", qid])
+    fm = _fm(d)
+    assert fm["state"] == "active" and "deferred" not in fm
+    assert fm["started"] >= started and quest.current_stage(fm) == "plan"   # rewritten; stamps have second resolution
+    _make(qdir, "2609040000-zz", "Over", state="completed", review_accepted="2026-09-04T00:00:00Z")
+    with pytest.raises(SystemExit):                              # require_open
+        quest.main(["defer", "2609040000-zz"])
+
+
+def test_update_quest_none_deletes_in_merge_mode_only(tmp_path):
+    d = _make(tmp_path / "docs" / "quests", "2609040000-aa", "Keys", deferred="2026-09-04T00:00:00Z", abandoned_reason=None)
+    fm = quest.update_quest(d, {"deferred": None, "missing": None, "state": "active"})
+    assert "deferred" not in fm and "missing" not in fm and fm["state"] == "active"
+    assert "abandoned_reason" in fm                              # a page value of None survives a merge
+    fm = quest.update_quest(d, {"id": "2609040000-aa", "abandoned_reason": None}, replace=True)
+    assert "abandoned_reason" in fm                              # replace mode keeps None-valued keys
+
+
 def test_init_is_idempotent_and_appends_paragraph(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     (tmp_path / "CLAUDE.md").write_text("# Me\n\nrules\n")
