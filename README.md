@@ -12,8 +12,8 @@ With it enabled, the agent will on its own: tell you what is open at the
 start of every session, read a quest before working on it, write the stage
 documents, and mark a stage as drafted when it wants your review. It will
 not open, start, park, move on from, skip, or abandon anything by itself.
-Those happen only when you ask, and Claude Code prompts you to approve the exact
-command each time.
+Those happen only when you ask, and Claude Code prompts you to approve the
+exact command each time.
 
 ## Process
 
@@ -70,9 +70,9 @@ Talk to the agent. It runs the commands.
 - "Open a chore to fix the volume off-by-one." Same, with `--chore`; the
   chore starts at plan.
 - "Start the mDNS quest." The agent runs `quest start 2609041432-7k`.
-- "Park the mDNS quest for now." The agent runs `quest defer
-  2609041432-7k`. The quest goes back to the backlog with its stage
-  progress kept, and `quest start` later resumes it at that stage.
+- "Park the mDNS quest for now." The agent runs
+  `quest defer 2609041432-7k`. The quest goes back to the backlog with its
+  stage progress kept, and `quest start` later resumes it at that stage.
 - "Draft the goal." The agent interviews you, writes `goal.md`, runs
   `quest draft 2609041432-7k goal`, and asks: keep iterating on the goal,
   or move to research?
