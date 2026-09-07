@@ -785,12 +785,14 @@ def test_init_refuses_a_claude_md_link_to_a_managed_or_non_file_target(tmp_path,
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     (tmp_path / ".claude").mkdir(); (tmp_path / ".claude" / "settings.json").write_text("{}")
     (tmp_path / ".git").mkdir(); (tmp_path / ".git" / "config").write_text("[core]\n")
-    for target in (".claude/settings.json", ".claude", "missing.md", ".git/config"):
+    (tmp_path / "docs" / "quests" / "x").mkdir(parents=True); (tmp_path / "docs" / "quests" / "x" / "quest.md").write_text("---\nid: x\n---\n")
+    for target in (".claude/settings.json", ".claude", "missing.md", ".git/config", "docs/quests/x/quest.md", "Docs/quests/x/quest.md"):
         (tmp_path / "CLAUDE.md").symlink_to(target)
         with pytest.raises(SystemExit) as e:
             quest.main(["init"])
         assert e.value.code == 1 and "CLAUDE.md" in capsys.readouterr().err, target
-        assert not (tmp_path / "docs").exists() and (tmp_path / ".claude" / "settings.json").read_text() == "{}", target
+        assert not (tmp_path / "docs" / "quests" / "README.md").exists() and (tmp_path / ".claude" / "settings.json").read_text() == "{}", target
+        assert (tmp_path / "docs" / "quests" / "x" / "quest.md").read_text() == "---\nid: x\n---\n", target
         (tmp_path / "CLAUDE.md").unlink()
 
 

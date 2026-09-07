@@ -497,7 +497,9 @@ def cmd_init(args: argparse.Namespace) -> None:
         if not target.is_relative_to(root.resolve()):
             die(f"refusing to write through a symlink that leaves the project: CLAUDE.md -> {os.readlink(claude_md)}")
         rel = target.relative_to(root.resolve())
-        if not target.is_file() or target.suffix != ".md" or any(part.startswith(".") for part in rel.parts) or rel.is_relative_to(ROOT_NAME):
+        # identity, not a string prefix: a case-insensitive filesystem reaches docs/quests as Docs/quests
+        in_tracker = qdir.exists() and any(p.samefile(qdir) for p in (target, *target.parents) if p.exists())
+        if not target.is_file() or target.suffix != ".md" or any(part.startswith(".") for part in rel.parts) or in_tracker:
             die(f"refusing to write CLAUDE.md through a link to {os.readlink(claude_md)}: not a markdown file of the project's own")
     try:
         text = claude_md.read_text(encoding="utf-8") if claude_md.is_file() else ""
