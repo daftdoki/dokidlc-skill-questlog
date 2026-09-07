@@ -328,10 +328,16 @@ def terminal_table(rows: list[tuple[str, str, str, str, str, str]], heads: tuple
 def tracker_gate(root: Path) -> Path:
     """The tracker directory the script may write into, or die. A clone can link docs or docs/quests outside the project."""
     qdir = quests_dir(root)
-    for p in (qdir.parent, qdir):
-        if p.is_symlink():
-            die(f"refusing to write: {p.relative_to(root)} is a symlink")
+    linked = linked_tracker(root)
+    if linked:
+        die(f"refusing to use {linked}: it is a symlink, and every verb may write or migrate through it")
     return qdir
+
+
+def linked_tracker(root: Path) -> str | None:
+    """The first of docs and docs/quests that is a symlink, relative to root, or None."""
+    qdir = quests_dir(root)
+    return next((str(p.relative_to(root)) for p in (qdir.parent, qdir) if p.is_symlink()), None)
 
 
 def write_log(root: Path) -> Path:
@@ -625,6 +631,9 @@ def doctor_checks(root: Path) -> list[Row]:
     """Rows in the order they print. Pure; cmd_doctor prints, and runs the repairs the failed rows carry."""
     rows = []
     qdir = quests_dir(root)
+    linked = linked_tracker(root)
+    if linked:
+        return [row(False, f"{linked} is a symlink; every verb refuses it", "fix it by hand")]
     if not qdir.is_dir():
         return [row(False, f"{ROOT_NAME}/ exists", "quest init")]
     found = read_format(qdir)

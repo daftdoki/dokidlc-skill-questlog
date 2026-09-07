@@ -767,10 +767,14 @@ def test_linked_tracker_is_refused_before_any_migration(tmp_path, monkeypatch, c
         repo = tmp_path / link.replace("/", "-"); (repo / "docs").mkdir(parents=True) if link != "docs" else repo.mkdir()
         (repo / link).symlink_to(target)
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(repo))
-        for verb in (["log"], ["show", "2609011000-aa"], ["init"], ["doctor", "--fix"]):
+        for verb in (["log"], ["show", "2609011000-aa"], ["init"]):
             with pytest.raises(SystemExit) as e:
                 quest.main(verb)
             assert e.value.code != 0 and "symlink" in capsys.readouterr().err, (link, verb)
+        for verb in (["doctor"], ["doctor", "--fix"], ["doctor", "--brief"]):     # doctor names the link as its one row; --fix runs nothing
+            with pytest.raises(SystemExit) as e:
+                quest.main(verb)
+            assert f"{link} is a symlink" in capsys.readouterr().out, (link, verb)
             assert (d / "quest.md").read_text() == page and "format 3" in (oq / "README.md").read_text(), (link, verb)
     # a linked docs with no tracker behind it: new must not create one there
     empty = tmp_path / "empty"; empty.mkdir()

@@ -81,7 +81,9 @@ over old pages. Both are closed. `rename_to_format_4` keys off the page
 contents, runs whenever the log is absent, and doctor reports pages that
 predate format 4 with `--fix` as the cure. Keep the same shape for the
 next format: a predicate on the frontmatter, a pure rewrite, and a doctor
-row.
+row that carries the repair `doctor --fix` runs. `tracker_gate` and
+`settings_gate` refuse a linked or unwritable target before any verb
+writes; a new writer goes through one of them.
 
 ## Release
 
