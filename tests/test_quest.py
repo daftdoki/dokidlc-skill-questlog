@@ -757,6 +757,35 @@ def test_doctor_fix_runs_every_repair_and_leaves_a_foreign_or_newer_log_alone(tm
     assert "<!-- questlog format 4" in (qdir / "README.md").read_text() and "state: completed" in (d / "quest.md").read_text()
 
 
+def test_linked_tracker_is_refused_before_any_migration(tmp_path, monkeypatch, capsys):
+    # a clone can link docs/quests, or docs, outside the project; no verb may migrate pages there, read verbs included
+    outside = tmp_path / "outside"; oq = outside / "docs" / "quests"
+    d = _make(oq, "2609011000-aa", "At plan", state="active", goal_closed="x")
+    (oq / "README.md").write_text("# Quest log\n\n<!-- questlog format 3, written by questlog old on 2026-09-04 -->\n")
+    page = (d / "quest.md").read_text()
+    for link, target in (("docs/quests", oq), ("docs", outside / "docs")):
+        repo = tmp_path / link.replace("/", "-"); (repo / "docs").mkdir(parents=True) if link != "docs" else repo.mkdir()
+        (repo / link).symlink_to(target)
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(repo))
+        for verb in (["log"], ["show", "2609011000-aa"], ["init"], ["doctor", "--fix"]):
+            with pytest.raises(SystemExit) as e:
+                quest.main(verb)
+            assert e.value.code != 0 and "symlink" in capsys.readouterr().err, (link, verb)
+            assert (d / "quest.md").read_text() == page and "format 3" in (oq / "README.md").read_text(), (link, verb)
+
+
+def test_init_refuses_a_claude_md_link_to_a_managed_or_non_file_target(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    (tmp_path / ".claude").mkdir(); (tmp_path / ".claude" / "settings.json").write_text("{}")
+    for target in (".claude/settings.json", ".claude", "missing.md"):
+        (tmp_path / "CLAUDE.md").symlink_to(target)
+        with pytest.raises(SystemExit) as e:
+            quest.main(["init"])
+        assert e.value.code == 1 and "CLAUDE.md" in capsys.readouterr().err, target
+        assert not (tmp_path / "docs").exists() and (tmp_path / ".claude" / "settings.json").read_text() == "{}", target
+        (tmp_path / "CLAUDE.md").unlink()
+
+
 def test_init_accepts_claude_md_linked_inside_the_repo(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     (tmp_path / "AGENTS.md").write_text("# Me\n"); (tmp_path / "CLAUDE.md").symlink_to("AGENTS.md")
