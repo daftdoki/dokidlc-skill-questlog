@@ -709,7 +709,7 @@ def test_symlinked_settings_is_a_row_with_no_repair(tmp_path, monkeypatch, capsy
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor", "--fix"])
     out = capsys.readouterr().out
-    assert e.value.code == 1 and "FAIL .claude/settings.json is a symlink  (fix it by hand)" in out
+    assert e.value.code == 1 and "; the file is a symlink  (add them by hand)" in out
     assert real.read_text() == '{"permissions": {"ask": []}}'
 
 
@@ -742,7 +742,7 @@ def test_doctor_fix_runs_every_repair_and_leaves_a_foreign_or_newer_log_alone(tm
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor", "--fix"])
     out = capsys.readouterr().out
-    assert e.value.code == 1 and "FAIL docs/quests/README.md is not a quest log  (fix it by hand)" in out
+    assert e.value.code == 1 and "FAIL docs/quests/README.md is not a quest log, or cannot be read  (fix it by hand)" in out
     assert (qdir / "README.md").read_text() == "hello\n" and (d / "quest.md").read_text() == page
     assert "Bash(quest next *)" in (tmp_path / ".claude" / "settings.json").read_text()
     # a newer plugin's log: never downgraded

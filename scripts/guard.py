@@ -211,7 +211,10 @@ def decide(event: dict) -> tuple[str, str] | None:
             existing = Path(cwd, ROOT_NAME, rel)
             if not existing.is_file():
                 return "deny", "quest.md is created by `quest new`, not written by hand."
-            before = existing.read_text()
+            try:
+                before = existing.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                return "deny", "quest.md cannot be read, so the edit cannot be checked against its frontmatter."
             if tool == "Write":
                 after = str(inp.get("content", ""))
             else:

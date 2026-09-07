@@ -211,7 +211,10 @@ def load_quests(qdir: Path) -> list[tuple[Path, dict]]:
         if d.is_symlink() or page.is_symlink():
             continue
         if d.is_dir() and page.is_file():
-            fm, _ = parse_page(page.read_text())
+            try:
+                fm, _ = parse_page(page.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError):
+                continue                    # doctor names the page; every other verb works around it
             if fm.get("id"):
                 out.append((d, fm))
     return out
@@ -335,6 +338,8 @@ def write_log(root: Path) -> Path:
     qdir = tracker_gate(root)
     qdir.mkdir(parents=True, exist_ok=True)
     path = safe_write_path(qdir, qdir / "README.md")
+    if os.path.lexists(path) and read_format(qdir) is None:
+        die(f"refusing to rewrite {ROOT_NAME}/README.md: it is not a quest log, or cannot be read")
     path.write_text(render_log(load_quests(qdir), plugin_commit()))
     return path
 
@@ -419,14 +424,10 @@ def migrate(root: Path, from_format: int) -> None:
 def load_settings(root: Path) -> tuple[dict, str | None]:
     """The project settings and why they cannot take ask rules, or None. An absent file loads as {}; init creates it."""
     path = root / SETTINGS
-    if path.parent.is_symlink():
-        return {}, f"{path.parent.name} is a symlink"
     if path.parent.exists() and not path.parent.is_dir():
         return {}, f"{path.parent.name} is not a directory"
     if not os.path.lexists(path):
         return {}, None
-    if path.is_symlink():
-        return {}, f"{SETTINGS} is a symlink"
     if not path.is_file():
         return {}, f"{SETTINGS} is not a file"
     try:
@@ -457,6 +458,8 @@ def settings_gate(root: Path) -> tuple[Path, dict]:
     data, problem = load_settings(root)
     if problem:
         die(f"{problem}; fix it by hand", 2)
+    if path.is_file() and not os.access(path, os.W_OK) or not path.is_file() and path.parent.is_dir() and not os.access(path.parent, os.W_OK):
+        die(f"{SETTINGS} cannot be written; fix the permissions by hand")
     return path, data
 
 
@@ -494,8 +497,12 @@ def cmd_init(args: argparse.Namespace) -> None:
         if not target.is_relative_to(root.resolve()):
             die(f"refusing to write through a symlink that leaves the project: CLAUDE.md -> {os.readlink(claude_md)}")
         rel = target.relative_to(root.resolve())
-        if not target.is_file() or any(part.startswith(".") for part in rel.parts) or rel.is_relative_to(ROOT_NAME):
-            die(f"refusing to write CLAUDE.md through a link to {os.readlink(claude_md)}: not a plain file of the project's own")
+        if not target.is_file() or target.suffix != ".md" or any(part.startswith(".") for part in rel.parts) or rel.is_relative_to(ROOT_NAME):
+            die(f"refusing to write CLAUDE.md through a link to {os.readlink(claude_md)}: not a markdown file of the project's own")
+    try:
+        text = claude_md.read_text(encoding="utf-8") if claude_md.is_file() else ""
+    except (OSError, UnicodeDecodeError):
+        die("CLAUDE.md is not UTF-8 or cannot be read; fix it by hand")
     tracker_gate(root)
     settings = settings_gate(root)
     check_format(root)
@@ -509,7 +516,6 @@ def cmd_init(args: argparse.Namespace) -> None:
     if not (qdir / "README.md").is_file():
         write_log(root)
         made.append(f"{ROOT_NAME}/README.md")
-    text = claude_md.read_text() if claude_md.is_file() else ""
     if CLAUDE_MD_MARK not in text:
         claude_md.write_text(text.rstrip("\n") + "\n" + CLAUDE_MD_PARAGRAPH if text else CLAUDE_MD_PARAGRAPH.lstrip("\n"))
         made.append("CLAUDE.md paragraph")
@@ -603,7 +609,7 @@ def regenerate_tracker(root: Path) -> None:
     qdir = tracker_gate(root)
     found = read_format(qdir)
     if found is None and os.path.lexists(qdir / "README.md"):
-        die(f"refusing to rewrite {ROOT_NAME}/README.md: it is not a quest log")
+        die(f"refusing to rewrite {ROOT_NAME}/README.md: it is not a quest log, or cannot be read")
     if found is not None and found > FORMAT:
         die(f"refusing to rewrite a log written by a newer questlog (format {found}, this is {FORMAT}); update the plugin", 2)
     if found is not None and found < FORMAT:
@@ -621,7 +627,7 @@ def doctor_checks(root: Path) -> list[Row]:
         return [row(False, f"{ROOT_NAME}/ exists", "quest init")]
     found = read_format(qdir)
     if found is None and os.path.lexists(qdir / "README.md"):
-        rows.append(row(False, f"{ROOT_NAME}/README.md is not a quest log", "fix it by hand"))
+        rows.append(row(False, f"{ROOT_NAME}/README.md is not a quest log, or cannot be read", "fix it by hand"))
     elif found is None:
         rows.append(row(False, "quest log exists", "quest doctor --fix", regenerate_tracker))
     elif found > FORMAT:
@@ -635,7 +641,8 @@ def doctor_checks(root: Path) -> list[Row]:
     loaded = {d: fm for d, fm in quests}
     old = sum(1 for _, fm in quests if predates_format_4(fm))
     if old:
-        rows.append(row(False, f"{plural(old, 'quest.md file')} predate format 4", "quest doctor --fix", regenerate_tracker))
+        repairable = found is not None and found <= FORMAT or found is None and not os.path.lexists(qdir / "README.md")
+        rows.append(row(False, f"{plural(old, 'quest.md file')} predate format 4", "quest doctor --fix" if repairable else "fix the log first", regenerate_tracker if repairable else None))
     overlay_dir = qdir / GUIDANCE_DIR
     if overlay_dir.is_dir():
         stray = sorted(p.name for p in overlay_dir.iterdir() if p.name != f"{p.stem}.md" or p.stem not in STAGES["quest"])
@@ -644,7 +651,9 @@ def doctor_checks(root: Path) -> list[Row]:
         page = d / "quest.md"
         if not page.is_file():
             rows.append(row(False, f"{d.name}/ has no quest.md", "add one or remove the directory")); bad += 1; continue
-        fm = loaded.get(d) or parse_page(page.read_text())[0]
+        if d not in loaded:
+            rows.append(row(False, f"{d.name}/quest.md is not UTF-8 or cannot be read", "fix it by hand")); bad += 1; continue
+        fm = loaded[d]
         missing = [k for k in REQUIRED_KEYS if k not in fm]
         if missing or fm.get("kind") not in KINDS or fm.get("state") not in STATES or not ID_RE.match(str(fm.get("id", ""))):
             rows.append(row(False, f"{d.name}/quest.md frontmatter invalid" + (f", missing {', '.join(missing)}" if missing else ""), "fix the frontmatter")); bad += 1
@@ -672,7 +681,9 @@ def doctor_checks(root: Path) -> list[Row]:
         rows.append(row(False, problem, "fix it by hand"))
     else:
         missing = missing_ask_rules(data)
-        rows.append(row(not missing, "settings.json asks for every creator verb" + (f"; missing: {', '.join(missing)}" if missing else ""), "quest doctor --fix", write_missing_ask_rules))
+        linked = (root / SETTINGS).is_symlink() or (root / ".claude").is_symlink()   # read through a link is fine; the write refuses it
+        label = "settings.json asks for every creator verb" + (f"; missing: {', '.join(missing)}" if missing else "") + ("; the file is a symlink" if missing and linked else "")
+        rows.append(row(not missing, label, "add them by hand" if linked else "quest doctor --fix", None if linked else write_missing_ask_rules))
     rows.extend(git_checks(root))
     return rows
 
@@ -685,12 +696,13 @@ def cmd_doctor(args: argparse.Namespace) -> None:
         return
     rows = doctor_checks(root)
     repairs = dict.fromkeys(repair for ok, _, _, repair in rows if not ok and repair)
+    refused = 0
     if args.fix and repairs:
         for repair in repairs:
             try:
                 repair(root)               # a refused repair has said why on stderr; the others still run
-            except SystemExit:
-                pass
+            except SystemExit as e:
+                refused = max(refused, int(e.code or 1))
         rows = doctor_checks(root)
     failed = [r for r in rows if not r[0]]
     if args.brief:
@@ -702,7 +714,7 @@ def cmd_doctor(args: argparse.Namespace) -> None:
         sys.exit(0)
     for ok, label, fix, _ in rows:
         print(f"{'ok  ' if ok else 'FAIL'} {label}" + (f"  ({fix})" if not ok and fix else ""))
-    sys.exit(1 if failed else 0)
+    sys.exit(refused or (1 if failed else 0))
 
 
 # --- memory ------------------------------------------------------------------
