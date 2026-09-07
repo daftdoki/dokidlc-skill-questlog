@@ -92,24 +92,25 @@ def quests_dir(root: Path) -> Path:
     return root / ROOT_NAME
 
 
-def safe_write_path(qdir: Path, path: Path) -> Path:
-    """A path the script may write: inside the tracker, and no symlink on the way.
+def safe_write_path(base: Path, path: Path, what: str = ROOT_NAME) -> Path:
+    """A path the script may write: inside `base`, and no symlink on the way. `what` names the base in the refusal.
 
-    A cloned repository can carry a symlink at docs/quests/README.md or at a
-    quest directory. Following it would let a contributor make this script
-    overwrite any file the user can write. Refuse instead.
+    A cloned repository can carry a symlink at docs/quests/README.md, at a
+    quest directory, at .claude/settings.json, or at CLAUDE.md. Following it
+    would let a contributor make this script overwrite any file the user can
+    write. Refuse instead.
     """
-    rel = path.relative_to(qdir) if path.is_relative_to(qdir) else None
+    rel = path.relative_to(base) if path.is_relative_to(base) else None
     if rel is None:
-        die(f"refusing to write outside {ROOT_NAME}: {path}")
-    probe = qdir
+        die(f"refusing to write outside {what}: {path}")
+    probe = base
     for part in rel.parts:
         probe = probe / part
         if probe.is_symlink():
-            die(f"refusing to write through a symlink in {ROOT_NAME}: {probe.relative_to(qdir)}")
+            die(f"refusing to write through a symlink in {what}: {probe.relative_to(base)}")
     resolved = path.resolve() if path.exists() else path.parent.resolve() / path.name
-    if not resolved.is_relative_to(qdir.resolve()):
-        die(f"refusing to write outside {ROOT_NAME}: {path}")
+    if not resolved.is_relative_to(base.resolve()):
+        die(f"refusing to write outside {what}: {path}")
     return path
 
 
@@ -420,6 +421,7 @@ def missing_ask_rules(root: Path) -> list[str]:
 
 def write_ask_rules(root: Path) -> list[str]:
     """Add the missing ask rules to the project settings, keeping every other key. Returns what was added."""
+    safe_write_path(root, root / SETTINGS, "the project")
     data = read_settings(root)
     if data is None:
         die(f"{SETTINGS} is not valid JSON; fix it, then run quest init again", 2)
@@ -438,6 +440,7 @@ def cmd_init(args: argparse.Namespace) -> None:
     qdir = quests_dir(root)
     check_format(root)
     made = []
+    claude_md = safe_write_path(root, root / "CLAUDE.md", "the project")
     added = write_ask_rules(root)
     if added:
         made.append(f"{plural(len(added), 'ask rule')} in {SETTINGS}")
@@ -447,7 +450,6 @@ def cmd_init(args: argparse.Namespace) -> None:
     if not (qdir / "README.md").is_file():
         write_log(root)
         made.append(f"{ROOT_NAME}/README.md")
-    claude_md = root / "CLAUDE.md"
     text = claude_md.read_text() if claude_md.is_file() else ""
     if CLAUDE_MD_MARK not in text:
         claude_md.write_text(text.rstrip("\n") + "\n" + CLAUDE_MD_PARAGRAPH if text else CLAUDE_MD_PARAGRAPH.lstrip("\n"))

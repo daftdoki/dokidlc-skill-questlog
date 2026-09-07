@@ -440,6 +440,22 @@ def test_symlinked_log_and_quest_are_refused(tmp_path, monkeypatch, capsys):
     assert [fm["id"] for _, fm in quest.load_quests(qdir)] == ["2609041432-bb"]
 
 
+def test_symlinked_settings_and_claude_md_are_refused(tmp_path, monkeypatch, capsys):
+    # a cloned repository can carry a symlink at .claude, .claude/settings.json, or CLAUDE.md; init refuses each before writing anything
+    outside = tmp_path / "outside"; outside.mkdir()
+    victim = outside / "settings.json"; victim.write_text('{"theirs": true}')
+    for name, link, target in (("settings.json", ".claude/settings.json", victim), (".claude", ".claude", outside), ("CLAUDE.md", "CLAUDE.md", outside / "CLAUDE.md")):
+        repo = tmp_path / f"repo-{name}"
+        (repo / ".claude").mkdir(parents=True) if link != ".claude" else repo.mkdir()
+        (repo / link).symlink_to(target)
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(repo))
+        with pytest.raises(SystemExit) as e:
+            quest.main(["init"])
+        assert e.value.code == 1 and "symlink" in capsys.readouterr().err, name
+        assert not (repo / "docs").exists(), name
+    assert victim.read_text() == '{"theirs": true}' and not (outside / "CLAUDE.md").exists() and sorted(p.name for p in outside.iterdir()) == ["settings.json"]
+
+
 def test_multiline_title_is_one_log_line(tmp_path):
     qdir = tmp_path / "docs" / "quests"
     _make(qdir, "2609041432-bb", "First line\nsecond line")
