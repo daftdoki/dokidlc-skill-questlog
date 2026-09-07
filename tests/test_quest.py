@@ -699,6 +699,83 @@ def test_init_refuses_settings_before_migrating(tmp_path, monkeypatch, capsys):
     assert (d / "quest.md").read_text() == page and "format 3" in (qdir / "README.md").read_text()   # nothing migrated
 
 
+def test_symlinked_settings_is_a_row_with_no_repair(tmp_path, monkeypatch, capsys):
+    # doctor loads through the link, but the repair refuses it; the row must say so instead of advertising --fix
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    quest.main(["init"]); _git_commit_all(tmp_path); capsys.readouterr()
+    settings = tmp_path / ".claude" / "settings.json"
+    real = tmp_path / "real.json"; real.write_text('{"permissions": {"ask": []}}')
+    settings.unlink(); settings.symlink_to(real)
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor", "--fix"])
+    out = capsys.readouterr().out
+    assert e.value.code == 1 and "FAIL .claude/settings.json is a symlink  (fix it by hand)" in out
+    assert real.read_text() == '{"permissions": {"ask": []}}'
+
+
+def test_unreadable_files_are_rows_not_tracebacks(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    quest.main(["init"]); _git_commit_all(tmp_path); capsys.readouterr()
+    log = tmp_path / "docs" / "quests" / "README.md"; page = tmp_path / "CLAUDE.md"; settings = tmp_path / ".claude" / "settings.json"
+    good_log, good_page = log.read_bytes(), page.read_bytes()
+    log.write_bytes(b"# Quest log\n\xff\n"); page.write_bytes(b"caf\xe9\n"); settings.chmod(0)
+    try:
+        with pytest.raises(SystemExit) as e:
+            quest.main(["doctor", "--brief"])
+        out = capsys.readouterr().out
+        assert e.value.code == 0 and "README.md is not a quest log" in out and "CLAUDE.md is not UTF-8" in out and "settings.json cannot be read" in out
+    finally:
+        settings.chmod(0o644)
+    log.write_bytes(good_log); page.write_bytes(good_page)
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor", "--brief"])
+    assert e.value.code == 0 and "questlog: ok" in capsys.readouterr().out
+
+
+def test_doctor_fix_runs_every_repair_and_leaves_a_foreign_or_newer_log_alone(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    qdir = tmp_path / "docs" / "quests"
+    d = _make(qdir, "2609011001-cc", "Old done", kind="chore", state="done", plan_closed="x")
+    page = (d / "quest.md").read_text()
+    # a foreign README: the tracker repair refuses, the settings repair still runs, the page is not touched
+    (qdir / "README.md").write_text("hello\n")
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor", "--fix"])
+    out = capsys.readouterr().out
+    assert e.value.code == 1 and "FAIL docs/quests/README.md is not a quest log  (fix it by hand)" in out
+    assert (qdir / "README.md").read_text() == "hello\n" and (d / "quest.md").read_text() == page
+    assert "Bash(quest next *)" in (tmp_path / ".claude" / "settings.json").read_text()
+    # a newer plugin's log: never downgraded
+    (qdir / "README.md").write_text("# Quest log\n\n<!-- questlog format 9, written by questlog new on 2026-09-04 -->\n")
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor", "--fix"])
+    assert e.value.code == 1 and "format 9" in (qdir / "README.md").read_text() and (d / "quest.md").read_text() == page
+    # a missing log is written by --fix
+    (qdir / "README.md").unlink()
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor", "--fix"])
+    assert "<!-- questlog format 4" in (qdir / "README.md").read_text() and "state: completed" in (d / "quest.md").read_text()
+
+
+def test_init_accepts_claude_md_linked_inside_the_repo(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    (tmp_path / "AGENTS.md").write_text("# Me\n"); (tmp_path / "CLAUDE.md").symlink_to("AGENTS.md")
+    quest.main(["init"]); _git_commit_all(tmp_path)
+    assert quest.CLAUDE_MD_MARK in (tmp_path / "AGENTS.md").read_text()
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    assert e.value.code == 0
+
+
+def test_init_keeps_settings_indent_and_final_newline(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    settings = tmp_path / ".claude" / "settings.json"; settings.parent.mkdir()
+    settings.write_text('{\n    "enabledPlugins": {\n        "x@y": true\n    }\n}')
+    quest.main(["init"])
+    text = settings.read_text()
+    assert text.startswith('{\n    "enabledPlugins": {\n        "x@y": true\n    },\n    "permissions"') and not text.endswith("\n")
+
+
 def test_init_keeps_non_ascii_settings(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     settings = tmp_path / ".claude" / "settings.json"; settings.parent.mkdir()

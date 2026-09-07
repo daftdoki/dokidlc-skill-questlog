@@ -94,7 +94,7 @@ def quests_dir(root: Path) -> Path:
 
 
 def safe_write_path(base: Path, path: Path, what: str = ROOT_NAME) -> Path:
-    """A path the script may write: inside `base`, and no symlink on the way. `what` names the base in the refusal.
+    """A path the script may write: inside `base`, and no symlink at or below `base` on the way. `what` names the base in the refusal.
 
     A cloned repository can carry a symlink at docs/quests/README.md, at a
     quest directory, at .claude/settings.json, or at CLAUDE.md. Following it
@@ -338,7 +338,10 @@ def read_format(qdir: Path) -> int | None:
     path = qdir / "README.md"
     if not path.is_file() or path.is_symlink():
         return None
-    text = path.read_text()
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
     m = HEADER_RE.search(text)
     if m:
         return int(m.group(1))
@@ -405,14 +408,20 @@ def migrate(root: Path, from_format: int) -> None:
 def load_settings(root: Path) -> tuple[dict, str | None]:
     """The project settings and why they cannot take ask rules, or None. An absent file loads as {}; init creates it."""
     path = root / SETTINGS
+    if path.parent.is_symlink():
+        return {}, f"{path.parent.name} is a symlink"
     if path.parent.exists() and not path.parent.is_dir():
         return {}, f"{path.parent.name} is not a directory"
     if not os.path.lexists(path):
         return {}, None
+    if path.is_symlink():
+        return {}, f"{SETTINGS} is a symlink"
     if not path.is_file():
         return {}, f"{SETTINGS} is not a file"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
+    except OSError:
+        return {}, f"{SETTINGS} cannot be read"
     except (json.JSONDecodeError, UnicodeDecodeError):
         return {}, f"{SETTINGS} is not valid JSON"
     if not isinstance(data, dict):
@@ -446,8 +455,15 @@ def write_ask_rules(path: Path, data: dict) -> list[str]:
     if not missing:
         return []
     data.setdefault("permissions", {}).setdefault("ask", []).extend(missing)
-    path.parent.mkdir(exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    # keep the file's indent and its final newline, so the diff the creator commits is the rules and little else
+    old = path.read_text(encoding="utf-8") if path.is_file() else "\n"
+    m = re.search(r"^([ \t]+)\S", old, re.M)
+    indent = m.group(1) if m else "  "
+    try:
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps(data, indent=indent, ensure_ascii=False) + ("\n" if old.endswith("\n") else ""), encoding="utf-8")
+    except OSError as e:
+        die(f"{SETTINGS} cannot be written: {e.strerror}")
     return missing
 
 
@@ -459,8 +475,11 @@ def write_missing_ask_rules(root: Path) -> None:
 def cmd_init(args: argparse.Namespace) -> None:
     root = project_root()
     qdir = quests_dir(root)
-    # refuse before check_format, which may migrate the tracker, so a refused init leaves the tree as it found it
-    claude_md = safe_write_path(root, root / "CLAUDE.md", "the project")
+    # refuse before check_format, which may migrate the tracker, so a refused init leaves the tree as it found it.
+    # CLAUDE.md is often a link to AGENTS.md; a link that stays inside the project is fine, one that leaves it is not.
+    claude_md = root / "CLAUDE.md"
+    if claude_md.is_symlink() and not claude_md.resolve().is_relative_to(root.resolve()):
+        die(f"refusing to write through a symlink that leaves the project: CLAUDE.md -> {os.readlink(claude_md)}")
     settings = settings_gate(root)
     check_format(root)
     made = []
@@ -563,8 +582,13 @@ def git_add(root: Path, paths: list[str]) -> None:
 
 
 def regenerate_tracker(root: Path) -> None:
-    """The doctor's repair for a stale tracker: migrate an older format, else rename the pages and rewrite the log."""
-    found = read_format(quests_dir(root))
+    """The doctor's repair for a stale tracker: migrate an older format, else rename the pages and rewrite the log. A log that is not ours, or is newer, is left alone."""
+    qdir = quests_dir(root)
+    found = read_format(qdir)
+    if found is None and os.path.lexists(qdir / "README.md"):
+        die(f"refusing to rewrite {ROOT_NAME}/README.md: it is not a quest log")
+    if found is not None and found > FORMAT:
+        die(f"refusing to rewrite a log written by a newer questlog (format {found}, this is {FORMAT}); update the plugin", 2)
     if found is not None and found < FORMAT:
         migrate(root, found)           # renames the pages, then writes the log
     else:
@@ -579,8 +603,10 @@ def doctor_checks(root: Path) -> list[Row]:
     if not qdir.is_dir():
         return [row(False, f"{ROOT_NAME}/ exists", "quest init")]
     found = read_format(qdir)
-    if found is None:
-        rows.append(row(False, "quest log exists", "quest init"))
+    if found is None and os.path.lexists(qdir / "README.md"):
+        rows.append(row(False, f"{ROOT_NAME}/README.md is not a quest log", "fix it by hand"))
+    elif found is None:
+        rows.append(row(False, "quest log exists", "quest doctor --fix", regenerate_tracker))
     elif found > FORMAT:
         rows.append(row(False, f"quest log format {found} is newer than this plugin's {FORMAT}", "update the plugin"))
     elif found < FORMAT:
@@ -613,9 +639,14 @@ def doctor_checks(root: Path) -> list[Row]:
         same = log_lines(quests) == [l for l in current.splitlines() if l.startswith("| [")]
         rows.append(row(same, "quest log matches the directories", "quest doctor --fix", regenerate_tracker))
     claude_md = root / "CLAUDE.md"
-    claude_text = claude_md.read_text() if claude_md.is_file() else ""
-    section = marked_section(claude_text)
-    rows.append(row(section is not None, "CLAUDE.md has the quests paragraph", "quest init"))
+    try:
+        claude_text = claude_md.read_text(encoding="utf-8") if claude_md.is_file() else ""
+    except (OSError, UnicodeDecodeError):
+        claude_text, section = "", None
+        rows.append(row(False, "CLAUDE.md is not UTF-8 or cannot be read", "fix it by hand"))
+    else:
+        section = marked_section(claude_text)
+        rows.append(row(section is not None, "CLAUDE.md has the quests paragraph", "quest init"))
     if section is not None:
         # the paragraph is a copy that only init writes; the plugin's wording moves on without it
         rows.append(row(section == marked_section(CLAUDE_MD_PARAGRAPH), "CLAUDE.md quests paragraph matches the plugin's", "review it against the wording `quest init` writes; edit by hand"))
@@ -639,7 +670,10 @@ def cmd_doctor(args: argparse.Namespace) -> None:
     repairs = dict.fromkeys(repair for ok, _, _, repair in rows if not ok and repair)
     if args.fix and repairs:
         for repair in repairs:
-            repair(root)
+            try:
+                repair(root)               # a refused repair has said why on stderr; the others still run
+            except SystemExit:
+                pass
         rows = doctor_checks(root)
     failed = [r for r in rows if not r[0]]
     if args.brief:

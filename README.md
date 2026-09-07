@@ -199,9 +199,10 @@ The guard is for habit, not for an adversary. A command that reaches the
 tracker without naming it, through an encoded payload, a variable, or a
 script body on stdin, gets through; `quest doctor` is the check behind
 it. A path to the script, such as `bin/quest next`, does not match the
-rules; the skill always says `quest`. The script itself never
-writes through a symlink, so a cloned repository cannot point the quest
-log or a quest directory at another file.
+rules; the skill always says `quest`. The script refuses a symlink inside
+`docs/quests`, at `.claude` or its settings file, or a `CLAUDE.md` link
+that leaves the project, so a cloned repository cannot point those at
+another file; a link at `docs` itself is not checked.
 
 ### What the agent dispatches
 
