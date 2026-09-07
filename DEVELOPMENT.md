@@ -10,7 +10,7 @@ skills/quest/references/     one file per stage: the process and the review chec
 agents/                      six stage reviewers and the fact finder, one markdown file each
 hooks/hooks.json             PreToolUse guard and SessionStart doctor
 scripts/guard.sh             POSIX shim: exits 0 unless the tracker is touched, 2 if uv is missing
-scripts/guard.py             the checker: deny hand edits, ask on creator verbs
+scripts/guard.py             the checker: deny hand edits and writes into the tracker
 tests/                       pytest; nothing needs Claude Code
 ```
 
@@ -52,8 +52,9 @@ CI runs both on ubuntu and macos.
 
 The guard reads PreToolUse JSON on stdin. It prints a `permissionDecision`
 of `deny` for edits to `docs/quests/README.md` or any `quest.md` frontmatter
-and for Bash that writes into the tracker by redirect or in-place tools, and
-`ask` for creator verbs. Anything else prints nothing. A hook that cannot
+and for Bash that writes into the tracker by redirect or in-place tools.
+Anything else prints nothing; creator verbs prompt through the `ask` rules
+`quest init` writes to the project settings, not through the hook. A hook that cannot
 run exits 2 only when the action touched the tracker; Claude Code treats
 other non-zero exits as allow, which is why the shim is POSIX sh.
 
