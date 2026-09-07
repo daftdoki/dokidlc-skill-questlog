@@ -13,7 +13,7 @@ its stage files. The quest log, docs/quests/README.md, is generated.
 
 Usage:
   quest init                        create docs/quests, the CLAUDE.md paragraph, and the ask rules (creator verb)
-  quest doctor [--fix] [--brief]    check the tracker; --fix regenerates a stale log
+  quest doctor [--fix] [--brief]    check the tracker; --fix regenerates a stale log and writes missing ask rules
   quest log                         what is open, one line each
   quest complete [--all] [--limit N]  list completed work, newest first; --all adds abandoned
   quest show ID                     a quest's metadata and files (id prefix ok)
@@ -401,46 +401,68 @@ def migrate(root: Path, from_format: int) -> None:
 # --- init and doctor --------------------------------------------------------
 
 
-def read_settings(root: Path) -> dict | None:
-    """The project settings as a dict, {} when the file is absent, None when it is not JSON."""
+def settings_problem(root: Path) -> str | None:
+    """Why the project settings cannot take ask rules, or None. An absent file is fine; init creates it."""
     path = root / SETTINGS
-    if not path.is_file():
-        return {}
-    try:
-        return json.loads(path.read_text())
-    except json.JSONDecodeError:
+    if path.parent.exists() and not path.parent.is_dir():
+        return f"{path.parent.name} is not a directory"
+    if not os.path.lexists(path):
         return None
+    if not path.is_file():
+        return f"{SETTINGS} is not a file"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return f"{SETTINGS} is not valid JSON"
+    if not isinstance(data, dict):
+        return f"{SETTINGS} is not a JSON object"
+    perms = data.get("permissions", {})
+    if not isinstance(perms, dict):
+        return f"{SETTINGS} permissions is not an object"
+    if not isinstance(perms.get("ask", []), list):
+        return f"{SETTINGS} permissions.ask is not a list"
+    return None
+
+
+def read_settings(root: Path) -> dict:
+    """The project settings, {} when the file is absent. Call settings_problem first; this assumes it returned None."""
+    path = root / SETTINGS
+    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
 
 
 def missing_ask_rules(root: Path) -> list[str]:
-    """The rules in ASK_RULES absent from permissions.ask; every rule when the file is missing or not JSON."""
-    data = read_settings(root)
-    present = data.get("permissions", {}).get("ask", []) if isinstance(data, dict) else []
+    """The rules in ASK_RULES absent from permissions.ask."""
+    present = read_settings(root).get("permissions", {}).get("ask", [])
     return [r for r in ASK_RULES if r not in present]
 
 
 def write_ask_rules(root: Path) -> list[str]:
     """Add the missing ask rules to the project settings, keeping every other key. Returns what was added."""
-    safe_write_path(root, root / SETTINGS, "the project")
+    path = safe_write_path(root, root / SETTINGS, "the project")
+    problem = settings_problem(root)
+    if problem:
+        die(f"{problem}; fix it by hand, then run quest init again", 2)
     data = read_settings(root)
-    if data is None:
-        die(f"{SETTINGS} is not valid JSON; fix it, then run quest init again", 2)
     missing = missing_ask_rules(root)
     if not missing:
         return []
     data.setdefault("permissions", {}).setdefault("ask", []).extend(missing)
-    path = root / SETTINGS
     path.parent.mkdir(exist_ok=True)
-    path.write_text(json.dumps(data, indent=2) + "\n")
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return missing
 
 
 def cmd_init(args: argparse.Namespace) -> None:
     root = project_root()
     qdir = quests_dir(root)
+    # refuse before check_format, which may migrate the tracker, so a refused init leaves the tree as it found it
+    claude_md = safe_write_path(root, root / "CLAUDE.md", "the project")
+    safe_write_path(root, root / SETTINGS, "the project")
+    problem = settings_problem(root)
+    if problem:
+        die(f"{problem}; fix it by hand, then run quest init again", 2)
     check_format(root)
     made = []
-    claude_md = safe_write_path(root, root / "CLAUDE.md", "the project")
     added = write_ask_rules(root)
     if added:
         made.append(f"{plural(len(added), 'ask rule')} in {SETTINGS}")
@@ -578,8 +600,12 @@ def doctor_checks(root: Path) -> list[tuple[bool, str, str]]:
     if section is not None:
         # the paragraph is a copy that only init writes; the plugin's wording moves on without it
         rows.append((section == marked_section(CLAUDE_MD_PARAGRAPH), "CLAUDE.md quests paragraph matches the plugin's", "review it against the wording `quest init` writes; edit by hand"))
-    missing = missing_ask_rules(root)
-    rows.append((not missing, "settings.json asks for every creator verb" + (f"; missing: {', '.join(missing)}" if missing else ""), "quest init"))
+    problem = settings_problem(root)
+    if problem:
+        rows.append((False, problem, "fix it by hand"))
+    else:
+        missing = missing_ask_rules(root)
+        rows.append((not missing, "settings.json asks for every creator verb" + (f"; missing: {', '.join(missing)}" if missing else ""), "quest doctor --fix"))
     rows.extend(git_checks(root))
     return rows
 
@@ -591,13 +617,17 @@ def cmd_doctor(args: argparse.Namespace) -> None:
         print("questlog: this repository has no docs/quests/. Ask the creator whether to set up quests here; if yes, run `quest init`.")
         return
     rows = doctor_checks(root)
-    if args.fix and any(not ok and fix == "quest doctor --fix" for ok, _, fix in rows):
-        found = read_format(qdir)
-        if found is not None and found < FORMAT:
-            migrate(root, found)           # renames the pages, then writes the log
-        else:
-            rename_to_format_4(root)
-            write_log(root)
+    stale = [label for ok, label, fix in rows if not ok and fix == "quest doctor --fix"]
+    if args.fix and stale:
+        if any(not label.startswith("settings.json") for label in stale):
+            found = read_format(qdir)
+            if found is not None and found < FORMAT:
+                migrate(root, found)           # renames the pages, then writes the log
+            else:
+                rename_to_format_4(root)
+                write_log(root)
+        if any(label.startswith("settings.json") for label in stale):
+            write_ask_rules(root)              # adding a prompt cannot loosen anything, so no creator verb is needed
         rows = doctor_checks(root)
     failed = [r for r in rows if not r[0]]
     if args.brief:
@@ -867,7 +897,7 @@ def main(argv: list[str] | None = None) -> None:
 
     p = sub.add_parser("init", help="create docs/quests, the CLAUDE.md paragraph, and the ask rules (creator verb)")
     p.set_defaults(func=cmd_init)
-    p = sub.add_parser("doctor", help="check the tracker; --fix regenerates a stale log")
+    p = sub.add_parser("doctor", help="check the tracker; --fix regenerates a stale log and writes missing ask rules")
     p.add_argument("--fix", action="store_true"); p.add_argument("--brief", action="store_true", help="one line, nothing if no tracker")
     p.set_defaults(func=cmd_doctor)
 

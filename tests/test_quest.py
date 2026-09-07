@@ -647,11 +647,65 @@ def test_doctor_reports_missing_ask_rules(tmp_path, monkeypatch, capsys):
     settings.write_text(json.dumps(data))
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor"])
-    assert e.value.code == 1 and "FAIL settings.json asks for every creator verb; missing: Bash(quest next *)  (quest init)" in capsys.readouterr().out
-    quest.main(["init"]); capsys.readouterr()
+    assert e.value.code == 1 and "FAIL settings.json asks for every creator verb; missing: Bash(quest next *)  (quest doctor --fix)" in capsys.readouterr().out
+    # --fix writes the rules, an agent verb: a project initialized by an older plugin gets its prompts back without a creator verb
     with pytest.raises(SystemExit) as e:
-        quest.main(["doctor"])
-    assert e.value.code == 0
+        quest.main(["doctor", "--fix"])
+    assert e.value.code == 0 and "Bash(quest next *)" in settings.read_text()
+    assert "<!-- questlog format 4" in (tmp_path / "docs/quests/README.md").read_text()
+
+
+def test_settings_shapes_are_refused_without_a_traceback(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    quest.main(["init"]); _git_commit_all(tmp_path); capsys.readouterr()
+    settings = tmp_path / ".claude" / "settings.json"
+    page = tmp_path / "CLAUDE.md"; page_text = page.read_text()
+    for content, problem in (("{", "is not valid JSON"), ("null", "is not a JSON object"), ("[]", "is not a JSON object"),
+                             ('{"permissions": null}', "permissions is not an object"), ('{"permissions": []}', "permissions is not an object"),
+                             ('{"permissions": {"ask": null}}', "permissions.ask is not a list"), ('{"permissions": {"ask": "Bash(quest next *)"}}', "permissions.ask is not a list")):
+        settings.write_text(content)
+        with pytest.raises(SystemExit) as e:
+            quest.main(["doctor", "--brief"])                 # runs at every session start; must never traceback
+        out = capsys.readouterr().out
+        assert e.value.code == 0 and problem in out and "fix it by hand" in out, content
+        with pytest.raises(SystemExit) as e:
+            quest.main(["doctor"])
+        assert e.value.code == 1 and f"FAIL .claude/settings.json {problem}  (fix it by hand)" in capsys.readouterr().out, content
+        with pytest.raises(SystemExit) as e:
+            quest.main(["init"])
+        assert e.value.code == 2 and problem in capsys.readouterr().err, content
+        assert settings.read_text() == content and page.read_text() == page_text
+    # .claude as a regular file, and settings.json as a directory
+    settings.unlink(); settings.mkdir()
+    with pytest.raises(SystemExit) as e:
+        quest.main(["init"])
+    assert e.value.code == 2 and "not a file" in capsys.readouterr().err
+    settings.rmdir(); settings.parent.rmdir(); settings.parent.write_text("x")
+    with pytest.raises(SystemExit) as e:
+        quest.main(["init"])
+    assert e.value.code == 2 and ".claude is not a directory" in capsys.readouterr().err
+
+
+def test_init_refuses_settings_before_migrating(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    qdir = tmp_path / "docs" / "quests"
+    d = _make(qdir, "2609011000-aa", "At plan", state="active", goal_closed="x")
+    (qdir / "README.md").write_text("# Quest log\n\n<!-- questlog format 3, written by questlog old on 2026-09-04 -->\n")
+    (tmp_path / ".claude").mkdir(); (tmp_path / ".claude" / "settings.json").write_text("{")
+    page = (d / "quest.md").read_text()
+    with pytest.raises(SystemExit) as e:
+        quest.main(["init"])
+    assert e.value.code == 2
+    assert (d / "quest.md").read_text() == page and "format 3" in (qdir / "README.md").read_text()   # nothing migrated
+
+
+def test_init_keeps_non_ascii_settings(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    settings = tmp_path / ".claude" / "settings.json"; settings.parent.mkdir()
+    settings.write_text('{\n    "hooks": {"command": "echo ✓ café"}\n}\n', encoding="utf-8")
+    quest.main(["init"])
+    text = settings.read_text(encoding="utf-8")
+    assert "echo ✓ café" in text and "\\u" not in text and json.loads(text)["hooks"] == {"command": "echo ✓ café"}
 
 
 REFERENCES = ROOT / "skills" / "quest" / "references"

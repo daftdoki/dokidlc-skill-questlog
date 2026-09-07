@@ -98,7 +98,7 @@ quest log                                   what is open, newest first
 quest complete [--all] [--limit N]          what is completed, newest first, ten by default
 quest show 2609041432-7k                    one quest; a unique id prefix works
 quest draft 2609041432-7k plan              the stage file is written, please review
-quest doctor --fix                          check the tracker; regenerate a stale log
+quest doctor --fix                          check the tracker; regenerate a stale log, write missing ask rules
 quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]
 quest start ID
 quest defer ID                              active back to backlog; stage progress stays
@@ -190,7 +190,9 @@ Write, and Bash tools enforces the first three rows; the `ask` rules in
 
 A `SessionStart` hook runs `quest doctor --brief`, one line telling the
 agent how many entries are open, or that the log was written by a newer
-plugin. If `uv` is missing, guarded actions are refused rather than
+plugin. A project initialized before the rules existed gets them from
+`quest doctor --fix`, which the agent may run on its own, since adding a
+prompt cannot loosen anything. If `uv` is missing, guarded actions are refused rather than
 allowed, and everything else proceeds.
 
 The guard is for habit, not for an adversary. A command that reaches the

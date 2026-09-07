@@ -23,7 +23,7 @@ You draft. The creator decides.
 | `quest complete [--all] [--limit N]` | you | completed work, newest first, ten by default; `--all` adds abandoned. Run it only when asked; completed work stays out of context otherwise |
 | `quest show ID` | you | a quest's metadata, files, current stage, and the stage's guidance; a unique id prefix works |
 | `quest draft ID STAGE` | you | the stage file is written, reviewed, and awaits the creator |
-| `quest doctor [--fix]` | you | checks the tracker; `--fix` regenerates a stale log |
+| `quest doctor [--fix]` | you | checks the tracker; `--fix` regenerates a stale log and writes missing ask rules |
 | `quest init` | creator asks | creates `docs/quests/`, the CLAUDE.md paragraph, and the ask rules in `.claude/settings.json` |
 | `quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]` | creator asks | opens a quest or chore in the backlog |
 | `quest start ID` | creator asks | backlog to active; a deferred entry resumes at its stage |
