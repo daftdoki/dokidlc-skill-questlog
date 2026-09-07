@@ -41,6 +41,7 @@ import random
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from datetime import UTC, date, datetime, time
 from pathlib import Path
 
@@ -401,49 +402,47 @@ def migrate(root: Path, from_format: int) -> None:
 # --- init and doctor --------------------------------------------------------
 
 
-def settings_problem(root: Path) -> str | None:
-    """Why the project settings cannot take ask rules, or None. An absent file is fine; init creates it."""
+def load_settings(root: Path) -> tuple[dict, str | None]:
+    """The project settings and why they cannot take ask rules, or None. An absent file loads as {}; init creates it."""
     path = root / SETTINGS
     if path.parent.exists() and not path.parent.is_dir():
-        return f"{path.parent.name} is not a directory"
+        return {}, f"{path.parent.name} is not a directory"
     if not os.path.lexists(path):
-        return None
+        return {}, None
     if not path.is_file():
-        return f"{SETTINGS} is not a file"
+        return {}, f"{SETTINGS} is not a file"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError):
-        return f"{SETTINGS} is not valid JSON"
+        return {}, f"{SETTINGS} is not valid JSON"
     if not isinstance(data, dict):
-        return f"{SETTINGS} is not a JSON object"
+        return {}, f"{SETTINGS} is not a JSON object"
     perms = data.get("permissions", {})
     if not isinstance(perms, dict):
-        return f"{SETTINGS} permissions is not an object"
+        return {}, f"{SETTINGS} permissions is not an object"
     if not isinstance(perms.get("ask", []), list):
-        return f"{SETTINGS} permissions.ask is not a list"
-    return None
+        return {}, f"{SETTINGS} permissions.ask is not a list"
+    return data, None
 
 
-def read_settings(root: Path) -> dict:
-    """The project settings, {} when the file is absent. Call settings_problem first; this assumes it returned None."""
-    path = root / SETTINGS
-    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
-
-
-def missing_ask_rules(root: Path) -> list[str]:
-    """The rules in ASK_RULES absent from permissions.ask."""
-    present = read_settings(root).get("permissions", {}).get("ask", [])
+def missing_ask_rules(data: dict) -> list[str]:
+    """The rules in ASK_RULES absent from the settings' permissions.ask."""
+    present = data.get("permissions", {}).get("ask", [])
     return [r for r in ASK_RULES if r not in present]
 
 
-def write_ask_rules(root: Path) -> list[str]:
-    """Add the missing ask rules to the project settings, keeping every other key. Returns what was added."""
+def settings_gate(root: Path) -> tuple[Path, dict]:
+    """The settings path the script may write and its content, or die: no symlink on the way, and a shape the rules fit."""
     path = safe_write_path(root, root / SETTINGS, "the project")
-    problem = settings_problem(root)
+    data, problem = load_settings(root)
     if problem:
-        die(f"{problem}; fix it by hand, then run quest init again", 2)
-    data = read_settings(root)
-    missing = missing_ask_rules(root)
+        die(f"{problem}; fix it by hand", 2)
+    return path, data
+
+
+def write_ask_rules(path: Path, data: dict) -> list[str]:
+    """Add the missing ask rules to the loaded settings and write them, keeping every other key. Returns what was added."""
+    missing = missing_ask_rules(data)
     if not missing:
         return []
     data.setdefault("permissions", {}).setdefault("ask", []).extend(missing)
@@ -452,18 +451,20 @@ def write_ask_rules(root: Path) -> list[str]:
     return missing
 
 
+def write_missing_ask_rules(root: Path) -> None:
+    """The doctor's repair. Adding a prompt cannot loosen anything, so no creator verb is needed."""
+    write_ask_rules(*settings_gate(root))
+
+
 def cmd_init(args: argparse.Namespace) -> None:
     root = project_root()
     qdir = quests_dir(root)
     # refuse before check_format, which may migrate the tracker, so a refused init leaves the tree as it found it
     claude_md = safe_write_path(root, root / "CLAUDE.md", "the project")
-    safe_write_path(root, root / SETTINGS, "the project")
-    problem = settings_problem(root)
-    if problem:
-        die(f"{problem}; fix it by hand, then run quest init again", 2)
+    settings = settings_gate(root)
     check_format(root)
     made = []
-    added = write_ask_rules(root)
+    added = write_ask_rules(*settings)
     if added:
         made.append(f"{plural(len(added), 'ask rule')} in {SETTINGS}")
     if not qdir.is_dir():
@@ -478,7 +479,7 @@ def cmd_init(args: argparse.Namespace) -> None:
         made.append("CLAUDE.md paragraph")
     git_add(root, [ROOT_NAME, "CLAUDE.md", SETTINGS])
     print("initialized: " + ", ".join(made) if made else "already initialized; nothing changed")
-    for ok, label, fix in git_checks(root):
+    for ok, label, fix, _ in git_checks(root):
         if not ok:
             print(f"quest: {label} ({fix})")
 
@@ -533,16 +534,24 @@ def git_states(root: Path, paths: tuple[str, ...]) -> dict[str, str]:
     return out
 
 
-def git_checks(root: Path) -> list[tuple[bool, str, str]]:
+Row = tuple[bool, str, str, Callable[[Path], None] | None]
+
+
+def row(ok: bool, label: str, fix: str = "", repair=None) -> Row:
+    """A doctor row: whether the check holds, what it checked, what the creator runs when it fails, and the function `doctor --fix` runs for it, when one exists."""
+    return ok, label, fix, repair
+
+
+def git_checks(root: Path) -> list[Row]:
     rows = []
     states = git_states(root, PERSISTED)
     for path in PERSISTED:
         state = states[path]
         if state == "no-git":
-            return [(False, "this directory is a git repository", "git init, then commit docs/quests/ and .claude/settings.json")]
+            return [row(False, "this directory is a git repository", f"git init, then commit {ROOT_NAME}/ and {SETTINGS}")]
         label = {"tracked": f"{path} is committed", "untracked": f"{path} is not committed", "ignored": f"{path} is ignored by git", "missing": f"{path} does not exist"}[state]
         fix = {"tracked": "", "untracked": f"git add {path} && git commit", "ignored": f"remove {path} from .gitignore, then git add it", "missing": "quest init"}[state]
-        rows.append((state == "tracked", label, fix))
+        rows.append(row(state == "tracked", label, fix))
     return rows
 
 
@@ -553,59 +562,69 @@ def git_add(root: Path, paths: list[str]) -> None:
         pass
 
 
-def doctor_checks(root: Path) -> list[tuple[bool, str, str]]:
-    """(ok, label, fix) rows. Pure; cmd_doctor prints and fixes."""
+def regenerate_tracker(root: Path) -> None:
+    """The doctor's repair for a stale tracker: migrate an older format, else rename the pages and rewrite the log."""
+    found = read_format(quests_dir(root))
+    if found is not None and found < FORMAT:
+        migrate(root, found)           # renames the pages, then writes the log
+    else:
+        rename_to_format_4(root)
+        write_log(root)
+
+
+def doctor_checks(root: Path) -> list[Row]:
+    """Rows in the order they print. Pure; cmd_doctor prints, and runs the repairs the failed rows carry."""
     rows = []
     qdir = quests_dir(root)
     if not qdir.is_dir():
-        return [(False, f"{ROOT_NAME}/ exists", "quest init")]
+        return [row(False, f"{ROOT_NAME}/ exists", "quest init")]
     found = read_format(qdir)
     if found is None:
-        rows.append((False, "quest log exists", "quest init"))
+        rows.append(row(False, "quest log exists", "quest init"))
     elif found > FORMAT:
-        rows.append((False, f"quest log format {found} is newer than this plugin's {FORMAT}", "update the plugin"))
+        rows.append(row(False, f"quest log format {found} is newer than this plugin's {FORMAT}", "update the plugin"))
     elif found < FORMAT:
-        rows.append((False, f"quest log format {found} is older than this plugin's {FORMAT}", "quest doctor --fix"))
+        rows.append(row(False, f"quest log format {found} is older than this plugin's {FORMAT}", "quest doctor --fix", regenerate_tracker))
     else:
-        rows.append((True, f"quest log format {found}", ""))
+        rows.append(row(True, f"quest log format {found}"))
     bad = 0
     quests = load_quests(qdir)
     loaded = {d: fm for d, fm in quests}
     old = sum(1 for _, fm in quests if predates_format_4(fm))
     if old:
-        rows.append((False, f"{plural(old, 'quest.md file')} predate format 4", "quest doctor --fix"))
+        rows.append(row(False, f"{plural(old, 'quest.md file')} predate format 4", "quest doctor --fix", regenerate_tracker))
     overlay_dir = qdir / GUIDANCE_DIR
     if overlay_dir.is_dir():
         stray = sorted(p.name for p in overlay_dir.iterdir() if p.name != f"{p.stem}.md" or p.stem not in STAGES["quest"])
-        rows.append((not stray, f"{GUIDANCE_DIR}/ holds only STAGE.md files" + (f"; stray: {', '.join(stray)}" if stray else ""), "name overlays after a stage, or remove them"))
+        rows.append(row(not stray, f"{GUIDANCE_DIR}/ holds only STAGE.md files" + (f"; stray: {', '.join(stray)}" if stray else ""), "name overlays after a stage, or remove them"))
     for d in sorted(p for p in qdir.iterdir() if p.is_dir() and p.name != GUIDANCE_DIR):
         page = d / "quest.md"
         if not page.is_file():
-            rows.append((False, f"{d.name}/ has no quest.md", "add one or remove the directory")); bad += 1; continue
+            rows.append(row(False, f"{d.name}/ has no quest.md", "add one or remove the directory")); bad += 1; continue
         fm = loaded.get(d) or parse_page(page.read_text())[0]
         missing = [k for k in REQUIRED_KEYS if k not in fm]
         if missing or fm.get("kind") not in KINDS or fm.get("state") not in STATES or not ID_RE.match(str(fm.get("id", ""))):
-            rows.append((False, f"{d.name}/quest.md frontmatter invalid" + (f", missing {', '.join(missing)}" if missing else ""), "fix the frontmatter")); bad += 1
+            rows.append(row(False, f"{d.name}/quest.md frontmatter invalid" + (f", missing {', '.join(missing)}" if missing else ""), "fix the frontmatter")); bad += 1
         elif not d.name.startswith(str(fm["id"])):
-            rows.append((False, f"{d.name}/ does not start with its id {fm['id']}", "rename the directory")); bad += 1
-    rows.append((bad == 0, f"{len(quests)} quest.md files valid", ""))
+            rows.append(row(False, f"{d.name}/ does not start with its id {fm['id']}", "rename the directory")); bad += 1
+    rows.append(row(bad == 0, f"{len(quests)} quest.md files valid"))
     if found is not None and found <= FORMAT:
         current = (qdir / "README.md").read_text()
         same = log_lines(quests) == [l for l in current.splitlines() if l.startswith("| [")]
-        rows.append((same, "quest log matches the directories", "quest doctor --fix"))
+        rows.append(row(same, "quest log matches the directories", "quest doctor --fix", regenerate_tracker))
     claude_md = root / "CLAUDE.md"
     claude_text = claude_md.read_text() if claude_md.is_file() else ""
     section = marked_section(claude_text)
-    rows.append((section is not None, "CLAUDE.md has the quests paragraph", "quest init"))
+    rows.append(row(section is not None, "CLAUDE.md has the quests paragraph", "quest init"))
     if section is not None:
         # the paragraph is a copy that only init writes; the plugin's wording moves on without it
-        rows.append((section == marked_section(CLAUDE_MD_PARAGRAPH), "CLAUDE.md quests paragraph matches the plugin's", "review it against the wording `quest init` writes; edit by hand"))
-    problem = settings_problem(root)
+        rows.append(row(section == marked_section(CLAUDE_MD_PARAGRAPH), "CLAUDE.md quests paragraph matches the plugin's", "review it against the wording `quest init` writes; edit by hand"))
+    data, problem = load_settings(root)
     if problem:
-        rows.append((False, problem, "fix it by hand"))
+        rows.append(row(False, problem, "fix it by hand"))
     else:
-        missing = missing_ask_rules(root)
-        rows.append((not missing, "settings.json asks for every creator verb" + (f"; missing: {', '.join(missing)}" if missing else ""), "quest doctor --fix"))
+        missing = missing_ask_rules(data)
+        rows.append(row(not missing, "settings.json asks for every creator verb" + (f"; missing: {', '.join(missing)}" if missing else ""), "quest doctor --fix", write_missing_ask_rules))
     rows.extend(git_checks(root))
     return rows
 
@@ -617,27 +636,20 @@ def cmd_doctor(args: argparse.Namespace) -> None:
         print("questlog: this repository has no docs/quests/. Ask the creator whether to set up quests here; if yes, run `quest init`.")
         return
     rows = doctor_checks(root)
-    stale = [label for ok, label, fix in rows if not ok and fix == "quest doctor --fix"]
-    if args.fix and stale:
-        if any(not label.startswith("settings.json") for label in stale):
-            found = read_format(qdir)
-            if found is not None and found < FORMAT:
-                migrate(root, found)           # renames the pages, then writes the log
-            else:
-                rename_to_format_4(root)
-                write_log(root)
-        if any(label.startswith("settings.json") for label in stale):
-            write_ask_rules(root)              # adding a prompt cannot loosen anything, so no creator verb is needed
+    repairs = dict.fromkeys(repair for ok, _, _, repair in rows if not ok and repair)
+    if args.fix and repairs:
+        for repair in repairs:
+            repair(root)
         rows = doctor_checks(root)
     failed = [r for r in rows if not r[0]]
     if args.brief:
         if failed:
-            print("questlog: " + "; ".join(f"{label} ({fix})" if fix else label for _, label, fix in failed))
+            print("questlog: " + "; ".join(f"{label} ({fix})" if fix else label for _, label, fix, _ in failed))
         else:
             n = len(log_lines(load_quests(qdir)))
             print(f"questlog: ok, {n} open. Run `quest log`.")
         sys.exit(0)
-    for ok, label, fix in rows:
+    for ok, label, fix, _ in rows:
         print(f"{'ok  ' if ok else 'FAIL'} {label}" + (f"  ({fix})" if not ok and fix else ""))
     sys.exit(1 if failed else 0)
 
