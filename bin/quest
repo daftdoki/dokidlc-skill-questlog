@@ -702,7 +702,7 @@ def doctor_checks(root: Path) -> list[Row]:
 def cmd_doctor(args: argparse.Namespace) -> None:
     root = project_root()
     qdir = quests_dir(root)
-    if args.brief and not qdir.is_dir():
+    if args.brief and not qdir.is_dir() and not linked_tracker(root):
         print("questlog: this repository has no docs/quests/. Ask the creator whether to set up quests here; if yes, run `quest init`.")
         return
     rows = doctor_checks(root)

@@ -783,6 +783,11 @@ def test_linked_tracker_is_refused_before_any_migration(tmp_path, monkeypatch, c
     with pytest.raises(SystemExit) as e:
         quest.main(["new", "Hello"])
     assert e.value.code == 1 and "symlink" in capsys.readouterr().err and list(empty.iterdir()) == []
+    for verb in (["doctor"], ["doctor", "--fix"], ["doctor", "--brief"]):
+        with pytest.raises(SystemExit):
+            quest.main(verb)
+        assert "docs is a symlink" in capsys.readouterr().out, verb
+    assert list(empty.iterdir()) == []
 
 
 def test_init_refuses_a_claude_md_link_to_a_managed_or_non_file_target(tmp_path, monkeypatch, capsys):
