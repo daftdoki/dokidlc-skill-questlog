@@ -6,8 +6,9 @@
 
 Denies hand edits to the quest log and to quest.md frontmatter, and Bash
 whose redirect target or in-place tool argument is a path inside the
-tracker. Asks the creator to approve creator verbs. Allows everything else
-by printing nothing.
+tracker. Allows everything else by printing nothing. Creator verbs are not
+its job: the ask rules `quest init` writes to the project settings prompt
+for those.
 """
 
 from __future__ import annotations
@@ -20,8 +21,6 @@ import sys
 from pathlib import Path
 
 ROOT_NAME = "docs/quests"
-CREATOR_VERBS = ("init", "new", "start", "defer", "next", "skip", "abandon")
-VERB_RE = re.compile(r"(?:^|[\s;&|(]|/)(?:bin/)?quest\s+(" + "|".join(CREATOR_VERBS) + r")\b")
 # the wide rule: any writer near any tracker mention. Kept only for a command shlex cannot parse.
 WRITER_RE = re.compile(r"(?:(?<![<>])>{1,2}(?!&)|\bsed\s+(-i|--in-place)|\btee\b|\b(cp|mv|install|dd|rsync)\b|\b(python3?|perl|ruby|node)\s+-[ce]|\bawk\b.*-i\s*inplace|<<-?\s*['\"]?\w+|\|\s*(sh|bash|zsh)\b)")
 TRACKER_RE = re.compile(r"docs/quests|\bquests\b")
@@ -223,9 +222,6 @@ def decide(event: dict) -> tuple[str, str] | None:
 
     if tool == "Bash":
         cmd = str(inp.get("command", ""))
-        m = VERB_RE.search(cmd)
-        if m:
-            return "ask", f"Creator verb: quest {m.group(1)}. Approve only if you asked for this. Command: {cmd.strip()}"
         hit = bash_write_target(cmd, cwd)
         if hit:
             how, where = hit

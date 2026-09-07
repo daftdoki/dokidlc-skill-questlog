@@ -69,15 +69,10 @@ def test_write_quest_md_only_with_same_frontmatter(repo):
     assert guard.decide(ev("Write", repo, file_path="docs/quests/2609049999-zz-new/quest.md", content="---\nid: x\n---\n"))[0] == "deny"
 
 
-def test_bash_creator_verbs_ask(repo):
-    for cmd in ("quest init", "quest new 'A thing'", "quest next 2609041432-7k", "quest defer 2609041432-7k", "cd x && quest abandon 26 'why'", "/plugins/x/bin/quest start 26", "bin/quest skip 26 research"):
-        d, reason = guard.decide(ev("Bash", repo, command=cmd))
-        assert d == "ask", cmd
-        assert cmd.strip() in reason
-
-
 def test_bash_agent_verbs_allowed(repo):
-    for cmd in ("quest log", "quest show 2609", "quest draft 2609041432-7k goal", "quest doctor", "request new thing"):
+    # creator verbs too: the ask rules quest init writes to the project settings prompt for those, not the hook
+    for cmd in ("quest log", "quest show 2609", "quest draft 2609041432-7k goal", "quest doctor", "request new thing",
+                "quest init", "quest new 'A thing'", "quest next 2609041432-7k", "quest defer 2609041432-7k", "cd x && quest abandon 26 'why'", "/plugins/x/bin/quest start 26", "bin/quest skip 26 research"):
         assert guard.decide(ev("Bash", repo, command=cmd)) is None, cmd
 
 
@@ -105,10 +100,10 @@ def test_shim_guarded_without_uv_exits_two(repo):
 
 
 def test_shim_guarded_with_uv_prints_decision(repo):
-    r = _shim(ev("Bash", repo, command="quest next 2609041432-7k"), os.environ["PATH"])
+    r = _shim(ev("Bash", repo, command="echo x > docs/quests/README.md"), os.environ["PATH"])
     assert r.returncode == 0
     out = json.loads(r.stdout)
-    assert out["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 def test_value_only_frontmatter_edit_is_denied(repo):
@@ -129,7 +124,7 @@ def test_more_bash_writers_and_tracker_forms_are_denied(repo):
 
 def test_shim_sends_every_bash_to_the_checker(repo):
     r = _shim(ev("Bash", repo, command="quest\tnew x"), os.environ["PATH"])
-    assert r.returncode == 0 and (r.stdout == "" or "ask" in r.stdout)
+    assert r.returncode == 0 and r.stdout == ""
     r = _shim(ev("Edit", repo, file_path="src/x.py", old_string="a", new_string="b"), "/usr/bin:/bin")
     assert r.returncode == 0 and r.stdout == ""
 
