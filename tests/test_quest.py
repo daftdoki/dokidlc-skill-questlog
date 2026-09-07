@@ -293,7 +293,7 @@ def test_init_writes_ask_rules_and_keeps_other_keys(tmp_path, monkeypatch, capsy
     before = settings.read_bytes()
     quest.main(["init"])
     assert settings.read_bytes() == before and "already initialized; nothing changed" in capsys.readouterr().out
-    # one rule already there: six are added and the existing one stays
+    # one rule already there. init adds six and keeps the existing one.
     settings.write_text('{"permissions": {"ask": ["Bash(quest next *)"]}}')
     quest.main(["init"])
     assert json.loads(settings.read_text())["permissions"]["ask"] == ["Bash(quest next *)"] + [r for r in quest.ASK_RULES if r != "Bash(quest next *)"]
@@ -306,7 +306,7 @@ def test_init_writes_ask_rules_and_keeps_other_keys(tmp_path, monkeypatch, capsy
         quest.main(["init"])
     assert e.value.code == 2 and ".claude/settings.json" in capsys.readouterr().err
     assert (fresh / ".claude" / "settings.json").read_text() == "{" and not (fresh / "docs").exists()
-    # no settings file at all: one is created with just the rules
+    # no settings file at all. init creates one with just the rules.
     bare = tmp_path / "bare"; bare.mkdir()
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(bare))
     quest.main(["init"])

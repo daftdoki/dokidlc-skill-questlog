@@ -185,7 +185,7 @@ Write, and Bash tools enforces the first three rows; the `ask` rules in
 | Edit or Write to `docs/quests/README.md` | denied |
 | Edit or Write that touches a `quest.md` frontmatter block | denied; the body below it is fine |
 | Bash that redirects into `docs/quests`, or runs `sed -i`, `tee`, `cp`, `mv`, `dd`, or an inline script (`python3 -c`, `sh -c`) that names a file there | denied; the redirect's target is what counts, so `2>/dev/null` beside a tracker path passes |
-| Bash that runs `quest init`, `new`, `start`, `defer`, `next`, `skip`, or `abandon` | you are asked to approve, by the `ask` rules `quest init` writes to `.claude/settings.json`; the verb is matched per subcommand, so a commit message or heredoc that names it does not prompt |
+| Bash that runs `quest init`, `new`, `start`, `defer`, `next`, `skip`, or `abandon` | you are asked to approve, by the `ask` rules `quest init` writes to `.claude/settings.json`; the rules match the verb per subcommand, so a commit message or heredoc that names it does not prompt |
 | Anything else, including the agent writing a stage file | allowed |
 
 A `SessionStart` hook runs `quest doctor --brief`, one line telling the

@@ -7,7 +7,7 @@
 Denies hand edits to the quest log and to quest.md frontmatter, and Bash
 whose redirect target or in-place tool argument is a path inside the
 tracker. Allows everything else by printing nothing. Creator verbs are not
-its job: the ask rules `quest init` writes to the project settings prompt
+its job. The ask rules `quest init` writes to the project settings prompt
 for those.
 """
 

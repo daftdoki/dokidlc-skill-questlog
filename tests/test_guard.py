@@ -70,7 +70,7 @@ def test_write_quest_md_only_with_same_frontmatter(repo):
 
 
 def test_bash_agent_verbs_allowed(repo):
-    # creator verbs too: the ask rules quest init writes to the project settings prompt for those, not the hook
+    # creator verbs too. The ask rules quest init writes to the project settings prompt for those, not the hook.
     for cmd in ("quest log", "quest show 2609", "quest draft 2609041432-7k goal", "quest doctor", "request new thing",
                 "quest init", "quest new 'A thing'", "quest next 2609041432-7k", "quest defer 2609041432-7k", "cd x && quest abandon 26 'why'", "/plugins/x/bin/quest start 26", "bin/quest skip 26 research"):
         assert guard.decide(ev("Bash", repo, command=cmd)) is None, cmd
@@ -97,6 +97,9 @@ def test_shim_unrelated_exits_zero_without_uv(repo):
 def test_shim_guarded_without_uv_exits_two(repo):
     r = _shim(ev("Bash", repo, command="echo x > docs/quests/README.md"), "/usr/bin:/bin")
     assert r.returncode == 2 and "uv" in r.stderr
+    # the word quest alone is not a guarded action; only the tracker path is
+    r = _shim(ev("Edit", repo, file_path="src/quest_helper.py", old_string="a", new_string="the quest begins"), "/usr/bin:/bin")
+    assert r.returncode == 0 and r.stdout == ""
 
 
 def test_shim_guarded_with_uv_prints_decision(repo):
