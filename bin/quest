@@ -576,6 +576,8 @@ def doctor_checks(root: Path) -> list[tuple[bool, str, str]]:
     if section is not None:
         # the paragraph is a copy that only init writes; the plugin's wording moves on without it
         rows.append((section == marked_section(CLAUDE_MD_PARAGRAPH), "CLAUDE.md quests paragraph matches the plugin's", "review it against the wording `quest init` writes; edit by hand"))
+    missing = missing_ask_rules(root)
+    rows.append((not missing, "settings.json asks for every creator verb" + (f"; missing: {', '.join(missing)}" if missing else ""), "quest init"))
     rows.extend(git_checks(root))
     return rows
 

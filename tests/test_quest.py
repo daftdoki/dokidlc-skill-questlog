@@ -159,7 +159,9 @@ def _fm(d):
 
 def _git_commit_all(tmp_path):
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    (tmp_path / ".claude").mkdir(exist_ok=True); (tmp_path / ".claude" / "settings.json").write_text("{}")
+    (tmp_path / ".claude").mkdir(exist_ok=True)
+    if not (tmp_path / ".claude" / "settings.json").is_file():     # init may have written the ask rules already
+        (tmp_path / ".claude" / "settings.json").write_text("{}")
     subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
     subprocess.run(["git", "-C", str(tmp_path), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "x"], check=True)
 
@@ -615,6 +617,25 @@ def test_doctor_compares_the_marked_paragraph_with_the_template(tmp_path, monkey
     out = capsys.readouterr().out
     assert e.value.code == 1 and "FAIL CLAUDE.md quests paragraph matches" in out and "quest init` writes" in out
     assert quest.marked_section("no mark here\n") is None
+
+
+def test_doctor_reports_missing_ask_rules(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    quest.main(["init"]); _git_commit_all(tmp_path); capsys.readouterr()
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    assert e.value.code == 0 and "ok   settings.json asks for every creator verb" in capsys.readouterr().out
+    settings = tmp_path / ".claude" / "settings.json"
+    data = json.loads(settings.read_text())
+    data["permissions"]["ask"].remove("Bash(quest next *)")
+    settings.write_text(json.dumps(data))
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    assert e.value.code == 1 and "FAIL settings.json asks for every creator verb; missing: Bash(quest next *)  (quest init)" in capsys.readouterr().out
+    quest.main(["init"]); capsys.readouterr()
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    assert e.value.code == 0
 
 
 REFERENCES = ROOT / "skills" / "quest" / "references"
