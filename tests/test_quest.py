@@ -772,12 +772,20 @@ def test_linked_tracker_is_refused_before_any_migration(tmp_path, monkeypatch, c
                 quest.main(verb)
             assert e.value.code != 0 and "symlink" in capsys.readouterr().err, (link, verb)
             assert (d / "quest.md").read_text() == page and "format 3" in (oq / "README.md").read_text(), (link, verb)
+    # a linked docs with no tracker behind it: new must not create one there
+    empty = tmp_path / "empty"; empty.mkdir()
+    repo = tmp_path / "repo-new"; repo.mkdir(); (repo / "docs").symlink_to(empty)
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(repo))
+    with pytest.raises(SystemExit) as e:
+        quest.main(["new", "Hello"])
+    assert e.value.code == 1 and "symlink" in capsys.readouterr().err and list(empty.iterdir()) == []
 
 
 def test_init_refuses_a_claude_md_link_to_a_managed_or_non_file_target(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     (tmp_path / ".claude").mkdir(); (tmp_path / ".claude" / "settings.json").write_text("{}")
-    for target in (".claude/settings.json", ".claude", "missing.md"):
+    (tmp_path / ".git").mkdir(); (tmp_path / ".git" / "config").write_text("[core]\n")
+    for target in (".claude/settings.json", ".claude", "missing.md", ".git/config"):
         (tmp_path / "CLAUDE.md").symlink_to(target)
         with pytest.raises(SystemExit) as e:
             quest.main(["init"])

@@ -366,10 +366,9 @@ def check_format(root: Path) -> None:
     pages still get the key renames, so that whichever verb writes the next
     log never stamps a new format over old pages.
     """
-    qdir = quests_dir(root)
-    if not qdir.exists() and not qdir.is_symlink():
+    qdir = tracker_gate(root)          # every verb writes or migrates through here, so a linked docs or tracker is refused before anything is read or created
+    if not qdir.exists():
         return
-    qdir = tracker_gate(root)          # a migration writes pages, so a linked tracker is refused before anything is read
     found = read_format(qdir)
     if found is None:
         if not os.path.lexists(qdir / "README.md"):
@@ -494,7 +493,8 @@ def cmd_init(args: argparse.Namespace) -> None:
         target = claude_md.resolve()
         if not target.is_relative_to(root.resolve()):
             die(f"refusing to write through a symlink that leaves the project: CLAUDE.md -> {os.readlink(claude_md)}")
-        if not target.is_file() or target.is_relative_to((root / ".claude").resolve()) or target.is_relative_to(quests_dir(root).resolve()):
+        rel = target.relative_to(root.resolve())
+        if not target.is_file() or any(part.startswith(".") for part in rel.parts) or rel.is_relative_to(ROOT_NAME):
             die(f"refusing to write CLAUDE.md through a link to {os.readlink(claude_md)}: not a plain file of the project's own")
     tracker_gate(root)
     settings = settings_gate(root)
