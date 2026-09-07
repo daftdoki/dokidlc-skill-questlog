@@ -24,7 +24,7 @@ You draft. The creator decides.
 | `quest show ID` | you | a quest's metadata, files, current stage, and the stage's guidance; a unique id prefix works |
 | `quest draft ID STAGE` | you | the stage file is written, reviewed, and awaits the creator |
 | `quest doctor [--fix]` | you | checks the tracker; `--fix` regenerates a stale log |
-| `quest init` | creator asks | creates `docs/quests/` and the CLAUDE.md paragraph |
+| `quest init` | creator asks | creates `docs/quests/`, the CLAUDE.md paragraph, and the ask rules in `.claude/settings.json` |
 | `quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]` | creator asks | opens a quest or chore in the backlog |
 | `quest start ID` | creator asks | backlog to active; a deferred entry resumes at its stage |
 | `quest defer ID` | creator asks | active to backlog; stage progress stays, `quest start` resumes it |
@@ -34,7 +34,8 @@ You draft. The creator decides.
 
 Run a creator verb only when the creator asked for it in this conversation,
 never because you judged it necessary. Show the exact command before you
-run it. The hook turns every creator verb into an approval prompt.
+run it. The `ask` rules in the project's settings turn every creator verb
+into an approval prompt; no permission mode approves one on its own.
 
 ## Stages
 

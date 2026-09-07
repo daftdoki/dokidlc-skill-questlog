@@ -177,14 +177,15 @@ from the directories on demand.
 **What is guarded.** The log and every `quest.md` frontmatter block are
 written only by the verbs, so the log always matches the directories and
 a stage date is never typed by hand. A `PreToolUse` hook on the Edit,
-Write, and Bash tools enforces it:
+Write, and Bash tools enforces the first three rows; the `ask` rules in
+`.claude/settings.json` give the fourth:
 
 | Trigger | Result |
 |---|---|
 | Edit or Write to `docs/quests/README.md` | denied |
 | Edit or Write that touches a `quest.md` frontmatter block | denied; the body below it is fine |
 | Bash that redirects into `docs/quests`, or runs `sed -i`, `tee`, `cp`, `mv`, `dd`, or an inline script (`python3 -c`, `sh -c`) that names a file there | denied; the redirect's target is what counts, so `2>/dev/null` beside a tracker path passes |
-| Bash that runs `quest init`, `new`, `start`, `defer`, `next`, `skip`, or `abandon` | you are asked to approve, with the command shown |
+| Bash that runs `quest init`, `new`, `start`, `defer`, `next`, `skip`, or `abandon` | you are asked to approve, by the `ask` rules `quest init` writes to `.claude/settings.json`; the verb is matched per subcommand, so a commit message or heredoc that names it does not prompt |
 | Anything else, including the agent writing a stage file | allowed |
 
 A `SessionStart` hook runs `quest doctor --brief`, one line telling the
@@ -195,7 +196,8 @@ allowed, and everything else proceeds.
 The guard is for habit, not for an adversary. A command that reaches the
 tracker without naming it, through an encoded payload, a variable, or a
 script body on stdin, gets through; `quest doctor` is the check behind
-it. The script itself never
+it. A path to the script, such as `bin/quest next`, does not match the
+rules; the skill always says `quest`. The script itself never
 writes through a symlink, so a cloned repository cannot point the quest
 log or a quest directory at another file.
 
@@ -225,9 +227,9 @@ claude plugin install questlog@dokidlc
 ```
 
 Then start a session in a repository and say "set up quests." The agent
-runs `quest init`, which creates `docs/quests/`, the quest log, and a
-short paragraph in `CLAUDE.md`, and asks you to approve it. Commit the
-result.
+runs `quest init`, which creates `docs/quests/`, the quest log, a short
+paragraph in `CLAUDE.md`, and one `ask` rule per creator verb in
+`.claude/settings.json`, and asks you to approve it. Commit the result.
 
 To have a repository declare the plugin for everyone who clones it, add to
 `.claude/settings.json`:
