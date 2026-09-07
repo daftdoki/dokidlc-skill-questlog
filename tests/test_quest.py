@@ -1,6 +1,7 @@
 """Tests for bin/quest. No harness, no network."""
 
 import importlib.util
+import json
 import random
 import subprocess
 from datetime import UTC, datetime
@@ -275,6 +276,39 @@ def test_init_is_idempotent_and_appends_paragraph(tmp_path, monkeypatch, capsys)
     quest.main(["init"])
     assert (tmp_path / "CLAUDE.md").read_text().count(quest.CLAUDE_MD_MARK) == 1
     assert "nothing changed" in capsys.readouterr().out
+
+
+def test_init_writes_ask_rules_and_keeps_other_keys(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    settings = tmp_path / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    settings.write_text('{"enabledPlugins": {"questlog@dokidlc": true}, "permissions": {"allow": ["Bash(git status)"]}}')
+    quest.main(["init"])
+    data = json.loads(settings.read_text())
+    assert data["enabledPlugins"] == {"questlog@dokidlc": True} and data["permissions"]["allow"] == ["Bash(git status)"]
+    assert data["permissions"]["ask"] == list(quest.ASK_RULES) and len(quest.ASK_RULES) == 7
+    assert "7 ask rules in .claude/settings.json" in capsys.readouterr().out
+    before = settings.read_bytes()
+    quest.main(["init"])
+    assert settings.read_bytes() == before and "already initialized; nothing changed" in capsys.readouterr().out
+    # one rule already there: six are added and the existing one stays
+    settings.write_text('{"permissions": {"ask": ["Bash(quest next *)"]}}')
+    quest.main(["init"])
+    assert json.loads(settings.read_text())["permissions"]["ask"] == ["Bash(quest next *)"] + [r for r in quest.ASK_RULES if r != "Bash(quest next *)"]
+    assert "6 ask rules" in capsys.readouterr().out
+    # an unparsable file stops init before it touches anything
+    fresh = tmp_path / "fresh"; (fresh / ".claude").mkdir(parents=True)
+    (fresh / ".claude" / "settings.json").write_text("{")
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(fresh))
+    with pytest.raises(SystemExit) as e:
+        quest.main(["init"])
+    assert e.value.code == 2 and ".claude/settings.json" in capsys.readouterr().err
+    assert (fresh / ".claude" / "settings.json").read_text() == "{" and not (fresh / "docs").exists()
+    # no settings file at all: one is created with just the rules
+    bare = tmp_path / "bare"; bare.mkdir()
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(bare))
+    quest.main(["init"])
+    assert json.loads((bare / ".claude" / "settings.json").read_text()) == {"permissions": {"ask": list(quest.ASK_RULES)}}
 
 
 def test_format_newer_refuses_older_migrates(tmp_path, monkeypatch, capsys):

@@ -12,7 +12,7 @@ Every quest or chore is a directory under docs/quests/ holding quest.md and
 its stage files. The quest log, docs/quests/README.md, is generated.
 
 Usage:
-  quest init                        create docs/quests and the CLAUDE.md paragraph (creator verb)
+  quest init                        create docs/quests, the CLAUDE.md paragraph, and the ask rules (creator verb)
   quest doctor [--fix] [--brief]    check the tracker; --fix regenerates a stale log
   quest log                         what is open, one line each
   quest complete [--all] [--limit N]  list completed work, newest first; --all adds abandoned
@@ -61,6 +61,10 @@ STAGES = {"quest": ("goal", "research", "design", "plan", "implement", "review")
 SLUG_MAX = 40
 GENERATED_HEAD = "# Quest log\n"
 HEADER_RE = re.compile(r"<!-- questlog format (\d+), written by questlog (\S+) on (\S+) -->")
+CREATOR_VERBS = ("init", "new", "start", "defer", "next", "skip", "abandon")
+# one permission rule per creator verb; Claude Code prompts on a match in every mode and does not look inside quoted text
+ASK_RULES = tuple(f"Bash(quest {v} *)" for v in CREATOR_VERBS)
+SETTINGS = ".claude/settings.json"
 CLAUDE_MD_MARK = "<!-- questlog -->"
 CLAUDE_MD_PARAGRAPH = f"""
 ## Quests {CLAUDE_MD_MARK}
@@ -396,11 +400,47 @@ def migrate(root: Path, from_format: int) -> None:
 # --- init and doctor --------------------------------------------------------
 
 
+def read_settings(root: Path) -> dict | None:
+    """The project settings as a dict, {} when the file is absent, None when it is not JSON."""
+    path = root / SETTINGS
+    if not path.is_file():
+        return {}
+    try:
+        return json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return None
+
+
+def missing_ask_rules(root: Path) -> list[str]:
+    """The rules in ASK_RULES absent from permissions.ask; every rule when the file is missing or not JSON."""
+    data = read_settings(root)
+    present = data.get("permissions", {}).get("ask", []) if isinstance(data, dict) else []
+    return [r for r in ASK_RULES if r not in present]
+
+
+def write_ask_rules(root: Path) -> list[str]:
+    """Add the missing ask rules to the project settings, keeping every other key. Returns what was added."""
+    data = read_settings(root)
+    if data is None:
+        die(f"{SETTINGS} is not valid JSON; fix it, then run quest init again", 2)
+    missing = missing_ask_rules(root)
+    if not missing:
+        return []
+    data.setdefault("permissions", {}).setdefault("ask", []).extend(missing)
+    path = root / SETTINGS
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n")
+    return missing
+
+
 def cmd_init(args: argparse.Namespace) -> None:
     root = project_root()
     qdir = quests_dir(root)
     check_format(root)
     made = []
+    added = write_ask_rules(root)
+    if added:
+        made.append(f"{plural(len(added), 'ask rule')} in {SETTINGS}")
     if not qdir.is_dir():
         qdir.mkdir(parents=True)
         made.append(str(qdir.relative_to(root)) + "/")
@@ -412,7 +452,7 @@ def cmd_init(args: argparse.Namespace) -> None:
     if CLAUDE_MD_MARK not in text:
         claude_md.write_text(text.rstrip("\n") + "\n" + CLAUDE_MD_PARAGRAPH if text else CLAUDE_MD_PARAGRAPH.lstrip("\n"))
         made.append("CLAUDE.md paragraph")
-    git_add(root, [ROOT_NAME, "CLAUDE.md"])
+    git_add(root, [ROOT_NAME, "CLAUDE.md", SETTINGS])
     print("initialized: " + ", ".join(made) if made else "already initialized; nothing changed")
     for ok, label, fix in git_checks(root):
         if not ok:
@@ -430,7 +470,7 @@ def marked_section(text: str) -> str | None:
 
 
 REQUIRED_KEYS = ("id", "title", "kind", "state", "created")
-PERSISTED = (ROOT_NAME, ".claude/settings.json", "CLAUDE.md")
+PERSISTED = (ROOT_NAME, SETTINGS, "CLAUDE.md")
 
 
 def git_status_of(root: Path, path: str) -> str:
@@ -477,7 +517,7 @@ def git_checks(root: Path) -> list[tuple[bool, str, str]]:
         if state == "no-git":
             return [(False, "this directory is a git repository", "git init, then commit docs/quests/ and .claude/settings.json")]
         label = {"tracked": f"{path} is committed", "untracked": f"{path} is not committed", "ignored": f"{path} is ignored by git", "missing": f"{path} does not exist"}[state]
-        fix = {"tracked": "", "untracked": f"git add {path} && git commit", "ignored": f"remove {path} from .gitignore, then git add it", "missing": "quest init" if path != ".claude/settings.json" else "enable the plugin in project settings so clones get it"}[state]
+        fix = {"tracked": "", "untracked": f"git add {path} && git commit", "ignored": f"remove {path} from .gitignore, then git add it", "missing": "quest init"}[state]
         rows.append((state == "tracked", label, fix))
     return rows
 
@@ -821,7 +861,7 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("abandon", help="terminal, with a reason (creator verb)")
     p.add_argument("id"); p.add_argument("reason"); p.set_defaults(func=cmd_abandon)
 
-    p = sub.add_parser("init", help="create docs/quests and the CLAUDE.md paragraph (creator verb)")
+    p = sub.add_parser("init", help="create docs/quests, the CLAUDE.md paragraph, and the ask rules (creator verb)")
     p.set_defaults(func=cmd_init)
     p = sub.add_parser("doctor", help="check the tracker; --fix regenerates a stale log")
     p.add_argument("--fix", action="store_true"); p.add_argument("--brief", action="store_true", help="one line, nothing if no tracker")
