@@ -233,7 +233,8 @@ claude plugin install questlog@dokidlc
 Then start a session in a repository and say "set up quests." The agent
 runs `quest init`, which creates `docs/quests/`, the quest log, a short
 paragraph in `CLAUDE.md`, and one `ask` rule per creator verb in
-`.claude/settings.json`, and asks you to approve it. Commit the result.
+`.claude/settings.json`. Approve that first run when Claude Code asks;
+from then on the rules prompt for every creator verb. Commit the result.
 
 To have a repository declare the plugin for everyone who clones it, add to
 `.claude/settings.json`:
