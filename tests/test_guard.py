@@ -97,9 +97,17 @@ def test_shim_unrelated_exits_zero_without_uv(repo):
 def test_shim_guarded_without_uv_exits_two(repo):
     r = _shim(ev("Bash", repo, command="echo x > docs/quests/README.md"), "/usr/bin:/bin")
     assert r.returncode == 2 and "uv" in r.stderr
-    # the word quest alone is not a guarded action; only the tracker path is
-    r = _shim(ev("Edit", repo, file_path="src/quest_helper.py", old_string="a", new_string="the quest begins"), "/usr/bin:/bin")
-    assert r.returncode == 0 and r.stdout == ""
+    # an aliased tracker path never carries the literal docs/quests; the word match forwards it, and without uv it is refused
+    for path in ("docs//quests/2609041432-7k-thing/quest.md", "docs/./quests/2609041432-7k-thing/quest.md", "dq/2609041432-7k-thing/quest.md", "docs//quests/README.md"):
+        r = _shim(ev("Edit", repo, file_path=str(repo / path), old_string="state: backlog", new_string="state: completed"), "/usr/bin:/bin")
+        assert r.returncode == 2, path
+
+
+def test_shim_forwards_aliased_tracker_paths(repo):
+    (repo / "dq").symlink_to(repo / "docs" / "quests")
+    for path in ("docs//quests/2609041432-7k-thing/quest.md", "dq/2609041432-7k-thing/quest.md", "docs/x/../quests/2609041432-7k-thing/quest.md"):
+        r = _shim(ev("Edit", repo, file_path=str(repo / path), old_string="state: backlog", new_string="state: completed"), os.environ["PATH"])
+        assert r.returncode == 0 and json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny", path
 
 
 def test_shim_guarded_with_uv_prints_decision(repo):
