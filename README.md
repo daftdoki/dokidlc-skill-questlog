@@ -155,8 +155,8 @@ started: '2026-09-05T10:20:00Z'
 deferred: '...'            # only while parked; start removes it
 goal_drafted: '...'        # one pair of keys per stage
 goal_accepted: '...'
-implement_built: '...'     # implement says built, the others say drafted
 research_skipped: '...'
+implement_built: '...'     # implement says built, the others say drafted
 abandoned_reason: ...      # only when abandoned
 ---
 ## Goal

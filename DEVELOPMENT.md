@@ -85,9 +85,8 @@ predate format 4 with `--fix` as the cure. Format 5 follows that shape:
 `rename_to_format_5` runs beside the format 4 pass everywhere it runs.
 Keep the same shape for the next format: a predicate on the frontmatter,
 a pure rewrite, and a doctor row that carries the repair `doctor --fix`
-runs. `tracker_gate` and
-`settings_gate` refuse a linked or unwritable target before any verb
-writes; a new writer goes through one of them.
+runs. `tracker_gate` and `settings_gate` refuse a linked or unwritable
+target before any verb writes; a new writer goes through one of them.
 
 ## Release
 

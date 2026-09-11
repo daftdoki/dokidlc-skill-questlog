@@ -680,14 +680,10 @@ def doctor_checks(root: Path) -> list[Row]:
     bad = 0
     quests = load_quests(qdir)
     loaded = {d: fm for d, fm in quests}
-    old = sum(1 for _, fm in quests if predates_format_4(fm))
-    if old:
-        repairable = found is not None and found <= FORMAT or found is None and not os.path.lexists(qdir / "README.md")
-        rows.append(row(False, f"{plural(old, 'quest.md file')} {'predates' if old == 1 else 'predate'} format 4", "quest doctor --fix" if repairable else "fix the log first", regenerate_tracker if repairable else None))
-    old5 = sum(1 for _, fm in quests if predates_format_5(fm))
-    if old5:
-        repairable = found is not None and found <= FORMAT or found is None and not os.path.lexists(qdir / "README.md")
-        rows.append(row(False, f"{plural(old5, 'quest.md file')} {'predates' if old5 == 1 else 'predate'} format 5", "quest doctor --fix" if repairable else "fix the log first", regenerate_tracker if repairable else None))
+    repairable = found is not None and found <= FORMAT or found is None and not os.path.lexists(qdir / "README.md")
+    for n, fmt in ((sum(1 for _, fm in quests if predates_format_4(fm)), 4), (sum(1 for _, fm in quests if predates_format_5(fm)), 5)):
+        if n:
+            rows.append(row(False, f"{plural(n, 'quest.md file')} {'predates' if n == 1 else 'predate'} format {fmt}", "quest doctor --fix" if repairable else "fix the log first", regenerate_tracker if repairable else None))
     overlay_dir = qdir / GUIDANCE_DIR
     if overlay_dir.is_dir():
         stray = sorted(p.name for p in overlay_dir.iterdir() if p.name != f"{p.stem}.md" or p.stem not in STAGES["quest"])
@@ -793,6 +789,8 @@ READY_PHRASE = {"implement": "built and reviewed"}   # what `quest draft` says o
 def ready_key(stage: str) -> str:
     """The frontmatter stamp that says a stage is ready for the creator."""
     return f"{stage}_{READY.get(stage, 'drafted')}"
+
+
 REFERENCES = PLUGIN_ROOT / "skills" / "quest" / "references"
 GUIDANCE_DIR = "guidance"   # docs/quests/guidance/STAGE.md: a project's own rules for a stage, read after the reference file
 
