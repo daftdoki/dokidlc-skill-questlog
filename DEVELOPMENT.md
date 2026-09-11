@@ -72,6 +72,9 @@ with a migration.
 - Format 4 renamed the state `done` to `completed` and every `STAGE_closed`
   key to `STAGE_accepted`. It is the first migration that rewrites whole
   frontmatter blocks, through `update_quest(..., replace=True)`.
+- Format 5 renamed `implement_drafted` to `implement_built`. Implement's
+  product is commits, so its ready stamp says the work was built, where a
+  document stage still says drafted.
 
 The format number is read from the log header, but the data that changes
 lives in `quest.md`. Two paths used to skip the migration. `quest doctor
