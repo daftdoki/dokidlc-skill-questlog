@@ -190,6 +190,8 @@ def test_full_quest_lifecycle(tmp_path, monkeypatch):
         quest.main(["skip", qid, "plan"])
     (d / "plan.md").write_text("# Plan\n")
     quest.main(["draft", qid, "plan"]); quest.main(["next", qid])
+    quest.main(["draft", qid, "implement"])
+    assert "implement_built" in _fm(d) and "implement_drafted" not in _fm(d)
     quest.main(["next", qid])
     quest.main(["next", qid])
     fm = _fm(d)
@@ -507,7 +509,11 @@ def test_draft_asks_iterate_or_move(tmp_path, capsys, monkeypatch):
     quest.main(["start", qid]); (d / "plan.md").write_text("# Plan\n"); capsys.readouterr()
     quest.main(["draft", qid, "plan"])
     assert "keep iterating on plan, or move to implement?" in capsys.readouterr().out
-    quest.main(["next", qid]); quest.main(["next", qid]); capsys.readouterr()
+    quest.main(["next", qid]); capsys.readouterr()
+    quest.main(["draft", qid, "implement"])
+    out = capsys.readouterr().out
+    assert "built and reviewed" in out and "keep iterating on implement, or move to review?" in out
+    quest.main(["next", qid]); capsys.readouterr()
     quest.main(["draft", qid, "review"])
     assert "whether the work is complete" in capsys.readouterr().out
 

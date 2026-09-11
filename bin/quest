@@ -20,7 +20,8 @@ Usage:
   quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]
   quest start ID                    backlog to active; resumes a deferred entry at its stage
   quest defer ID                    active to backlog; stage progress stays
-  quest draft ID STAGE              the stage file is written and awaits review
+  quest draft ID STAGE              a stage is ready for the creator: a document written,
+                                    or implement built and reviewed
                                     stages: goal research design plan implement review
   quest next ID [STAGE]             the creator accepted the current stage; from review, completed
                                     STAGE, when given, must be the current one
@@ -752,6 +753,13 @@ def print_memory_hits(query: str) -> None:
 # --- transitions ------------------------------------------------------------
 
 STAGE_FILES = {"goal": "goal.md", "research": "research.md", "design": "design.md", "plan": "plan.md"}
+READY = {"implement": "built"}                      # implement's product is commits, so its stamp reads built, not drafted
+READY_PHRASE = {"implement": "built and reviewed"}   # what `quest draft` says out loud, beside the key it writes
+
+
+def ready_key(stage: str) -> str:
+    """The frontmatter stamp that says a stage is ready for the creator."""
+    return f"{stage}_{READY.get(stage, 'drafted')}"
 REFERENCES = PLUGIN_ROOT / "skills" / "quest" / "references"
 GUIDANCE_DIR = "guidance"   # docs/quests/guidance/STAGE.md: a project's own rules for a stage, read after the reference file
 
@@ -861,13 +869,14 @@ def cmd_draft(args: argparse.Namespace) -> None:
     wanted = STAGE_FILES.get(args.stage)
     if wanted and not (d / wanted).is_file():
         die(f"write {d.name}/{wanted} before drafting {args.stage}")
-    update_quest(d, {f"{args.stage}_drafted": now_iso()})
+    update_quest(d, {ready_key(args.stage): now_iso()})
     write_log(root)
     nxt = stage_after(fm, args.stage)
     verdict = last_verdict(d, args.stage)
     if verdict:
         print(f"last verdict: {verdict}")
-    print(f"{fm['id']} {args.stage} drafted; ask the creator: keep iterating on {args.stage}, or move to {nxt}?" if nxt else f"{fm['id']} {args.stage} drafted; ask the creator whether the work is complete")
+    said = READY_PHRASE.get(args.stage, "drafted")
+    print(f"{fm['id']} {args.stage} {said}; ask the creator: keep iterating on {args.stage}, or move to {nxt}?" if nxt else f"{fm['id']} {args.stage} {said}; ask the creator whether the work is complete")
     if args.stage in ("research", "design", "plan") and shutil.which("memory"):
         print(f"memory: what did you learn during {args.stage} on your own? One page per finding, `--ref {d.name}/{STAGE_FILES[args.stage]}`, before the creator moves on.")
 
@@ -879,7 +888,7 @@ def cmd_next(args: argparse.Namespace) -> None:
     if stage is None and fm.get("state") == "active":
         die(f"{fm['id']} is active but every stage is accepted; run quest doctor")
     require_stage(fm, args.stage or stage, "accept")
-    if stage in STAGE_FILES and not fm.get(f"{stage}_drafted"):
+    if stage in STAGE_FILES and not fm.get(ready_key(stage)):
         die(f"{fm['id']} {stage} was never drafted; run quest draft {fm['id']} {stage} first")
     changes = {f"{stage}_accepted": now_iso()}
     nxt = stage_after(fm, stage)
@@ -971,7 +980,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("id"); p.set_defaults(func=cmd_start)
     p = sub.add_parser("defer", help="active to backlog (creator verb)")
     p.add_argument("id"); p.set_defaults(func=cmd_defer)
-    p = sub.add_parser("draft", help="record that a stage file is written and awaits review")
+    p = sub.add_parser("draft", help="record that a stage is ready for the creator: a document written, or implement built and reviewed")
     p.add_argument("id"); p.add_argument("stage", choices=STAGES["quest"]); p.set_defaults(func=cmd_draft)
     p = sub.add_parser("next", help="the creator accepted the current stage; move to the next, or complete from review (creator verb)")
     p.add_argument("id"); p.add_argument("stage", nargs="?", choices=STAGES["quest"], help="the stage being accepted; refused if it is not the current one")
