@@ -10,7 +10,7 @@ quest log at `docs/quests/README.md` lists what is open, one line each.
 
 With it enabled, the agent will on its own: tell you what is open at the
 start of every session, read a quest before working on it, write the stage
-documents, and mark a stage as drafted when it wants your review. It will
+documents, and mark a stage as ready when it wants your review. It will
 not open, start, park, move on from, skip, or abandon anything by itself.
 Those happen only when you ask, and Claude Code prompts you to approve the
 exact command each time.
@@ -97,7 +97,7 @@ The agent runs the first five on its own and the rest only when you ask.
 quest log                                   what is open, newest first
 quest complete [--all] [--limit N]          what is completed, newest first, ten by default
 quest show 2609041432-7k                    one quest; a unique id prefix works
-quest draft 2609041432-7k plan              the stage file is written, please review
+quest draft 2609041432-7k plan              the stage is ready, please review
 quest doctor --fix                          check the tracker; regenerate a stale log, write missing ask rules
 quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]
 quest start ID
@@ -155,6 +155,7 @@ started: '2026-09-05T10:20:00Z'
 deferred: '...'            # only while parked; start removes it
 goal_drafted: '...'        # one pair of keys per stage
 goal_accepted: '...'
+implement_built: '...'     # implement says built, the others say drafted
 research_skipped: '...'
 abandoned_reason: ...      # only when abandoned
 ---

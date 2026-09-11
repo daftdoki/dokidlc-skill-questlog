@@ -79,9 +79,13 @@ lives in `quest.md`. Two paths used to skip the migration. `quest doctor
 made `check_format` a no-op so the next `quest new` stamped the new format
 over old pages. Both are closed. `rename_to_format_4` keys off the page
 contents, runs whenever the log is absent, and doctor reports pages that
-predate format 4 with `--fix` as the cure. Keep the same shape for the
-next format: a predicate on the frontmatter, a pure rewrite, and a doctor
-row that carries the repair `doctor --fix` runs. `tracker_gate` and
+predate format 4 with `--fix` as the cure. Format 5 follows that shape:
+`predates_format_5` is true when `implement_drafted` is a key,
+`format_5_frontmatter` renames it to `implement_built`, and
+`rename_to_format_5` runs beside the format 4 pass everywhere it runs.
+Keep the same shape for the next format: a predicate on the frontmatter,
+a pure rewrite, and a doctor row that carries the repair `doctor --fix`
+runs. `tracker_gate` and
 `settings_gate` refuse a linked or unwritable target before any verb
 writes; a new writer goes through one of them.
 

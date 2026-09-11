@@ -22,7 +22,7 @@ You draft. The creator decides.
 | `quest log` | you | one line per open quest or chore |
 | `quest complete [--all] [--limit N]` | you | completed work, newest first, ten by default; `--all` adds abandoned. Run it only when asked; completed work stays out of context otherwise |
 | `quest show ID` | you | a quest's metadata, files, current stage, and the stage's guidance; a unique id prefix works |
-| `quest draft ID STAGE` | you | the stage file is written, reviewed, and awaits the creator |
+| `quest draft ID STAGE` | you | a stage is ready for the creator: a document written, or implement built and reviewed |
 | `quest doctor [--fix]` | you | checks the tracker; `--fix` regenerates a stale log and writes missing ask rules |
 | `quest init` | creator asks | creates `docs/quests/`, the CLAUDE.md paragraph, and the ask rules in `.claude/settings.json` |
 | `quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]` | creator asks | opens a quest or chore in the backlog |
@@ -62,7 +62,7 @@ review loop, run `quest draft ID STAGE`, and ask the creator one question:
 keep iterating on this stage, or move to the next one? Name the next stage
 and the last verdict. Wait. On changes, revise, loop, draft, and ask
 again. On move on, show and run `quest next ID STAGE`; the quest moves
-only then.
+only then. Implement's stamp is `implement_built`.
 
 ## Review loop
 
