@@ -48,7 +48,7 @@ from pathlib import Path
 
 import yaml
 
-FORMAT = 4
+FORMAT = 5
 ROOT_NAME = "docs/quests"
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 # Lowercase alphanumerics without the characters that read alike: 0 1 i l o.
@@ -257,6 +257,16 @@ def format_4_frontmatter(fm: dict) -> dict:
     return out
 
 
+def predates_format_5(fm: dict) -> bool:
+    """Frontmatter written before format 5: the stamp `implement_drafted`, which format 5 renamed to `implement_built`."""
+    return "implement_drafted" in fm
+
+
+def format_5_frontmatter(fm: dict) -> dict:
+    """The same frontmatter with `implement_drafted` renamed to `implement_built`, order kept."""
+    return {("implement_built" if k == "implement_drafted" else k): v for k, v in fm.items()}
+
+
 def plural(n: int, noun: str) -> str:
     return f"{n} {noun}{'' if n == 1 else 's'}"
 
@@ -385,6 +395,7 @@ def check_format(root: Path) -> None:
     if found is None:
         if not os.path.lexists(qdir / "README.md"):
             rename_to_format_4(root)
+            rename_to_format_5(root)
         return
     if found > FORMAT:
         die(f"this repository was last written by a newer questlog (format {found}, this is {FORMAT}); update the plugin", 2)
@@ -401,6 +412,18 @@ def rename_to_format_4(root: Path) -> int:
             changed += 1
     if changed:
         print(f"quest: renamed pre-format-4 keys in {plural(changed, 'quest.md file')}", file=sys.stderr)
+    return changed
+
+
+def rename_to_format_5(root: Path) -> int:
+    """Rewrite every quest.md that predates format 5. Returns how many changed. Safe to run on current data."""
+    changed = 0
+    for d, fm in load_quests(quests_dir(root)):
+        if predates_format_5(fm):
+            update_quest(d, format_5_frontmatter(fm), replace=True)
+            changed += 1
+    if changed:
+        print(f"quest: renamed pre-format-5 keys in {plural(changed, 'quest.md file')}", file=sys.stderr)
     return changed
 
 
@@ -421,6 +444,11 @@ def migrate(root: Path, from_format: int) -> None:
         # `STAGE_closed` to `STAGE_accepted`. A quest is completed, and a stage
         # is accepted when the creator moves on from it.
         rename_to_format_4(root)
+    if from_format < 5:
+        # format 5 renamed `implement_drafted` to `implement_built`. Implement's
+        # product is commits, so the stamp says the work was built and reviewed,
+        # not that a document was written.
+        rename_to_format_5(root)
     write_log(root)
     print(f"quest: migrated docs/quests from format {from_format} to {FORMAT}", file=sys.stderr)
 
@@ -625,6 +653,7 @@ def regenerate_tracker(root: Path) -> None:
         migrate(root, found)           # renames the pages, then writes the log
     else:
         rename_to_format_4(root)
+        rename_to_format_5(root)
         write_log(root)
 
 
@@ -654,7 +683,11 @@ def doctor_checks(root: Path) -> list[Row]:
     old = sum(1 for _, fm in quests if predates_format_4(fm))
     if old:
         repairable = found is not None and found <= FORMAT or found is None and not os.path.lexists(qdir / "README.md")
-        rows.append(row(False, f"{plural(old, 'quest.md file')} predate format 4", "quest doctor --fix" if repairable else "fix the log first", regenerate_tracker if repairable else None))
+        rows.append(row(False, f"{plural(old, 'quest.md file')} {'predates' if old == 1 else 'predate'} format 4", "quest doctor --fix" if repairable else "fix the log first", regenerate_tracker if repairable else None))
+    old5 = sum(1 for _, fm in quests if predates_format_5(fm))
+    if old5:
+        repairable = found is not None and found <= FORMAT or found is None and not os.path.lexists(qdir / "README.md")
+        rows.append(row(False, f"{plural(old5, 'quest.md file')} {'predates' if old5 == 1 else 'predate'} format 5", "quest doctor --fix" if repairable else "fix the log first", regenerate_tracker if repairable else None))
     overlay_dir = qdir / GUIDANCE_DIR
     if overlay_dir.is_dir():
         stray = sorted(p.name for p in overlay_dir.iterdir() if p.name != f"{p.stem}.md" or p.stem not in STAGES["quest"])

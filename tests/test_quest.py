@@ -91,7 +91,7 @@ def test_log_excludes_terminal_and_sorts_newest_first(tmp_path):
     assert lines[0] == "| [2609041432-bb](2609041432-bb-new-active/) | quest | active | research | New active |"
     assert lines[1] == "| [2609011000-aa](2609011000-aa-old-open/) | quest | backlog | goal | Old open |"
     text = quest.render_log(quest.load_quests(qdir), "abc1234", NOW)
-    assert text.startswith("# Quest log\n\n<!-- questlog format 4, written by questlog abc1234 on 2026-09-04 -->")
+    assert text.startswith("# Quest log\n\n<!-- questlog format 5, written by questlog abc1234 on 2026-09-04 -->")
 
 
 def test_log_byte_bound_thirty_items(tmp_path):
@@ -319,13 +319,13 @@ def test_format_newer_refuses_older_migrates(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     quest.main(["init"])
     log = tmp_path / "docs/quests/README.md"
-    log.write_text(log.read_text().replace("format 4", "format 5"))
+    log.write_text(log.read_text().replace("format 5", "format 6"))
     with pytest.raises(SystemExit) as e:
         quest.main(["log"])
     assert e.value.code == 2 and "newer questlog" in capsys.readouterr().err
     log.write_text("# Quest log\n\nno header\n")
     quest.main(["log"])
-    assert "format 4" in log.read_text()
+    assert "format 5" in log.read_text()
     assert "migrated" in capsys.readouterr().err
 
 
@@ -383,9 +383,10 @@ def test_migration_to_format_2_marks_plan_skipped_only_past_implement(tmp_path, 
     assert "plan_skipped" not in _fm(a)
     assert quest.current_stage(_fm(a)) == "design"
     assert _fm(b)["plan_skipped"] and quest.current_stage(_fm(b)) == "implement"
+    assert "implement_drafted" not in _fm(b) and _fm(b)["implement_built"] == "x"
     assert _fm(c)["plan_skipped"] and quest.current_stage(_fm(c)) is None
     assert _fm(c)["state"] == "completed" and "review_closed" not in _fm(c) and _fm(c)["review_accepted"] == "x"
-    assert "format 4" in (qdir / "README.md").read_text()
+    assert "format 5" in (qdir / "README.md").read_text()
 
 
 def test_memory_hits_fail_open_and_parse(monkeypatch):
@@ -418,7 +419,7 @@ def test_list_style_log_from_format_2_is_migrated(tmp_path, monkeypatch, capsys)
     (qdir / "README.md").write_text("# Quest log\n\n<!-- questlog format 2, written by questlog old on 2026-09-04 -->\n\n- [2609011000-aa](2609011000-aa-open-one/) quest active research: Open one\n")
     quest.main(["log"]); capsys.readouterr()
     text = (qdir / "README.md").read_text()
-    assert "format 4" in text and "| [2609011000-aa]" in text and _fm(qdir / "2609011000-aa-open-one")["goal_accepted"] == "x"
+    assert "format 5" in text and "| [2609011000-aa]" in text and _fm(qdir / "2609011000-aa-open-one")["goal_accepted"] == "x"
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor"])
     assert "quest log matches the directories" in capsys.readouterr().out
@@ -524,6 +525,7 @@ def test_doctor_reports_old_format_and_fix_migrates_pages(tmp_path, monkeypatch,
     qdir = tmp_path / "docs" / "quests"
     a = _make(qdir, "2609011000-aa", "At plan", state="active", goal_closed="x", research_skipped="x", design_closed="x")
     c = _make(qdir, "2609011001-cc", "Old done", kind="chore", state="done", plan_closed="x", implement_closed="x", review_closed="x")
+    e3 = _make(qdir, "2609011002-ee", "Both formats", state="active", plan_closed="x", implement_drafted="x")
     (qdir / "README.md").write_text("# Quest log\n\n<!-- questlog format 3, written by questlog old on 2026-09-04 -->\n")
     (tmp_path / "CLAUDE.md").write_text("## Quests <!-- questlog -->\n\nRun `quest close` when asked.\n")
     _git_commit_all(tmp_path)
@@ -531,16 +533,34 @@ def test_doctor_reports_old_format_and_fix_migrates_pages(tmp_path, monkeypatch,
         quest.main(["doctor"])
     out = capsys.readouterr().out
     assert e.value.code == 1
-    assert "format 3 is older" in out and "2 quest.md files predate format 4" in out and "paragraph matches" in out
+    assert "format 3 is older" in out and "3 quest.md files predate format 4" in out and "paragraph matches" in out
+    assert "1 quest.md file predates format 5" in out
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor", "--fix"])
     out = capsys.readouterr().out
     assert e.value.code == 1 and "predate" not in out and "older" not in out      # only the CLAUDE.md wording is left, and that is a hand edit
     assert _fm(a)["design_accepted"] == "x" and "design_closed" not in _fm(a) and quest.current_stage(_fm(a)) == "plan"
     assert _fm(c)["state"] == "completed" and _fm(c)["review_accepted"] == "x"
-    assert "format 4" in (qdir / "README.md").read_text()
+    assert "implement_drafted" not in _fm(e3) and _fm(e3)["implement_built"] == "x" and _fm(e3)["plan_accepted"] == "x"
+    assert "format 5" in (qdir / "README.md").read_text()
     with pytest.raises(SystemExit):
         quest.main(["abandon", "2609011001-cc", "no"])           # completed stays terminal
+
+
+def test_format_5_renames_implement_drafted(tmp_path, monkeypatch, capsys):
+    """Format 5 renamed implement_drafted to implement_built. The header is written relative to FORMAT, so this test needs no edit at the next bump."""
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    qdir = tmp_path / "docs" / "quests"
+    a = _make(qdir, "2609011000-aa", "Implementing", state="active", plan_accepted="x", implement_drafted="x")
+    (qdir / "README.md").write_text(f"# Quest log\n\n<!-- questlog format {quest.FORMAT - 1}, written by questlog old on 2026-09-04 -->\n")
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    out = capsys.readouterr().out
+    assert e.value.code == 1 and "1 quest.md file predates format 5" in out
+    with pytest.raises(SystemExit):
+        quest.main(["doctor", "--fix"])
+    assert _fm(a)["implement_built"] == "x" and "implement_drafted" not in _fm(a)
+    assert f"format {quest.FORMAT}" in (qdir / "README.md").read_text()
 
 
 def test_missing_log_still_renames_old_pages(tmp_path, monkeypatch, capsys):
@@ -552,7 +572,7 @@ def test_missing_log_still_renames_old_pages(tmp_path, monkeypatch, capsys):
     assert "renamed pre-format-4 keys in 1 quest.md file" in capsys.readouterr().err
     assert _fm(a)["design_accepted"] == "x" and "design_closed" not in _fm(a)
     text = (qdir / "README.md").read_text()
-    assert "format 4" in text and "| quest | active | plan | At plan |" in text
+    assert "format 5" in text and "| quest | active | plan | At plan |" in text
 
 
 def test_done_page_that_escaped_migration_is_still_terminal(tmp_path, monkeypatch):
@@ -658,7 +678,7 @@ def test_doctor_reports_missing_ask_rules(tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor", "--fix"])
     assert e.value.code == 0 and "Bash(quest next *)" in settings.read_text()
-    assert "<!-- questlog format 4" in (tmp_path / "docs/quests/README.md").read_text()
+    assert "<!-- questlog format 5" in (tmp_path / "docs/quests/README.md").read_text()
 
 
 def test_settings_shapes_are_refused_without_a_traceback(tmp_path, monkeypatch, capsys):
@@ -760,7 +780,7 @@ def test_doctor_fix_runs_every_repair_and_leaves_a_foreign_or_newer_log_alone(tm
     (qdir / "README.md").unlink()
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor", "--fix"])
-    assert "<!-- questlog format 4" in (qdir / "README.md").read_text() and "state: completed" in (d / "quest.md").read_text()
+    assert "<!-- questlog format 5" in (qdir / "README.md").read_text() and "state: completed" in (d / "quest.md").read_text()
 
 
 def test_linked_tracker_is_refused_before_any_migration(tmp_path, monkeypatch, capsys):
