@@ -394,17 +394,17 @@ def format_6_frontmatter(fm: dict) -> dict:
     return out
 
 
+def mapping_line(fm: dict, new: dict) -> str:
+    """`ID: STATE`, with `(was OLD)` when the page's old state disagrees with its stamps and `, resume at X` when one applies."""
+    old = str(fm.get("state"))
+    agrees = new["state"] in BY_NAME if old == "active" else old == new["state"]
+    was = "" if agrees else f" (was {old})"
+    return f"{fm['id']}: {new['state']}{was}" + (f", resume at {new['resume']}" if new.get("resume") else "")
+
+
 def mapping_lines(qdir: Path) -> list[str]:
     """One line per format 5 page: what the migration would make of it."""
-    lines = []
-    for _, fm in load_quests(qdir):
-        if is_format_5(fm):
-            new = format_6_frontmatter(fm)
-            old = str(fm.get("state"))
-            agrees = new["state"] in BY_NAME if old == "active" else old == new["state"]
-            was = "" if agrees else f" (was {old})"
-            lines.append(f"{fm['id']}: {new['state']}{was}" + (f", resume at {new['resume']}" if new.get("resume") else ""))
-    return lines
+    return [mapping_line(fm, format_6_frontmatter(fm)) for _, fm in load_quests(qdir) if is_format_5(fm)]
 
 
 def rename_to_format_6(root: Path) -> int:
@@ -418,7 +418,7 @@ def rename_to_format_6(root: Path) -> int:
         if is_format_5(fm):
             new = format_6_frontmatter(fm)
             update_quest(d, new, replace=True)
-            print(f"quest: {fm['id']}: {new['state']}", file=sys.stderr)
+            print(f"quest: {mapping_line(fm, new)}", file=sys.stderr)
             changed += 1
     write_log(root)
     if changed:

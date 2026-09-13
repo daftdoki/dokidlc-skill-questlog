@@ -315,6 +315,25 @@ def test_next_refuses_unconverged_verdict_until_confirmed(tmp_path, monkeypatch,
     assert e.value.code == 2
 
 
+def test_next_completes_in_one_write(tmp_path, monkeypatch):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
+    quest.main([qid, "start"]); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
+    (d / "plan.md").write_text("# Plan\n")
+    for _ in range(4):
+        quest.main([qid, "next"])
+    assert _fm(d)["state"] == "evaluate goal"
+    writes = []
+    real = quest.update_quest
+    def counting(*a, **k):
+        writes.append(a)
+        return real(*a, **k)
+    monkeypatch.setattr(quest, "update_quest", counting)
+    quest.main([qid, "next"])
+    assert len(writes) == 1                                      # one write, so an interruption never leaves a half-moved page
+    fm = _fm(d)
+    assert fm["state"] == "completed" and fm["history"][-1]["state"] == "completed"
+
+
 def test_abandon_requires_reason_and_keeps_files(tmp_path, monkeypatch):
     qdir, d, qid = _fresh(tmp_path, monkeypatch)
     with pytest.raises(SystemExit):
