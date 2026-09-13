@@ -71,8 +71,8 @@ def test_write_quest_md_only_with_same_frontmatter(repo):
 
 def test_bash_agent_verbs_allowed(repo):
     # creator verbs too. The ask rules quest init writes to the project settings prompt for those, not the hook.
-    for cmd in ("quest log", "quest show 2609", "quest draft 2609041432-7k goal", "quest doctor", "request new thing",
-                "quest init", "quest new 'A thing'", "quest next 2609041432-7k", "quest defer 2609041432-7k", "cd x && quest abandon 26 'why'", "/plugins/x/bin/quest start 26", "bin/quest skip 26 research"):
+    for cmd in ("quest log", "quest 2609", "quest 2609041432-7k next", "quest doctor", "request new thing",
+                "quest init", "quest new 'A thing'", "quest 2609041432-7k next --confirmed", "quest 2609041432-7k defer", "cd x && quest 26 abandon 'why'", "/plugins/x/bin/quest 26 start", "bin/quest 26 skip"):
         assert guard.decide(ev("Bash", repo, command=cmd)) is None, cmd
 
 

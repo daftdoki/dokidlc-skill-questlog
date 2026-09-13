@@ -5,34 +5,12 @@
 # ///
 """Quests and chores with staged review.
 
-A quest runs goal, research, design, plan, implement, review. A chore runs
-plan, implement, review. The agent drafts a stage and the creator iterates
-on it; when the creator is satisfied the quest moves to the next stage.
-Every quest or chore is a directory under docs/quests/ holding quest.md and
-its stage files. The quest log, docs/quests/README.md, is generated.
-
-Usage:
-  quest init                        create docs/quests, the CLAUDE.md paragraph, and the ask rules (creator verb)
-  quest doctor [--fix] [--brief]    check the tracker; --fix regenerates a stale log and writes missing ask rules
-  quest log                         what is open, one line each
-  quest complete [--all] [--limit N]  list completed work, newest first; --all adds abandoned
-  quest show ID                     a quest's metadata and files (id prefix ok)
-  quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]
-  quest start ID                    backlog to active; resumes a deferred entry at its stage
-  quest defer ID                    active to backlog; stage progress stays
-  quest draft ID STAGE              a stage is ready for the creator: a document written,
-                                    or implement built and reviewed
-                                    stages: goal research design plan implement review
-  quest next ID [STAGE]             the creator accepted the current stage; from review, completed
-                                    STAGE, when given, must be the current one
-  quest skip ID research            the creator waived research
-  quest abandon ID "reason"         terminal; files stay, entry leaves the log
-
-new, start, defer, next, skip, and abandon are creator verbs: run them only
-when the creator asked, and show the command first.
+A quest moves through one flat machine of states, from draft goal to
+evaluate goal. The agent writes each state's file and moves on; the creator
+reviews and moves on. Every quest or chore is a directory under docs/quests/
+holding quest.md and its stage files. The quest log, docs/quests/README.md,
+is generated.
 """
-
-from __future__ import annotations
 
 import argparse
 import json
@@ -43,29 +21,71 @@ import re
 import subprocess
 import sys
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time
 from pathlib import Path
 
 import yaml
 
-FORMAT = 5
+FORMAT = 6
 ROOT_NAME = "docs/quests"
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 # Lowercase alphanumerics without the characters that read alike: 0 1 i l o.
 ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz"
 ID_RE = re.compile(r"^\d{10}-[" + ALPHABET + "]{2}$")
+SHAPE = re.compile(r"^\d{1,10}(-\S*)?$")   # an id prefix, or a directory-name prefix, which resolve accepts too
 KINDS = ("quest", "chore")
-STATES = ("backlog", "active", "completed", "abandoned")
-FINISHED = ("completed", "abandoned")
-TERMINAL = (*FINISHED, "done")   # `done` is the pre-format-4 spelling; a page that escaped migration is still finished
-COMPLETE_LIMIT = 10
-STAGES = {"quest": ("goal", "research", "design", "plan", "implement", "review"), "chore": ("plan", "implement", "review")}
+BACKLOG, COMPLETED, ABANDONED = "backlog", "completed", "abandoned"
+FINISHED = (COMPLETED, ABANDONED)
+HISTORY_LIMIT = 10
 SLUG_MAX = 40
 GENERATED_HEAD = "# Quest log\n"
 HEADER_RE = re.compile(r"<!-- questlog format (\d+), written by questlog (\S+) on (\S+) -->")
-CREATOR_VERBS = ("init", "new", "start", "defer", "next", "skip", "abandon")
+
+
+@dataclass(frozen=True)
+class State:
+    name: str             # "review plan"
+    file: str | None      # stage file that must exist before next, or None
+    skippable: bool
+    reviewer: str | None  # agent name, review states and evaluate goal
+    record: str | None    # review record file
+    reference: str        # file under skills/quest/references/
+    doing: str            # gerund phrase, "reviewing the plan"; fills {next} in the previous state's say
+    say: str              # printed after "ID is at NAME. "; {id} and {next} are filled
+    nudge: bool = False   # print the memory write prompt on entry
+
+
+STATES = (
+    State("draft goal", "goal.md", False, None, None, "goal.md", "drafting the goal",
+          "Write goal.md, then run: quest {id} next"),
+    State("review goal", None, True, "review-goal", "goal-review.md", "goal.md", "reviewing the goal",
+          "Run the review-goal loop into goal-review.md, then ask the creator: move on to {next}?"),
+    State("research", "research.md", True, None, None, "research.md", "researching",
+          "Write research.md, then run: quest {id} next"),
+    State("review research", None, True, "review-research", "research-review.md", "research.md", "reviewing the research",
+          "Run the review-research loop into research-review.md, then ask: move on to {next}?", nudge=True),
+    State("design", "design.md", True, None, None, "design.md", "designing",
+          "Write design.md, then run: quest {id} next"),
+    State("review design", None, True, "review-design", "design-review.md", "design.md", "reviewing the design",
+          "Run the review-design loop into design-review.md, then ask: move on to {next}?", nudge=True),
+    State("plan", "plan.md", False, None, None, "plan.md", "planning",
+          "Write plan.md, then run: quest {id} next"),
+    State("review plan", None, True, "review-plan", "plan-review.md", "plan.md", "reviewing the plan",
+          "Run the review-plan loop into plan-review.md, then ask: move on to {next}?", nudge=True),
+    State("implement", None, False, None, None, "implement.md", "implementing",
+          "Build in the order plan.md lists, then run: quest {id} next"),
+    State("review implementation", None, True, "review-implement", "implement-review.md", "implement.md", "reviewing the implementation",
+          "Run the review-implement loop into implement-review.md, then ask: move on to {next}?"),
+    State("evaluate goal", None, False, "review-result", "result-review.md", "review.md", "evaluating the goal",
+          "Run the review-result loop into result-review.md, then ask: is the goal met?"),
+)
+BY_NAME = {s.name: s for s in STATES}
+CHORE_SKIPS = ("research", "review research", "design", "review design")
+REVIEW_OF = {"research": "review research", "design": "review design"}   # skipping the key skips the value too
+
 # one permission rule per creator verb; Claude Code prompts on a match in every mode and does not look inside quoted text
-ASK_RULES = tuple(f"Bash(quest {v} *)" for v in CREATOR_VERBS)
+ASK_RULES = tuple(f"Bash(quest {v} *)" for v in ("init", "new", "start", "defer", "next", "skip", "abandon"))
 SETTINGS = ".claude/settings.json"
 CLAUDE_MD_MARK = "<!-- questlog -->"
 CLAUDE_MD_PARAGRAPH = f"""
@@ -73,6 +93,24 @@ CLAUDE_MD_PARAGRAPH = f"""
 
 Work is tracked as quests and chores under `docs/quests/`. Run `quest log` to see what is open and `quest show ID` to read one. The `quest` skill has the stage rules and lists the verbs. You draft; the creator decides. Run a creator verb only when the creator asks, and show the command first.
 """
+
+USAGE = """Usage:
+  quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]   open a quest or chore in the backlog
+  quest log                      what is open, one line each
+  quest history [--all] [--limit N]   completed work, newest first; --all adds abandoned
+  quest doctor [--fix] [--brief]  check the tracker; --fix migrates and repairs
+  quest init                     create docs/quests, the CLAUDE.md paragraph, and the ask rules
+
+  quest ID [show]                show a quest: its page, files, state, and guidance (id prefix ok)
+  quest ID start                 leave the backlog; a deferred quest resumes where it was
+  quest ID defer                 back to the backlog; the state is kept
+  quest ID next [--confirmed]    the current state is done; enter the next one
+  quest ID skip                  skip the current state; research and design take their review with them
+  quest ID abandon "reason"      terminal; files stay, the entry leaves the log
+
+States, in order: {states}
+init, new, start, defer, next, skip, and abandon prompt the creator.
+""".format(states=", ".join(s.name for s in STATES))
 
 
 # --- where ------------------------------------------------------------------
@@ -183,6 +221,8 @@ def parse_page(text: str) -> tuple[dict, str]:
         return {}, text
     fm = yaml.safe_load(text[4:end]) or {}
     fm = {k: stamp_text(v) for k, v in fm.items()} if isinstance(fm, dict) else {}
+    if isinstance(fm.get("history"), list):
+        fm["history"] = [{**e, "at": stamp_text(e.get("at"))} if isinstance(e, dict) else e for e in fm["history"]]
     return fm, text[end + 5 :]
 
 
@@ -193,8 +233,14 @@ class _Quoted(str):
 yaml.add_representer(_Quoted, lambda d, v: d.represent_scalar("tag:yaml.org,2002:str", str(v), style="'"))
 
 
+def _quote_stamp(v):
+    return _Quoted(v) if isinstance(v, str) and re.match(r"^\d{4}-\d{2}-\d{2}T", v) else v
+
+
 def render_page(fm: dict, body: str) -> str:
-    out = {k: (_Quoted(v) if isinstance(v, str) and re.match(r"^\d{4}-\d{2}-\d{2}T", v) else v) for k, v in fm.items()}
+    out = {k: _quote_stamp(v) for k, v in fm.items()}
+    if isinstance(out.get("history"), list):
+        out["history"] = [{**e, "at": _quote_stamp(e.get("at"))} if isinstance(e, dict) else e for e in out["history"]]
     dumped = yaml.dump(out, sort_keys=False, allow_unicode=True, default_flow_style=False)
     return f"---\n{dumped}---\n{body if body.endswith(chr(10)) else body + chr(10)}"
 
@@ -221,27 +267,49 @@ def load_quests(qdir: Path) -> list[tuple[Path, dict]]:
     return out
 
 
-def stages_for(fm: dict) -> tuple[str, ...]:
-    """The stage sequence for this entry's kind; an unknown kind gets the quest sequence."""
-    return STAGES.get(fm.get("kind", "quest"), STAGES["quest"])
+# --- the machine -------------------------------------------------------------
 
 
-def current_stage(fm: dict) -> str | None:
-    """First stage not accepted or skipped, or None when the quest is finished."""
-    for stage in stages_for(fm):
-        if not fm.get(f"{stage}_accepted") and not fm.get(f"{stage}_skipped"):
-            return stage
-    return None
+def entry(at: str, state: str, skipped: bool = False, note: str | None = None) -> dict:
+    e = {"state": state, "at": at}
+    if skipped:
+        e["skipped"] = True
+    if note:
+        e["note"] = note
+    return e
 
 
-def stage_after(fm: dict, stage: str) -> str | None:
-    """Where the entry goes once `stage` is accepted. Skipped stages are passed over, so this is what `next` will do."""
-    return current_stage({**fm, f"{stage}_accepted": True})
+def state_of(fm: dict) -> State | None:
+    """The machine state the entry is at, or None for backlog and finished entries."""
+    return BY_NAME.get(str(fm.get("state")))
 
 
-def finished_at(fm: dict) -> str:
-    """When a completed or abandoned entry finished: the abandon stamp, or the review acceptance. Empty when neither is recorded."""
-    return str(fm.get("abandoned") or fm.get("review_accepted") or "")
+def skipped(fm: dict) -> set[str]:
+    return {str(e.get("state")) for e in fm.get("history") or [] if isinstance(e, dict) and e.get("skipped")}
+
+
+def successor(fm: dict, name: str) -> str:
+    """The next state after `name` that carries no skipped entry, or completed past the last one."""
+    names = [s.name for s in STATES]
+    skip = skipped(fm)
+    for later in names[names.index(name) + 1 :]:
+        if later not in skip:
+            return later
+    return COMPLETED
+
+
+def last_entry(fm: dict) -> dict:
+    h = fm.get("history") or []
+    return h[-1] if h and isinstance(h[-1], dict) else {}
+
+
+def current(history: list[dict]) -> str:
+    """The state of the last entry that is not skipped."""
+    return next((str(e["state"]) for e in reversed(history) if isinstance(e, dict) and not e.get("skipped")), BACKLOG)
+
+
+def append_history(fm: dict, name: str, skipped: bool = False, note: str | None = None, at: str | None = None) -> list[dict]:
+    return [*(fm.get("history") or []), entry(at or now_iso(), name, skipped, note)]
 
 
 def predates_format_4(fm: dict) -> bool:
@@ -249,22 +317,15 @@ def predates_format_4(fm: dict) -> bool:
     return fm.get("state") == "done" or any(k.endswith("_closed") for k in fm)
 
 
-def format_4_frontmatter(fm: dict) -> dict:
-    """The same frontmatter with `done` renamed to `completed` and `STAGE_closed` to `STAGE_accepted`, order kept."""
-    out = {re.sub(r"_closed$", "_accepted", k): v for k, v in fm.items()}
-    if out.get("state") == "done":
-        out["state"] = "completed"
-    return out
-
-
 def predates_format_5(fm: dict) -> bool:
     """Frontmatter written before format 5: the stamp `implement_drafted`, which format 5 renamed to `implement_built`."""
     return "implement_drafted" in fm
 
 
-def format_5_frontmatter(fm: dict) -> dict:
-    """The same frontmatter with `implement_drafted` renamed to `implement_built`, order kept."""
-    return {("implement_built" if k == "implement_drafted" else k): v for k, v in fm.items()}
+def is_format_5(fm: dict) -> bool:
+    """A format 5 page: no history, the five format 5 keys, a known kind, and neither older mark."""
+    return ("history" not in fm and {"id", "title", "kind", "state", "created"} <= fm.keys()
+            and fm.get("kind") in KINDS and not predates_format_4(fm) and not predates_format_5(fm))
 
 
 def plural(n: int, noun: str) -> str:
@@ -280,6 +341,21 @@ def resolve(qdir: Path, prefix: str) -> tuple[Path, dict]:
     return matches[0]
 
 
+def say(fm: dict) -> str:
+    """The one state line: where the entry is, and what happens next."""
+    qid = fm["id"]
+    s = state_of(fm)
+    if s:
+        nxt = successor(fm, s.name)
+        doing = BY_NAME[nxt].doing if nxt in BY_NAME else "completion"
+        return f"{qid} is at {s.name}. " + s.say.format(id=qid, next=doing)
+    if fm.get("state") == BACKLOG and fm.get("resume"):
+        return f"{qid} is in the backlog, to resume at {fm['resume']}. Start it with: quest {qid} start"
+    if fm.get("state") == BACKLOG:
+        return f"{qid} is in the backlog as a {fm.get('kind', 'quest')}. Start it with: quest {qid} start"
+    return f"{qid} is {fm.get('state')}."
+
+
 # --- the quest log ----------------------------------------------------------
 
 
@@ -287,34 +363,39 @@ def header_line(commit: str, now: datetime | None = None) -> str:
     return f"<!-- questlog format {FORMAT}, written by questlog {commit} on {(now or datetime.now(UTC)):%Y-%m-%d} -->"
 
 
-def log_rows(quests: list[tuple[Path, dict]]) -> list[tuple[str, str, str, str, str, str]]:
-    """(id, directory, kind, state, stage, title) for open entries, newest first."""
-    rows = [(d, fm) for d, fm in quests if fm.get("state") in ("backlog", "active")]
+def state_cell(fm: dict) -> str:
+    state = str(fm.get("state"))
+    return f"{state}, resume at {fm['resume']}" if state == BACKLOG and fm.get("resume") else state
+
+
+def log_rows(quests: list[tuple[Path, dict]]) -> list[tuple[str, ...]]:
+    """(id, directory, kind, state, title) for open entries, newest first."""
+    rows = [(d, fm) for d, fm in quests if fm.get("state") == BACKLOG or fm.get("state") in BY_NAME]
     rows.sort(key=lambda r: str(r[1]["id"]), reverse=True)
-    return [table_row(d, fm, current_stage(fm) or "completed") for d, fm in rows]
+    return [table_row(d, fm, state_cell(fm)) for d, fm in rows]
 
 
-def complete_rows(quests: list[tuple[Path, dict]], include_abandoned: bool = False, limit: int = COMPLETE_LIMIT) -> list[tuple[str, str, str, str, str, str]]:
+def history_rows(quests: list[tuple[Path, dict]], include_abandoned: bool = False, limit: int = HISTORY_LIMIT) -> list[tuple[str, ...]]:
     """(id, directory, kind, state, finished date, title) for finished entries, newest finish first, at most `limit`."""
-    states = FINISHED if include_abandoned else ("completed",)
+    states = FINISHED if include_abandoned else (COMPLETED,)
     rows = [(d, fm) for d, fm in quests if fm.get("state") in states]
-    rows.sort(key=lambda r: (finished_at(r[1]), str(r[1]["id"])), reverse=True)
-    return [table_row(d, fm, finished_at(fm)[:10]) for d, fm in rows[:limit]]
+    rows.sort(key=lambda r: (str(last_entry(r[1]).get("at", "")), str(r[1]["id"])), reverse=True)
+    return [table_row(d, fm, str(fm.get("state")), str(last_entry(fm).get("at", ""))[:10]) for d, fm in rows[:limit]]
 
 
-def table_row(d: Path, fm: dict, fifth: str) -> tuple[str, str, str, str, str, str]:
-    """(id, directory, kind, state, FIFTH, title); the fifth cell is the stage in the log and the finish date in `complete`."""
-    return (str(fm["id"]), d.name, str(fm.get("kind", "quest")), str(fm.get("state")), fifth, str(fm.get("title", "")))
+def table_row(d: Path, fm: dict, *cells: str) -> tuple[str, ...]:
+    """(id, directory, kind, CELLS..., title)."""
+    return (str(fm["id"]), d.name, str(fm.get("kind", "quest")), *cells, str(fm.get("title", "")))
 
 
 def log_lines(quests: list[tuple[Path, dict]]) -> list[str]:
     """Markdown table rows, one per open entry. The id links to the directory. A pipe in a title is escaped."""
     def cell(title: str) -> str:
         return " ".join(title.split()).replace("|", "\\|")   # one line, pipes escaped
-    return [f"| [{qid}]({dirname}/) | {kind} | {state} | {stage} | {cell(title)} |" for qid, dirname, kind, state, stage, title in log_rows(quests)]
+    return [f"| [{qid}]({dirname}/) | {kind} | {state} | {cell(title)} |" for qid, dirname, kind, state, title in log_rows(quests)]
 
 
-LOG_TABLE_HEAD = "| Id | Kind | State | Stage | Title |\n|---|---|---|---|---|"
+LOG_TABLE_HEAD = "| Id | Kind | State | Title |\n|---|---|---|---|"
 
 
 def render_log(quests: list[tuple[Path, dict]], commit: str, now: datetime | None = None) -> str:
@@ -323,13 +404,13 @@ def render_log(quests: list[tuple[Path, dict]], commit: str, now: datetime | Non
     return f"{GENERATED_HEAD}\n{header_line(commit, now)}\n\nOpen quests and chores, newest first. Generated; do not edit by hand.\n\n{body}\n"
 
 
-LOG_HEADS = ("Id", "Kind", "State", "Stage", "Title")
-COMPLETE_HEADS = ("Id", "Kind", "State", "Finished", "Title")
+LOG_HEADS = ("Id", "Kind", "State", "Title")
+HISTORY_HEADS = ("Id", "Kind", "State", "Finished", "Title")
 
 
-def terminal_table(rows: list[tuple[str, str, str, str, str, str]], heads: tuple[str, ...] = LOG_HEADS) -> str:
+def terminal_table(rows: list[tuple[str, ...]], heads: tuple[str, ...] = LOG_HEADS) -> str:
     """Aligned columns for the terminal, no directory column."""
-    cells = [(qid, kind, state, stage, title) for qid, _, kind, state, stage, title in rows]
+    cells = [(r[0], *r[2:]) for r in rows]
     widths = [max(len(h), *(len(c[i]) for c in cells)) for i, h in enumerate(heads[:-1])]
     def fmt(c):
         return "  ".join(v.ljust(widths[i]) for i, v in enumerate(c[:-1])) + "  " + c[-1]
@@ -376,81 +457,37 @@ def read_format(qdir: Path) -> int | None:
     m = HEADER_RE.search(text)
     if m:
         return int(m.group(1))
-    # only a file that is recognisably our log gets migrated; anything else is left alone
+    # only a file that is recognisably our log is treated as one; anything else is left alone
     return 0 if text.lstrip().startswith(GENERATED_HEAD.strip()) else None
 
 
-def check_format(root: Path) -> None:
-    """Refuse data newer than this script. Migrate data older than it.
+SUB5 = "migrate with questlog format-5 first"
+F5 = "run: quest doctor --fix"
 
-    The format number lives in the log header, but the data that changes
-    lives in each quest.md. When the log is missing altogether, the quest
-    pages still get the key renames, so that whichever verb writes the next
-    log never stamps a new format over old pages.
+
+def page_formats(qdir: Path) -> tuple[int, int]:
+    """(pages older than format 5, format 5 pages) among the tracker's pages."""
+    pages = [fm for _, fm in load_quests(qdir)]
+    return sum(1 for fm in pages if predates_format_4(fm) or predates_format_5(fm)), sum(1 for fm in pages if is_format_5(fm))
+
+
+def check_format(root: Path) -> None:
+    """Refuse data newer than this script, and data older than it; the doctor migrates format 5, nothing migrates below that.
+
+    The format number lives in the log header, but the data that changes lives
+    in each quest.md, so with no header the pages decide.
     """
-    qdir = tracker_gate(root)          # every verb writes or migrates through here, so a linked docs or tracker is refused before anything is read or created
+    qdir = tracker_gate(root)          # every verb writes through here, so a linked docs or tracker is refused before anything is read or created
     if not qdir.exists():
         return
     found = read_format(qdir)
-    if found is None:
-        if not os.path.lexists(qdir / "README.md"):
-            rename_to_format_4(root)
-            rename_to_format_5(root)
-        return
-    if found > FORMAT:
+    if found is not None and found > FORMAT:
         die(f"this repository was last written by a newer questlog (format {found}, this is {FORMAT}); update the plugin", 2)
-    if found < FORMAT:
-        migrate(root, found)
-
-
-def rename_to_format_4(root: Path) -> int:
-    """Rewrite every quest.md that predates format 4. Returns how many changed. Safe to run on current data."""
-    changed = 0
-    for d, fm in load_quests(quests_dir(root)):
-        if predates_format_4(fm):
-            update_quest(d, format_4_frontmatter(fm), replace=True)
-            changed += 1
-    if changed:
-        print(f"quest: renamed pre-format-4 keys in {plural(changed, 'quest.md file')}", file=sys.stderr)
-    return changed
-
-
-def rename_to_format_5(root: Path) -> int:
-    """Rewrite every quest.md that predates format 5. Returns how many changed. Safe to run on current data."""
-    changed = 0
-    for d, fm in load_quests(quests_dir(root)):
-        if predates_format_5(fm):
-            update_quest(d, format_5_frontmatter(fm), replace=True)
-            changed += 1
-    if changed:
-        print(f"quest: renamed pre-format-5 keys in {plural(changed, 'quest.md file')}", file=sys.stderr)
-    return changed
-
-
-def migrate(root: Path, from_format: int) -> None:
-    """Bring every quest.md up to FORMAT, then rewrite the log."""
-    # format 3 changed the quest log from list lines to a table; write_log below is the migration.
-    if from_format < 2:
-        # format 2 added the plan stage between design and implement. Work that
-        # had already reached implement never had a plan stage; record it as
-        # skipped so it does not appear to be waiting there.
-        stamp = now_iso()
-        for d, fm in load_quests(quests_dir(root)):
-            reached_implement = any(k.startswith("implement_") for k in fm) or fm.get("state") in TERMINAL
-            if reached_implement and not any(k.startswith("plan_") for k in fm):
-                update_quest(d, {"plan_skipped": stamp, "plan_note": "predates the plan stage (format 2)"})
-    if from_format < 4:
-        # format 4 renamed the state `done` to `completed` and the stage keys
-        # `STAGE_closed` to `STAGE_accepted`. A quest is completed, and a stage
-        # is accepted when the creator moves on from it.
-        rename_to_format_4(root)
-    if from_format < 5:
-        # format 5 renamed `implement_drafted` to `implement_built`. Implement's
-        # product is commits, so the stamp says the work was built and reviewed,
-        # not that a document was written.
-        rename_to_format_5(root)
-    write_log(root)
-    print(f"quest: migrated docs/quests from format {from_format} to {FORMAT}", file=sys.stderr)
+    pre5, f5 = page_formats(qdir)
+    if pre5 or (found is not None and found < 5):
+        die(f"this tracker is format {found if found is not None and found < 5 else 'below 5'}; {SUB5}", 2)
+    if f5 or found == 5:
+        die(f"this tracker is format 5; {F5}", 2)
 
 
 # --- init and doctor --------------------------------------------------------
@@ -521,10 +558,11 @@ def write_missing_ask_rules(root: Path) -> None:
     write_ask_rules(*settings_gate(root))
 
 
-def cmd_init(args: argparse.Namespace) -> None:
+def cmd_init(rest: list[str]) -> None:
+    no_args(rest, "init")
     root = project_root()
     qdir = quests_dir(root)
-    # refuse before check_format, which may migrate the tracker, so a refused init leaves the tree as it found it.
+    # refuse before check_format, so a refused init leaves the tree as it found it.
     # CLAUDE.md is often a link to AGENTS.md; a link that stays inside the project is fine, one that leaves it is not.
     claude_md = root / "CLAUDE.md"
     if claude_md.is_symlink():
@@ -558,7 +596,7 @@ def cmd_init(args: argparse.Namespace) -> None:
         made.append("CLAUDE.md paragraph")
     git_add(root, [ROOT_NAME, "CLAUDE.md", SETTINGS])
     print("initialized: " + ", ".join(made) if made else "already initialized; nothing changed")
-    for ok, label, fix, _ in git_checks(root):
+    for ok, label, fix, _, _ in git_checks(root):
         if not ok:
             print(f"quest: {label} ({fix})")
 
@@ -573,22 +611,9 @@ def marked_section(text: str) -> str | None:
     return "\n".join(line.rstrip() for line in lines[start:end]).strip()
 
 
-REQUIRED_KEYS = ("id", "title", "kind", "state", "created")
+REQUIRED_KEYS = ("id", "title", "kind", "state", "history")
+VALID_STATES = (BACKLOG, *FINISHED, *BY_NAME)
 PERSISTED = (ROOT_NAME, SETTINGS, "CLAUDE.md")
-
-
-def git_status_of(root: Path, path: str) -> str:
-    """'tracked', 'untracked', 'ignored', 'missing', or 'no-git'."""
-    try:
-        subprocess.run(["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"], capture_output=True, check=True)
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return "no-git"
-    if not (root / path).exists():
-        return "missing"
-    if subprocess.run(["git", "-C", str(root), "check-ignore", "-q", path], capture_output=True).returncode == 0:
-        return "ignored"
-    tracked = subprocess.run(["git", "-C", str(root), "ls-files", "--error-unmatch", path], capture_output=True).returncode == 0
-    return "tracked" if tracked else "untracked"
 
 
 def git_states(root: Path, paths: tuple[str, ...]) -> dict[str, str]:
@@ -613,12 +638,12 @@ def git_states(root: Path, paths: tuple[str, ...]) -> dict[str, str]:
     return out
 
 
-Row = tuple[bool, str, str, Callable[[Path], None] | None]
+Row = tuple[bool, str, str, Callable[[Path], None] | None, tuple[str, ...]]
 
 
-def row(ok: bool, label: str, fix: str = "", repair=None) -> Row:
-    """A doctor row: whether the check holds, what it checked, what the creator runs when it fails, and the function `doctor --fix` runs for it, when one exists."""
-    return ok, label, fix, repair
+def row(ok: bool, label: str, fix: str = "", repair=None, detail: tuple[str, ...] = ()) -> Row:
+    """A doctor row: whether the check holds, what it checked, what the creator runs when it fails, the function `doctor --fix` runs for it, and detail lines printed under it."""
+    return ok, label, fix, repair, detail
 
 
 def git_checks(root: Path) -> list[Row]:
@@ -642,19 +667,17 @@ def git_add(root: Path, paths: list[str]) -> None:
 
 
 def regenerate_tracker(root: Path) -> None:
-    """The doctor's repair for a stale tracker: migrate an older format, else rename the pages and rewrite the log. A log that is not ours, or is newer, is left alone."""
+    """The doctor's repair for a stale tracker: rewrite the log. A log that is not ours, or is newer, and pages below format 5 are left alone."""
     qdir = tracker_gate(root)
     found = read_format(qdir)
     if found is None and os.path.lexists(qdir / "README.md"):
         die(f"refusing to rewrite {ROOT_NAME}/README.md: it is not a quest log, or cannot be read")
     if found is not None and found > FORMAT:
         die(f"refusing to rewrite a log written by a newer questlog (format {found}, this is {FORMAT}); update the plugin", 2)
-    if found is not None and found < FORMAT:
-        migrate(root, found)           # renames the pages, then writes the log
-    else:
-        rename_to_format_4(root)
-        rename_to_format_5(root)
-        write_log(root)
+    pre5, _ = page_formats(qdir)
+    if pre5:
+        die(f"{plural(pre5, 'quest.md file')} {'predates' if pre5 == 1 else 'predate'} format 5; {SUB5}", 2)
+    write_log(root)
 
 
 def doctor_checks(root: Path) -> list[Row]:
@@ -667,27 +690,30 @@ def doctor_checks(root: Path) -> list[Row]:
     if not qdir.is_dir():
         return [row(False, f"{ROOT_NAME}/ exists", "quest init")]
     found = read_format(qdir)
+    quests = load_quests(qdir)
+    pre5 = sum(1 for _, fm in quests if predates_format_4(fm) or predates_format_5(fm))
+    f5 = sum(1 for _, fm in quests if is_format_5(fm))
     if found is None and os.path.lexists(qdir / "README.md"):
         rows.append(row(False, f"{ROOT_NAME}/README.md is not a quest log, or cannot be read", "fix it by hand"))
+    elif found is not None and found > FORMAT:
+        rows.append(row(False, f"quest log format {found} is newer than this plugin's {FORMAT}", "update the plugin"))
+    elif pre5 or (found is not None and found < 5):
+        rows.append(row(False, f"{plural(pre5, 'quest.md file')} {'predates' if pre5 == 1 else 'predate'} format 5" if pre5 else f"quest log format {found} is below 5", SUB5))
+    elif f5 or found == 5:
+        label = f"tracker is format 5 ({plural(f5, 'page')})" if found != FORMAT else f"{plural(f5, 'page')} {'is' if f5 == 1 else 'are'} format 5 under a format {FORMAT} log"
+        rows.append(row(False, label, "quest doctor --fix"))
     elif found is None:
         rows.append(row(False, "quest log exists", "quest doctor --fix", regenerate_tracker))
-    elif found > FORMAT:
-        rows.append(row(False, f"quest log format {found} is newer than this plugin's {FORMAT}", "update the plugin"))
-    elif found < FORMAT:
-        rows.append(row(False, f"quest log format {found} is older than this plugin's {FORMAT}", "quest doctor --fix", regenerate_tracker))
     else:
         rows.append(row(True, f"quest log format {found}"))
-    bad = 0
-    quests = load_quests(qdir)
-    loaded = {d: fm for d, fm in quests}
-    repairable = found is not None and found <= FORMAT or found is None and not os.path.lexists(qdir / "README.md")
-    for n, fmt in ((sum(1 for _, fm in quests if predates_format_4(fm)), 4), (sum(1 for _, fm in quests if predates_format_5(fm)), 5)):
-        if n:
-            rows.append(row(False, f"{plural(n, 'quest.md file')} {'predates' if n == 1 else 'predate'} format {fmt}", "quest doctor --fix" if repairable else "fix the log first", regenerate_tracker if repairable else None))
+    format_ok = rows[-1][0]
     overlay_dir = qdir / GUIDANCE_DIR
     if overlay_dir.is_dir():
-        stray = sorted(p.name for p in overlay_dir.iterdir() if p.name != f"{p.stem}.md" or p.stem not in STAGES["quest"])
+        references = {s.reference for s in STATES}
+        stray = sorted(p.name for p in overlay_dir.iterdir() if p.name not in references)
         rows.append(row(not stray, f"{GUIDANCE_DIR}/ holds only STAGE.md files" + (f"; stray: {', '.join(stray)}" if stray else ""), "name overlays after a stage, or remove them"))
+    bad = 0
+    loaded = {d: fm for d, fm in quests}
     for d in sorted(p for p in qdir.iterdir() if p.is_dir() and p.name != GUIDANCE_DIR):
         page = d / "quest.md"
         if not page.is_file():
@@ -695,15 +721,21 @@ def doctor_checks(root: Path) -> list[Row]:
         if d not in loaded:
             rows.append(row(False, f"{d.name}/quest.md is not UTF-8 or cannot be read", "fix it by hand")); bad += 1; continue
         fm = loaded[d]
+        if is_format_5(fm) or predates_format_4(fm) or predates_format_5(fm):
+            continue                                    # the format row counts these
         missing = [k for k in REQUIRED_KEYS if k not in fm]
-        if missing or fm.get("kind") not in KINDS or fm.get("state") not in STATES or not ID_RE.match(str(fm.get("id", ""))):
+        history = fm.get("history")
+        history_ok = isinstance(history, list) and history and all(isinstance(e, dict) and e.get("state") and e.get("at") for e in history)
+        if missing or fm.get("kind") not in KINDS or fm.get("state") not in VALID_STATES or not ID_RE.match(str(fm.get("id", ""))) or not history_ok:
             rows.append(row(False, f"{d.name}/quest.md frontmatter invalid" + (f", missing {', '.join(missing)}" if missing else ""), "fix the frontmatter")); bad += 1
+        elif current(history) != fm["state"]:
+            rows.append(row(False, f"{d.name}/quest.md state {fm['state']} disagrees with its history ({current(history)})", "fix the frontmatter")); bad += 1
         elif not d.name.startswith(str(fm["id"])):
             rows.append(row(False, f"{d.name}/ does not start with its id {fm['id']}", "rename the directory")); bad += 1
     rows.append(row(bad == 0, f"{len(quests)} quest.md files valid"))
-    if found is not None and found <= FORMAT:
-        current = (qdir / "README.md").read_text()
-        same = log_lines(quests) == [l for l in current.splitlines() if l.startswith("| [")]
+    if format_ok:
+        current_log = (qdir / "README.md").read_text()
+        same = log_lines(quests) == [l for l in current_log.splitlines() if l.startswith("| [")]
         rows.append(row(same, "quest log matches the directories", "quest doctor --fix", regenerate_tracker))
     claude_md = root / "CLAUDE.md"
     try:
@@ -729,14 +761,17 @@ def doctor_checks(root: Path) -> list[Row]:
     return rows
 
 
-def cmd_doctor(args: argparse.Namespace) -> None:
+def cmd_doctor(rest: list[str]) -> None:
+    p = argparse.ArgumentParser(prog="quest doctor")
+    p.add_argument("--fix", action="store_true"); p.add_argument("--brief", action="store_true", help="one line, nothing if no tracker")
+    args = p.parse_args(rest)
     root = project_root()
     qdir = quests_dir(root)
     if args.brief and not qdir.is_dir() and not linked_tracker(root):
         print("questlog: this repository has no docs/quests/. Ask the creator whether to set up quests here; if yes, run `quest init`.")
         return
     rows = doctor_checks(root)
-    repairs = dict.fromkeys(repair for ok, _, _, repair in rows if not ok and repair)
+    repairs = dict.fromkeys(repair for ok, _, _, repair, _ in rows if not ok and repair)
     refused = 0
     if args.fix and repairs:
         for repair in repairs:
@@ -748,13 +783,15 @@ def cmd_doctor(args: argparse.Namespace) -> None:
     failed = [r for r in rows if not r[0]]
     if args.brief:
         if failed:
-            print("questlog: " + "; ".join(f"{label} ({fix})" if fix else label for _, label, fix, _ in failed))
+            print("questlog: " + "; ".join(f"{label} ({fix})" if fix else label for _, label, fix, _, _ in failed))
         else:
             n = len(log_lines(load_quests(qdir)))
             print(f"questlog: ok, {n} open. Run `quest log`.")
         sys.exit(0)
-    for ok, label, fix, _ in rows:
+    for ok, label, fix, _, detail in rows:
         print(f"{'ok  ' if ok else 'FAIL'} {label}" + (f"  ({fix})" if not ok and fix else ""))
+        for line in detail:
+            print(f"     {line}")
     sys.exit(refused or (1 if failed else 0))
 
 
@@ -779,56 +816,34 @@ def print_memory_hits(query: str) -> None:
         print("memory: " + " · ".join(hits))
 
 
-# --- transitions ------------------------------------------------------------
-
-STAGE_FILES = {"goal": "goal.md", "research": "research.md", "design": "design.md", "plan": "plan.md"}
-READY = {"implement": "built"}                      # implement's product is commits, so its stamp reads built, not drafted
-READY_PHRASE = {"implement": "built and reviewed"}   # what `quest draft` says out loud, beside the key it writes
-
-
-def ready_key(stage: str) -> str:
-    """The frontmatter stamp that says a stage is ready for the creator."""
-    return f"{stage}_{READY.get(stage, 'drafted')}"
-
+# --- guidance ---------------------------------------------------------------
 
 REFERENCES = PLUGIN_ROOT / "skills" / "quest" / "references"
 GUIDANCE_DIR = "guidance"   # docs/quests/guidance/STAGE.md: a project's own rules for a stage, read after the reference file
 
 
-def reviewer_for(stage: str) -> str:
-    """The reviewer agent for a stage: review-STAGE, except the review stage's own, which checks the result."""
-    return "review-result" if stage == "review" else f"review-{stage}"
-
-
-def record_for(stage: str) -> str:
-    """The review record beside the stage file: STAGE-review.md, with the same exception as the agent."""
-    return "result-review.md" if stage == "review" else f"{stage}-review.md"
-
-
-def guidance_paths(stage: str, root: Path) -> list[tuple[str, str]]:
-    """What a session reads before drafting `stage`: the plugin's reference file, the reviewer agent, and the project's overlay when it has one."""
-    rows = [("guidance", str(REFERENCES / f"{stage}.md")), ("reviewer", f"questlog:{reviewer_for(stage)}")]
-    overlay = quests_dir(root) / GUIDANCE_DIR / f"{stage}.md"
-    if overlay.is_file():
-        rows.append(("overlay", str(overlay)))
-    return rows
-
-
 def print_guidance(fm: dict, root: Path) -> None:
-    """The guidance lines for the current stage; nothing for a finished entry. A backlog entry gets its first stage, which is what `start` begins."""
-    stage = current_stage(fm)
-    if fm.get("state") in TERMINAL or stage is None:
+    """The guidance lines for the current state; for a backlog entry, the state `start` would enter; nothing for a finished entry."""
+    s = state_of(fm)
+    if s is None and fm.get("state") == BACKLOG:
+        s = BY_NAME.get(str(fm.get("resume"))) or STATES[0]
+    if s is None:
         return
-    for label, value in guidance_paths(stage, root):
-        print(f"{label}: {value}")
+    print(f"guidance: {REFERENCES / s.reference}")
+    if s.reviewer:
+        print(f"reviewer: questlog:{s.reviewer}")
+        print(f"record: {s.record}")
+    overlay = quests_dir(root) / GUIDANCE_DIR / s.reference
+    if overlay.is_file():
+        print(f"overlay: {overlay}")
 
 
-def last_verdict(d: Path, stage: str) -> str | None:
-    """The verdict line of the last pass in STAGE-review.md, or None when there is no record."""
-    record = d / record_for(stage)
-    if not record.is_file():
+def last_verdict(d: Path, record: str) -> str | None:
+    """The verdict line of the last pass in the review record, or None when there is no record."""
+    path = d / record
+    if not path.is_file():
         return None
-    verdicts = [l.partition(":")[2].strip() for l in record.read_text().splitlines() if l.startswith("Verdict:")]
+    verdicts = [l.partition(":")[2].strip() for l in path.read_text().splitlines() if l.startswith("Verdict:")]
     return verdicts[-1] if verdicts else None
 
 
@@ -847,113 +862,112 @@ def update_quest(d: Path, changes: dict, replace: bool = False) -> dict:
     return fm
 
 
-def load_entry(prefix: str) -> tuple[Path, Path, dict]:
-    """The prelude every verb shares: project root, format check, resolve the entry."""
-    root = project_root()
-    check_format(root)
-    d, fm = resolve(quests_dir(root), prefix)
-    return root, d, fm
+# --- the verbs: quest ID VERB --------------------------------------------------
 
 
-def require_open(fm: dict) -> None:
-    if fm.get("state") in TERMINAL:
-        die(f"{fm['id']} is {fm['state']}; nothing more happens to it")
+def no_args(rest: list[str], what: str) -> None:
+    if rest:
+        die(f"{what} takes no arguments: {' '.join(rest)}", 2)
 
 
-def require_stage(fm: dict, stage: str, verb: str) -> None:
-    if fm.get("state") != "active":
-        die(f"{fm['id']} is {fm.get('state')}; start it before you {verb} a stage")
-    current = current_stage(fm)
-    if stage not in stages_for(fm):
-        die(f"{fm.get('kind')} {fm['id']} has no {stage} stage")
-    if current != stage:
-        die(f"{fm['id']} is at {current}, not {stage}")
+def require_at_state(fm: dict) -> State:
+    s = state_of(fm)
+    if s is None:
+        if fm.get("state") == BACKLOG:
+            die(f"{fm['id']} is in the backlog; run: quest {fm['id']} start")
+        die(f"{fm['id']} is {fm.get('state')}; nothing more happens to it")
+    return s
 
 
-def cmd_start(args: argparse.Namespace) -> None:
-    root, d, fm = load_entry(args.id)
-    require_open(fm)
-    if fm.get("state") != "backlog":
-        die(f"{fm['id']} is already {fm['state']}")
-    fm = update_quest(d, {"state": "active", "started": now_iso(), "deferred": None})
-    write_log(root)
-    print(f"{fm['id']} active; current stage {current_stage(fm)}")
+def cmd_show(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
+    no_args(rest, "show")
+    print(say(fm))
+    print()
+    sys.stdout.write((d / "quest.md").read_text())
+    files = sorted(p.name for p in d.iterdir() if p.is_file() and p.name != "quest.md")
+    print("\nstage files: " + (", ".join(files) if files else "none"))
     print_guidance(fm, root)
     print_memory_hits(str(fm.get("title", "")))
 
 
-def cmd_defer(args: argparse.Namespace) -> None:
-    """The reverse of start. The stage keys stay, so `quest start` resumes the entry where it was."""
-    root, d, fm = load_entry(args.id)
-    require_open(fm)
-    if fm.get("state") != "active":
-        die(f"{fm['id']} is already {fm['state']}")
-    fm = update_quest(d, {"state": "backlog", "deferred": now_iso()})
+def cmd_start(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
+    no_args(rest, "start")
+    if fm.get("state") != BACKLOG:
+        die(f"{fm['id']} is {fm.get('state')}; only a backlog entry starts")
+    target = str(fm.get("resume") or STATES[0].name)
+    if target not in BY_NAME:
+        die(f"{fm['id']} resumes at {target!r}, which is not a state; fix the frontmatter")
+    fm = update_quest(d, {"state": target, "resume": None, "history": append_history(fm, target)})
     write_log(root)
-    print(f"{fm['id']} backlog; current stage {current_stage(fm)}")
+    print(say(fm))
+    print_guidance(fm, root)
+    print_memory_hits(str(fm.get("title", "")))
 
 
-def cmd_draft(args: argparse.Namespace) -> None:
-    root, d, fm = load_entry(args.id)
-    require_open(fm)
-    require_stage(fm, args.stage, "draft")
-    wanted = STAGE_FILES.get(args.stage)
-    if wanted and not (d / wanted).is_file():
-        die(f"write {d.name}/{wanted} before drafting {args.stage}")
-    update_quest(d, {ready_key(args.stage): now_iso()})
+def cmd_defer(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
+    """The reverse of start. The state is kept in `resume`, so `start` resumes the entry where it was."""
+    no_args(rest, "defer")
+    s = require_at_state(fm)
+    fm = update_quest(d, {"state": BACKLOG, "resume": s.name, "history": append_history(fm, BACKLOG)})
     write_log(root)
-    nxt = stage_after(fm, args.stage)
-    verdict = last_verdict(d, args.stage)
-    if verdict:
-        print(f"last verdict: {verdict}")
-    said = READY_PHRASE.get(args.stage, "drafted")
-    print(f"{fm['id']} {args.stage} {said}; ask the creator: keep iterating on {args.stage}, or move to {nxt}?" if nxt else f"{fm['id']} {args.stage} {said}; ask the creator whether the work is complete")
-    if args.stage in ("research", "design", "plan") and shutil.which("memory"):
-        print(f"memory: what did you learn during {args.stage} on your own? One page per finding, `--ref {d.name}/{STAGE_FILES[args.stage]}`, before the creator moves on.")
+    print(say(fm))
 
 
-def cmd_next(args: argparse.Namespace) -> None:
-    root, d, fm = load_entry(args.id)
-    require_open(fm)
-    stage = current_stage(fm)
-    if stage is None and fm.get("state") == "active":
-        die(f"{fm['id']} is active but every stage is accepted; run quest doctor")
-    require_stage(fm, args.stage or stage, "accept")
-    if stage in STAGE_FILES and not fm.get(ready_key(stage)):
-        die(f"{fm['id']} {stage} was never drafted; run quest draft {fm['id']} {stage} first")
-    changes = {f"{stage}_accepted": now_iso()}
-    nxt = stage_after(fm, stage)
-    if nxt is None:
-        changes["state"] = "completed"
-    fm = update_quest(d, changes)          # one write, so an interruption never leaves a half-accepted page
+def cmd_next(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
+    if rest not in ([], ["--confirmed"]):
+        die(f"next takes --confirmed or nothing: {' '.join(rest)}", 2)
+    s = require_at_state(fm)
+    if s.file and not (d / s.file).is_file():
+        die(f"{d.name}/{s.file} does not exist yet")
+    if s.reviewer:
+        verdict = last_verdict(d, s.record)
+        if verdict and not verdict.lower().startswith("converged") and not rest:
+            die(f"last verdict: {verdict}\nconfirm with the creator, then run: quest {fm['id']} next --confirmed")
+    nxt = successor(fm, s.name)
+    fm = update_quest(d, {"state": nxt, "history": append_history(fm, nxt)})   # one write, so an interruption never leaves a half-moved page
     write_log(root)
-    print(f"{fm['id']} {stage} accepted; " + (f"now at {nxt}" if nxt else "completed"))
+    print(say(fm))
+    if nxt in BY_NAME and BY_NAME[nxt].nudge and shutil.which("memory"):
+        print(f"memory: what did you learn while {s.doing} on your own? One page per finding, `--ref {d.name}/{s.file}`, before the creator moves on.")
 
 
-def cmd_skip(args: argparse.Namespace) -> None:
-    root, d, fm = load_entry(args.id)
-    require_open(fm)
-    require_stage(fm, "research", "skip")
-    fm = update_quest(d, {"research_skipped": now_iso()})
+def cmd_skip(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
+    no_args(rest, "skip")
+    s = require_at_state(fm)
+    if not s.skippable:
+        die(f"{s.name} cannot be skipped")
+    at = now_iso()
+    history = append_history(fm, s.name, skipped=True, at=at)
+    if s.name in REVIEW_OF:
+        history = append_history({"history": history}, REVIEW_OF[s.name], skipped=True, at=at)
+    nxt = successor({"history": history}, s.name)
+    history = append_history({"history": history}, nxt, at=at)
+    fm = update_quest(d, {"state": nxt, "history": history})
     write_log(root)
-    print(f"{fm['id']} research skipped; next stage {current_stage(fm)}")
+    print(say(fm))
 
 
-def cmd_abandon(args: argparse.Namespace) -> None:
-    root, d, fm = load_entry(args.id)
-    require_open(fm)
-    reason = (args.reason or "").strip()
+def cmd_abandon(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
+    if fm.get("state") in FINISHED:
+        die(f"{fm['id']} is {fm['state']}; nothing more happens to it")
+    reason = " ".join(rest).strip()
     if not reason:
         die("abandon needs a reason, in the creator's words")
-    update_quest(d, {"state": "abandoned", "abandoned": now_iso(), "abandoned_reason": reason})
+    fm = update_quest(d, {"state": ABANDONED, "resume": None, "history": append_history(fm, ABANDONED, note=reason)})
     write_log(root)
-    print(f"{fm['id']} abandoned; files stay in {d.name}/")
+    print(say(fm) + f" Files stay in {d.name}/.")
 
 
-# --- commands ---------------------------------------------------------------
+# --- commands: quest VERB ------------------------------------------------------
 
 
-def cmd_new(args: argparse.Namespace) -> None:
+def cmd_new(rest: list[str]) -> None:
+    p = argparse.ArgumentParser(prog="quest new")
+    p.add_argument("title")
+    p.add_argument("--chore", action="store_true", help="a small piece of work; research and design are skipped")
+    p.add_argument("--goal", help="what the creator wants to accomplish")
+    p.add_argument("--done-when", help="how we will know it is done")
+    args = p.parse_args(rest)
     root = project_root()
     check_format(root)
     qdir = quests_dir(root)
@@ -963,84 +977,58 @@ def cmd_new(args: argparse.Namespace) -> None:
     qid = new_id(existing_ids(qdir))
     d = safe_write_path(qdir, qdir / f"{qid}-{slugify(args.title)}")
     d.mkdir()
-    fm = {"id": qid, "title": args.title, "kind": kind, "state": "backlog", "created": now_iso()}
+    at = now_iso()
+    history = [entry(at, BACKLOG)] + ([entry(at, n, skipped=True, note="chore") for n in CHORE_SKIPS] if kind == "chore" else [])
+    fm = {"id": qid, "title": args.title, "kind": kind, "state": BACKLOG, "history": history}
     body = quest_body(args.goal or "(what the creator wants to accomplish)", args.done_when or "(how we will know)")
     (d / "quest.md").write_text(render_page(fm, body))
     write_log(root)
-    print(f"{kind} {qid} created at {d.relative_to(root)}/")
+    print(say(fm))
 
 
-def cmd_log(args: argparse.Namespace) -> None:
+def cmd_log(rest: list[str]) -> None:
+    no_args(rest, "log")
     root = project_root()
     check_format(root)
     rows = log_rows(load_quests(quests_dir(root)))
     print(terminal_table(rows) if rows else "Nothing open.")
 
 
-def cmd_complete(args: argparse.Namespace) -> None:
+def cmd_history(rest: list[str]) -> None:
+    p = argparse.ArgumentParser(prog="quest history")
+    p.add_argument("--all", action="store_true", help="include abandoned entries")
+    p.add_argument("--limit", type=int, default=HISTORY_LIMIT, metavar="N")
+    args = p.parse_args(rest)
     if args.limit < 1:
         die("--limit must be at least 1")
     root = project_root()
     check_format(root)
-    rows = complete_rows(load_quests(quests_dir(root)), args.all, args.limit)
-    print(terminal_table(rows, COMPLETE_HEADS) if rows else "Nothing completed.")
+    rows = history_rows(load_quests(quests_dir(root)), args.all, args.limit)
+    print(terminal_table(rows, HISTORY_HEADS) if rows else "Nothing completed.")
 
 
-def cmd_show(args: argparse.Namespace) -> None:
-    root, d, fm = load_entry(args.id)
-    sys.stdout.write((d / "quest.md").read_text())
-    files = sorted(p.name for p in d.iterdir() if p.is_file() and p.name != "quest.md")
-    print("\nstage files: " + (", ".join(files) if files else "none"))
-    print(f"current stage: {current_stage(fm) or 'none, finished'}")
-    print_guidance(fm, root)
-    print_memory_hits(str(fm.get("title", "")))
+GLOBAL = {"new": cmd_new, "log": cmd_log, "history": cmd_history, "doctor": cmd_doctor, "init": cmd_init}
+VERBS = {"show": cmd_show, "start": cmd_start, "defer": cmd_defer, "next": cmd_next, "skip": cmd_skip, "abandon": cmd_abandon}
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(prog="quest", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    p = sub.add_parser("new", help="open a quest or chore (creator verb)")
-    p.add_argument("title")
-    p.add_argument("--chore", action="store_true", help="a small piece of work; starts at plan")
-    p.add_argument("--goal", help="what the creator wants to accomplish")
-    p.add_argument("--done-when", help="how we will know it is done")
-    p.set_defaults(func=cmd_new)
-
-    p = sub.add_parser("start", help="backlog to active (creator verb)")
-    p.add_argument("id"); p.set_defaults(func=cmd_start)
-    p = sub.add_parser("defer", help="active to backlog (creator verb)")
-    p.add_argument("id"); p.set_defaults(func=cmd_defer)
-    p = sub.add_parser("draft", help="record that a stage is ready for the creator: a document written, or implement built and reviewed")
-    p.add_argument("id"); p.add_argument("stage", choices=STAGES["quest"]); p.set_defaults(func=cmd_draft)
-    p = sub.add_parser("next", help="the creator accepted the current stage; move to the next, or complete from review (creator verb)")
-    p.add_argument("id"); p.add_argument("stage", nargs="?", choices=STAGES["quest"], help="the stage being accepted; refused if it is not the current one")
-    p.set_defaults(func=cmd_next)
-    p = sub.add_parser("skip", help="the creator waived research (creator verb)")
-    p.add_argument("id"); p.add_argument("stage", choices=["research"]); p.set_defaults(func=cmd_skip)
-    p = sub.add_parser("abandon", help="terminal, with a reason (creator verb)")
-    p.add_argument("id"); p.add_argument("reason"); p.set_defaults(func=cmd_abandon)
-
-    p = sub.add_parser("init", help="create docs/quests, the CLAUDE.md paragraph, and the ask rules (creator verb)")
-    p.set_defaults(func=cmd_init)
-    p = sub.add_parser("doctor", help="check the tracker; --fix regenerates a stale log and writes missing ask rules")
-    p.add_argument("--fix", action="store_true"); p.add_argument("--brief", action="store_true", help="one line, nothing if no tracker")
-    p.set_defaults(func=cmd_doctor)
-
-    p = sub.add_parser("log", help="what is open, one line each")
-    p.set_defaults(func=cmd_log)
-
-    p = sub.add_parser("complete", help=f"list completed work, newest first, {COMPLETE_LIMIT} unless --limit says otherwise; --all adds abandoned")
-    p.add_argument("--all", action="store_true", help="include abandoned entries")
-    p.add_argument("--limit", type=int, default=COMPLETE_LIMIT, metavar="N")
-    p.set_defaults(func=cmd_complete)
-
-    p = sub.add_parser("show", help="one quest's metadata and files")
-    p.add_argument("id", help="identifier or a unique prefix")
-    p.set_defaults(func=cmd_show)
-
-    args = parser.parse_args(argv)
-    args.func(args)
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if not argv or argv[0] in ("-h", "--help"):
+        print(__doc__.strip() + "\n\n" + USAGE.rstrip())
+        return
+    head, rest = argv[0], argv[1:]
+    if head in GLOBAL:
+        GLOBAL[head](rest)
+        return
+    if not SHAPE.match(head):
+        die(f"unknown command: {head}\n\n{USAGE.rstrip()}", 2)
+    verb = rest[0] if rest else "show"
+    if verb not in VERBS:
+        die(f"unknown verb: {verb}; one of {', '.join(VERBS)}", 2)
+    root = project_root()
+    check_format(root)
+    d, fm = resolve(quests_dir(root), head)
+    VERBS[verb](root, d, fm, rest[1:])
 
 
 if __name__ == "__main__":
