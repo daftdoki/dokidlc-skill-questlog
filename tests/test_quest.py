@@ -433,16 +433,16 @@ def test_init_writes_ask_rules_and_keeps_other_keys(tmp_path, monkeypatch, capsy
     quest.main(["init"])
     data = json.loads(settings.read_text())
     assert data["enabledPlugins"] == {"questlog@dokidlc": True} and data["permissions"]["allow"] == ["Bash(git status)"]
-    assert data["permissions"]["ask"] == list(quest.ASK_RULES) and len(quest.ASK_RULES) == 7
-    assert "7 ask rules in .claude/settings.json" in capsys.readouterr().out
+    assert data["permissions"]["ask"] == list(quest.ASK_RULES) and len(quest.ASK_RULES) == 8
+    assert "8 ask rules in .claude/settings.json" in capsys.readouterr().out
     before = settings.read_bytes()
     quest.main(["init"])
     assert settings.read_bytes() == before and "already initialized; nothing changed" in capsys.readouterr().out
-    # one rule already there. init adds six and keeps the existing one.
-    settings.write_text('{"permissions": {"ask": ["Bash(quest next *)"]}}')
+    # one new rule already there. init adds seven and keeps it in place; an old-shape rule is stale and goes.
+    settings.write_text('{"permissions": {"ask": ["Bash(quest * next)", "Bash(quest next *)"]}}')
     quest.main(["init"])
-    assert json.loads(settings.read_text())["permissions"]["ask"] == ["Bash(quest next *)"] + [r for r in quest.ASK_RULES if r != "Bash(quest next *)"]
-    assert "6 ask rules" in capsys.readouterr().out
+    assert json.loads(settings.read_text())["permissions"]["ask"] == ["Bash(quest * next)"] + [r for r in quest.ASK_RULES if r != "Bash(quest * next)"]
+    assert "7 ask rules" in capsys.readouterr().out
     # an unparsable file stops init before it touches anything
     fresh = tmp_path / "fresh"; (fresh / ".claude").mkdir(parents=True)
     (fresh / ".claude" / "settings.json").write_text("{")
@@ -702,15 +702,15 @@ def test_doctor_reports_missing_ask_rules(tmp_path, monkeypatch, capsys):
     assert e.value.code == 0 and "ok   settings.json asks for every creator verb" in capsys.readouterr().out
     settings = tmp_path / ".claude" / "settings.json"
     data = json.loads(settings.read_text())
-    data["permissions"]["ask"].remove("Bash(quest next *)")
+    data["permissions"]["ask"].remove("Bash(quest * next)")
     settings.write_text(json.dumps(data))
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor"])
-    assert e.value.code == 1 and "FAIL settings.json asks for every creator verb; missing: Bash(quest next *)  (quest doctor --fix)" in capsys.readouterr().out
+    assert e.value.code == 1 and "FAIL settings.json asks for every creator verb; missing: Bash(quest * next)  (quest doctor --fix)" in capsys.readouterr().out
     # --fix writes the rules, an agent verb: a project initialized by an older plugin gets its prompts back without a creator verb
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor", "--fix"])
-    assert e.value.code == 0 and "Bash(quest next *)" in settings.read_text()
+    assert e.value.code == 0 and "Bash(quest * next)" in settings.read_text()
     assert f"<!-- questlog format {quest.FORMAT}" in (tmp_path / "docs/quests/README.md").read_text()
 
 
@@ -777,7 +777,7 @@ def test_symlinked_settings_is_a_row_with_no_repair(tmp_path, monkeypatch, capsy
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor", "--fix"])
     out = capsys.readouterr().out
-    assert e.value.code == 1 and "; the file is a symlink  (add them by hand)" in out
+    assert e.value.code == 1 and "; the file is a symlink  (fix them by hand)" in out
     assert real.read_text() == '{"permissions": {"ask": []}}'
 
 
@@ -812,7 +812,7 @@ def test_doctor_fix_runs_every_repair_and_leaves_a_foreign_or_newer_log_alone(tm
     out = capsys.readouterr().out
     assert e.value.code == 1 and "FAIL docs/quests/README.md is not a quest log, or cannot be read  (fix it by hand)" in out
     assert (qdir / "README.md").read_text() == "hello\n" and (d / "quest.md").read_text() == page
-    assert "Bash(quest next *)" in (tmp_path / ".claude" / "settings.json").read_text()
+    assert "Bash(quest * next)" in (tmp_path / ".claude" / "settings.json").read_text()
     # a newer plugin's log: never downgraded
     (qdir / "README.md").write_text("# Quest log\n\n<!-- questlog format 9, written by questlog new on 2026-09-04 -->\n")
     with pytest.raises(SystemExit) as e:
@@ -950,3 +950,202 @@ def test_guidance_dir_is_not_a_quest(tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit):
         quest.main(["doctor"])
     assert "FAIL guidance/ holds only STAGE.md files; stray: notes.txt" in capsys.readouterr().out
+
+
+# --- format 5 to 6 ------------------------------------------------------------
+
+
+def _fresh_format5_tracker(tmp_path, monkeypatch, **pages):
+    """A format 5 tracker: a header at format 5 and the given pages, each a dict of format 5 stamps."""
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    qdir = tmp_path / "docs" / "quests"
+    made = {qid: _format5_page(qdir, qid, stamps.pop("title", qid), **stamps) for qid, stamps in pages.items()}
+    (qdir / "README.md").write_text("# Quest log\n\n<!-- questlog format 5, written by questlog old on 2026-09-04 -->\n")
+    return qdir, made
+
+
+def test_format_5_refused_until_doctor_fix(tmp_path, monkeypatch, capsys):
+    qdir, made = _fresh_format5_tracker(tmp_path, monkeypatch, **{"2609011000-aa": {"state": "active", "started": "2026-09-04T01:00:00Z", "goal_drafted": "2026-09-04T02:00:00Z"}})
+    for argv in (["log"], ["2609011000-aa"], ["new", "x"], ["history"]):
+        with pytest.raises(SystemExit) as e:
+            quest.main(argv)
+        assert e.value.code == 2 and "this tracker is format 5; run: quest doctor --fix" in capsys.readouterr().err, argv
+    assert "history" not in _fm(made["2609011000-aa"])              # nothing written
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor", "--brief"])
+    assert "tracker is format 5 (1 page) (quest doctor --fix)" in capsys.readouterr().out
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    out = capsys.readouterr().out
+    assert "FAIL tracker is format 5 (1 page)  (quest doctor --fix)" in out and "     2609011000-aa: review goal" in out
+    assert "history" not in _fm(made["2609011000-aa"])              # the report wrote nothing
+    with pytest.raises(SystemExit):
+        quest.main(["doctor", "--fix"])
+    fm = _fm(made["2609011000-aa"])
+    assert fm["state"] == "review goal" and "created" not in fm and "goal_drafted" not in fm
+    assert f"format {quest.FORMAT}" in (qdir / "README.md").read_text()
+    quest.main(["log"])
+    assert "review goal" in capsys.readouterr().out
+    # no header, format 5 pages: the same refusal and the same repair
+    (qdir / "README.md").unlink()
+    _format5_page(qdir, "2609011001-bb", "Fresh", state="backlog")
+    with pytest.raises(SystemExit) as e:
+        quest.main(["log"])
+    assert e.value.code == 2 and "format 5" in capsys.readouterr().err
+    with pytest.raises(SystemExit):
+        quest.main(["doctor", "--fix"])
+    assert _fm(qdir / "2609011001-bb-fresh")["history"][0]["state"] == "backlog"
+    # a format 5 page dropped under a format 6 header
+    _format5_page(qdir, "2609011002-cc", "Late", state="backlog")
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    assert f"1 page is format 5 under a format {quest.FORMAT} log" in capsys.readouterr().out
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor", "--fix"])
+    assert e.value.code == 1 and "history" in _fm(qdir / "2609011002-cc-late")   # only the CLAUDE.md rows are left failing
+
+
+def test_format_below_5_points_at_tag(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    qdir = tmp_path / "docs" / "quests"
+    old = _format5_page(qdir, "2609011000-aa", "Old done", kind="chore", state="done", plan_closed="x")
+    page = (old / "quest.md").read_text()
+    for header in ("# Quest log\n\n<!-- questlog format 3, written by questlog old on 2026-09-04 -->\n", "Not our file\n", None):
+        if header is None:
+            (qdir / "README.md").unlink()
+        else:
+            (qdir / "README.md").write_text(header)
+        with pytest.raises(SystemExit) as e:
+            quest.main(["log"])
+        assert e.value.code == 2 and "migrate with questlog format-5 first" in capsys.readouterr().err, header
+        with pytest.raises(SystemExit) as e:
+            quest.main(["doctor", "--fix"])
+        out = capsys.readouterr().out
+        assert "predates format 5  (migrate with questlog format-5 first)" in out or "not a quest log" in out, header
+        assert (old / "quest.md").read_text() == page, header                      # never rewritten
+    # a format 4 page (implement_drafted) under no header is older too
+    (old / "quest.md").unlink(); old.rmdir()
+    _format5_page(qdir, "2609011001-bb", "Format four", state="active", started="x", plan_accepted="x", implement_drafted="x")
+    with pytest.raises(SystemExit) as e:
+        quest.main(["log"])
+    assert e.value.code == 2 and "format-5" in capsys.readouterr().err
+    # a header below 5 with no pages at all is still refused by the header
+    (qdir / "2609011001-bb-format-four" / "quest.md").unlink(); (qdir / "2609011001-bb-format-four").rmdir()
+    (qdir / "README.md").write_text("# Quest log\n\n<!-- questlog format 4, written by questlog old on 2026-09-04 -->\n")
+    with pytest.raises(SystemExit) as e:
+        quest.main(["log"])
+    assert e.value.code == 2 and "this tracker is format 4" in capsys.readouterr().err
+
+
+def _history(fm):
+    return [(e["state"], e.get("skipped", False)) for e in fm["history"]]
+
+
+def test_format_6_frontmatter_mapping():
+    f6 = quest.format_6_frontmatter
+    base = {"id": "2609011000-aa", "title": "T", "created": "2026-09-01T00:00:00Z"}
+    # never-started quest
+    out = f6({**base, "kind": "quest", "state": "backlog"})
+    assert out == {"id": "2609011000-aa", "title": "T", "kind": "quest", "state": "backlog", "history": [quest.entry("2026-09-01T00:00:00Z", "backlog")]}
+    # never-started chore: six skipped entries and resume at plan
+    out = f6({**base, "kind": "chore", "state": "backlog"})
+    assert out["state"] == "backlog" and out["resume"] == "plan"
+    assert _history(out) == [("backlog", False)] + [(n, True) for n in ("draft goal", "review goal", *quest.CHORE_SKIPS)]
+    assert all(e.get("note") == "chore under format 5" for e in out["history"] if e.get("skipped"))
+    # active quest at goal, no ready stamp
+    out = f6({**base, "kind": "quest", "state": "active", "started": "2026-09-01T01:00:00Z"})
+    assert out["state"] == "draft goal" and _history(out) == [("backlog", False), ("draft goal", False)] and "resume" not in out
+    # active quest, goal drafted: review goal
+    out = f6({**base, "kind": "quest", "state": "active", "started": "2026-09-01T01:00:00Z", "goal_drafted": "2026-09-01T02:00:00Z"})
+    assert out["state"] == "review goal" and out["history"][-1]["at"] == "2026-09-01T02:00:00Z"
+    # research skipped: two skipped entries at the time the machine reached research, then design
+    out = f6({**base, "kind": "quest", "state": "active", "started": "2026-09-01T01:00:00Z", "goal_drafted": "2026-09-01T02:00:00Z",
+              "goal_accepted": "2026-09-01T03:00:00Z", "research_skipped": "2026-09-01T03:30:00Z"})
+    assert out["state"] == "design"
+    assert _history(out)[-3:] == [("research", True), ("review research", True), ("design", False)]
+    assert out["history"][-2]["at"] == "2026-09-01T03:00:00Z" and out["history"][-2]["note"] == "skipped"
+    # the mf shape: plan_skipped dated after implement_built, active with implement_built
+    mf = {**base, "kind": "quest", "state": "active", "started": "2026-09-02T01:28:19Z",
+          "goal_drafted": "2026-09-02T01:28:19Z", "goal_accepted": "2026-09-02T01:28:19Z",
+          "research_drafted": "2026-09-02T01:53:07Z", "research_accepted": "2026-09-02T01:53:07Z",
+          "design_drafted": "2026-09-02T02:22:13Z", "design_accepted": "2026-09-02T02:22:13Z",
+          "implement_built": "2026-09-02T02:39:42Z", "plan_skipped": "2026-09-04T23:44:35Z", "plan_note": "predates the plan stage (format 2)"}
+    out = f6(mf)
+    assert out["state"] == "review implementation"
+    assert [e["state"] for e in out["history"]] == ["backlog", "draft goal", "review goal", "research", "review research", "design", "review design", "plan", "review plan", "implement", "review implementation"]
+    plan = next(e for e in out["history"] if e["state"] == "plan")
+    assert plan["skipped"] and plan["note"] == "predates the plan stage (format 2)" and plan["at"] == "2026-09-02T02:22:13Z"   # not the stamp's time
+    assert out["history"][-1]["at"] == "2026-09-02T02:39:42Z"
+    # completed chore: every stage accepted, review_drafted dropped, history ends completed at review_accepted
+    out = f6({**base, "kind": "chore", "state": "completed", "started": "t1", "plan_drafted": "t2", "plan_accepted": "t3",
+              "implement_built": "t4", "implement_accepted": "t5", "review_drafted": "t6", "review_accepted": "t7"})
+    assert out["state"] == "completed" and "resume" not in out
+    assert [e["state"] for e in out["history"] if not e.get("skipped")] == ["backlog", "plan", "review plan", "implement", "review implementation", "evaluate goal", "completed"]
+    assert out["history"][-1]["at"] == "t7" and out["history"][-2]["at"] == "t5"
+    # completed with thin stamps: state said completed, no started
+    out = f6({**base, "kind": "quest", "state": "completed", "review_accepted": "t9"})
+    assert out["state"] == "completed" and _history(out) == [("backlog", False), ("completed", False)]
+    # deferred at review plan, then never resumed: backlog with resume, non-monotonic times accepted
+    out = f6({**base, "kind": "quest", "state": "backlog", "started": "2026-09-05T00:00:00Z", "goal_drafted": "t", "goal_accepted": "t",
+              "research_skipped": "t", "design_drafted": "t", "design_accepted": "t", "plan_drafted": "2026-09-01T00:00:00Z", "deferred": "2026-09-06T00:00:00Z"})
+    assert out["state"] == "backlog" and out["resume"] == "review plan" and out["history"][-1] == quest.entry("2026-09-06T00:00:00Z", "backlog")
+    # abandoned after deferral: no resume survives
+    out = f6({**base, "kind": "quest", "state": "abandoned", "started": "t", "deferred": "t2", "abandoned": "t3", "abandoned_reason": "no"})
+    assert out["state"] == "abandoned" and "resume" not in out and out["history"][-1] == quest.entry("t3", "abandoned", note="no")
+    # never-started chore abandoned
+    out = f6({**base, "kind": "chore", "state": "abandoned", "abandoned": "t3", "abandoned_reason": "no"})
+    assert out["state"] == "abandoned" and "resume" not in out
+
+
+def test_doctor_reports_old_format_and_fix_migrates_pages(tmp_path, monkeypatch, capsys):
+    """The report lists the mapped state of every page before anything is written; --fix writes exactly that."""
+    qdir, made = _fresh_format5_tracker(
+        tmp_path, monkeypatch,
+        **{"2609011000-aa": {"title": "At plan", "state": "active", "started": "t", "goal_drafted": "t", "goal_accepted": "t", "research_skipped": "t", "design_drafted": "t", "design_accepted": "t"},
+           "2609011001-cc": {"title": "Thin", "kind": "chore", "state": "completed", "review_accepted": "2026-09-03T00:00:00Z"},
+           "2609011002-ee": {"title": "Never", "kind": "chore", "state": "backlog"}})
+    (tmp_path / "CLAUDE.md").write_text(quest.CLAUDE_MD_PARAGRAPH.lstrip("\n"))
+    _git_commit_all(tmp_path)
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    out = capsys.readouterr().out
+    assert e.value.code == 1
+    assert "FAIL tracker is format 5 (3 pages)" in out
+    assert "     2609011000-aa: plan\n" in out and "     2609011001-cc: completed\n" in out and "     2609011002-ee: backlog, resume at plan\n" in out
+    assert "(was" not in out                                    # completed stays completed, active is not a format 6 state
+    assert "created" in _fm(made["2609011000-aa"])              # nothing written yet
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor", "--fix"])
+    out = capsys.readouterr().out
+    assert e.value.code == 0, out
+    assert _fm(made["2609011000-aa"])["state"] == "plan" and _fm(made["2609011002-ee"])["resume"] == "plan"
+    assert set(_fm(made["2609011001-cc"])) == {"id", "title", "kind", "state", "history"}
+    assert f"<!-- questlog format {quest.FORMAT}" in (qdir / "README.md").read_text()
+    quest.main(["2609011002-ee", "start"])
+    assert _fm(made["2609011002-ee"])["state"] == "plan"        # resumed at plan, not draft goal
+    # a page whose old state disagrees with its stamps shows (was OLD)
+    _format5_page(qdir, "2609011003-ff", "Odd", state="active", started="t", goal_drafted="t", goal_accepted="t", research_drafted="t", research_accepted="t",
+                  design_drafted="t", design_accepted="t", plan_drafted="t", plan_accepted="t", implement_built="t", implement_accepted="t", review_accepted="t")
+    with pytest.raises(SystemExit):
+        quest.main(["doctor"])
+    assert "     2609011003-ff: completed (was active)" in capsys.readouterr().out
+
+
+def test_stale_ask_rules_are_dropped(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    settings = tmp_path / ".claude" / "settings.json"; settings.parent.mkdir()
+    settings.write_text('{"permissions": {"allow": ["Bash(git status)"], "ask": ["Bash(quest next *)", "Bash(quest start *)", "Bash(other *)", "Bash(quest new *)"]}}')
+    quest.main(["init"]); _git_commit_all(tmp_path); capsys.readouterr()
+    data = json.loads(settings.read_text())
+    assert data["permissions"]["allow"] == ["Bash(git status)"]
+    assert data["permissions"]["ask"] == ["Bash(other *)", "Bash(quest new *)"] + [r for r in quest.ASK_RULES if r != "Bash(quest new *)"]
+    assert len(quest.ASK_RULES) == 8 and "Bash(quest * next --confirmed)" in quest.ASK_RULES and "Bash(quest * abandon *)" in quest.ASK_RULES
+    # doctor reports a stale rule that appears later, and --fix drops it
+    data["permissions"]["ask"].append("Bash(quest skip *)")
+    settings.write_text(json.dumps(data))
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    assert e.value.code == 1 and "FAIL settings.json asks for every creator verb; stale: Bash(quest skip *)  (quest doctor --fix)" in capsys.readouterr().out
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor", "--fix"])
+    assert e.value.code == 0 and "Bash(quest skip *)" not in settings.read_text()

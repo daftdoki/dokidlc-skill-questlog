@@ -84,14 +84,17 @@ BY_NAME = {s.name: s for s in STATES}
 CHORE_SKIPS = ("research", "review research", "design", "review design")
 REVIEW_OF = {"research": "review research", "design": "review design"}   # skipping the key skips the value too
 
-# one permission rule per creator verb; Claude Code prompts on a match in every mode and does not look inside quoted text
-ASK_RULES = tuple(f"Bash(quest {v} *)" for v in ("init", "new", "start", "defer", "next", "skip", "abandon"))
+# one permission rule per creator verb; Claude Code prompts on a match in every mode, a `*` stands for any text in its place,
+# and the rule does not look inside quoted text. `abandon` ends in `*` because its reason follows the verb; `next` has a second rule for its flag.
+ASK_RULES = ("Bash(quest init *)", "Bash(quest new *)",
+             *(f"Bash(quest * {v})" for v in ("start", "defer", "next", "skip")),
+             "Bash(quest * next --confirmed)", "Bash(quest * abandon *)")
 SETTINGS = ".claude/settings.json"
 CLAUDE_MD_MARK = "<!-- questlog -->"
 CLAUDE_MD_PARAGRAPH = f"""
 ## Quests {CLAUDE_MD_MARK}
 
-Work is tracked as quests and chores under `docs/quests/`. Run `quest log` to see what is open and `quest show ID` to read one. The `quest` skill has the stage rules and lists the verbs. You draft; the creator decides. Run a creator verb only when the creator asks, and show the command first.
+Work is tracked as quests and chores under `docs/quests/`. Run `quest log` to see what is open and `quest ID` to read one. The `quest` skill has the states and the verbs. You draft; the creator decides. Run a creator verb only when the creator asks, and show the command first.
 """
 
 USAGE = """Usage:
@@ -332,6 +335,97 @@ def plural(n: int, noun: str) -> str:
     return f"{n} {noun}{'' if n == 1 else 's'}"
 
 
+# --- format 5 to 6 ------------------------------------------------------------
+
+STAGES_5 = {"quest": ("goal", "research", "design", "plan", "implement", "review"), "chore": ("plan", "implement", "review")}
+WORK = {"goal": "draft goal", "research": "research", "design": "design", "plan": "plan", "implement": "implement", "review": "evaluate goal"}
+REVIEW = {"goal": "review goal", "research": "review research", "design": "review design", "plan": "review plan", "implement": "review implementation", "review": None}
+READY5 = {"implement": "implement_built"}   # every other stage's ready stamp was STAGE_drafted
+
+
+def format_6_frontmatter(fm: dict) -> dict:
+    """A format 5 page as format 6: state, resume when it applies, and a history built in machine order from the stamps.
+
+    Machine order, not time order: the format 2 migration dated `plan_skipped`
+    at migration time, after `implement_built` on three pages, so a skipped
+    stage takes the time the machine reached it and keeps its own stamp only
+    as a note. Stamps win over the page's `state`; nothing reads the times as
+    an order.
+    """
+    kind = str(fm.get("kind", "quest"))
+    stages = STAGES_5.get(kind, STAGES_5["quest"])
+    created = str(fm.get("created", ""))
+    hist = [entry(created, BACKLOG)]
+    if kind == "chore":
+        hist += [entry(created, n, True, "chore under format 5") for n in ("draft goal", "review goal", *CHORE_SKIPS)]
+    resume = None
+    if "started" in fm:
+        t = str(fm["started"])
+        for st in stages:
+            if f"{st}_skipped" in fm:
+                note = str(fm.get(f"{st}_note") or "skipped")
+                hist.append(entry(t, WORK[st], True, note))
+                if REVIEW[st]:
+                    hist.append(entry(t, REVIEW[st], True, note))
+                continue                                   # the next stage is entered at the same t
+            hist.append(entry(t, WORK[st]))
+            ready = fm.get(READY5.get(st, f"{st}_drafted"))
+            if ready and REVIEW[st]:
+                hist.append(entry(str(ready), REVIEW[st]))
+            if f"{st}_accepted" not in fm:
+                break
+            t = str(fm[f"{st}_accepted"])
+        else:
+            hist.append(entry(t, COMPLETED))               # every stage accepted; t is review_accepted
+        if "deferred" in fm:
+            resume = current(hist)
+            hist.append(entry(str(fm["deferred"]), BACKLOG))
+    elif kind == "chore":
+        resume = "plan"
+    if "review_accepted" in fm and current(hist) != COMPLETED:   # state said completed, stamps were thin
+        hist.append(entry(str(fm["review_accepted"]), COMPLETED))
+    if "abandoned" in fm:
+        hist.append(entry(str(fm["abandoned"]), ABANDONED, note=fm.get("abandoned_reason") or None))
+    state = current(hist)
+    out = {"id": fm["id"], "title": fm.get("title", ""), "kind": kind, "state": state}
+    if resume and state == BACKLOG:
+        out["resume"] = resume
+    out["history"] = hist
+    return out
+
+
+def mapping_lines(qdir: Path) -> list[str]:
+    """One line per format 5 page: what the migration would make of it."""
+    lines = []
+    for _, fm in load_quests(qdir):
+        if is_format_5(fm):
+            new = format_6_frontmatter(fm)
+            old = str(fm.get("state"))
+            agrees = new["state"] in BY_NAME if old == "active" else old == new["state"]
+            was = "" if agrees else f" (was {old})"
+            lines.append(f"{fm['id']}: {new['state']}{was}" + (f", resume at {new['resume']}" if new.get("resume") else ""))
+    return lines
+
+
+def rename_to_format_6(root: Path) -> int:
+    """Rewrite every format 5 page as format 6 and write the log. Returns how many changed. Pages older than format 5 refuse the run."""
+    qdir = tracker_gate(root)
+    pre5, _ = page_formats(qdir)
+    if pre5:
+        die(f"{plural(pre5, 'quest.md file')} {'predates' if pre5 == 1 else 'predate'} format 5; {SUB5}", 2)
+    changed = 0
+    for d, fm in load_quests(qdir):
+        if is_format_5(fm):
+            new = format_6_frontmatter(fm)
+            update_quest(d, new, replace=True)
+            print(f"quest: {fm['id']}: {new['state']}", file=sys.stderr)
+            changed += 1
+    write_log(root)
+    if changed:
+        print(f"quest: migrated {plural(changed, 'quest.md file')} from format 5 to {FORMAT}", file=sys.stderr)
+    return changed
+
+
 def resolve(qdir: Path, prefix: str) -> tuple[Path, dict]:
     matches = [(d, fm) for d, fm in load_quests(qdir) if str(fm["id"]).startswith(prefix) or d.name.startswith(prefix)]
     if not matches:
@@ -524,6 +618,12 @@ def missing_ask_rules(data: dict) -> list[str]:
     return [r for r in ASK_RULES if r not in present]
 
 
+def stale_ask_rules(data: dict) -> list[str]:
+    """Rules for the quest command that an earlier plugin wrote and this one does not: any `Bash(quest ` rule not in ASK_RULES."""
+    present = data.get("permissions", {}).get("ask", [])
+    return [r for r in present if isinstance(r, str) and r.startswith("Bash(quest ") and r not in ASK_RULES]
+
+
 def settings_gate(root: Path) -> tuple[Path, dict]:
     """The settings path the script may write and its content, or die: no symlink on the way, and a shape the rules fit."""
     path = safe_write_path(root, root / SETTINGS, "the project")
@@ -536,11 +636,12 @@ def settings_gate(root: Path) -> tuple[Path, dict]:
 
 
 def write_ask_rules(path: Path, data: dict) -> list[str]:
-    """Add the missing ask rules to the loaded settings and write them, keeping every other key. Returns what was added."""
-    missing = missing_ask_rules(data)
-    if not missing:
+    """Add the missing ask rules and drop the stale ones in the loaded settings, keeping every other key. Returns what was added."""
+    missing, stale = missing_ask_rules(data), stale_ask_rules(data)
+    if not missing and not stale:
         return []
-    data.setdefault("permissions", {}).setdefault("ask", []).extend(missing)
+    ask = data.setdefault("permissions", {}).setdefault("ask", [])
+    ask[:] = [r for r in ask if r not in stale] + missing
     # keep the file's indent and its final newline, so the diff the creator commits is the rules and little else
     old = path.read_text(encoding="utf-8") if path.is_file() else "\n"
     m = re.search(r"^([ \t]+)\S", old, re.M)
@@ -674,10 +775,13 @@ def regenerate_tracker(root: Path) -> None:
         die(f"refusing to rewrite {ROOT_NAME}/README.md: it is not a quest log, or cannot be read")
     if found is not None and found > FORMAT:
         die(f"refusing to rewrite a log written by a newer questlog (format {found}, this is {FORMAT}); update the plugin", 2)
-    pre5, _ = page_formats(qdir)
+    pre5, f5 = page_formats(qdir)
     if pre5:
         die(f"{plural(pre5, 'quest.md file')} {'predates' if pre5 == 1 else 'predate'} format 5; {SUB5}", 2)
-    write_log(root)
+    if f5 or found == 5:
+        rename_to_format_6(root)       # writes the log too
+    else:
+        write_log(root)
 
 
 def doctor_checks(root: Path) -> list[Row]:
@@ -701,7 +805,7 @@ def doctor_checks(root: Path) -> list[Row]:
         rows.append(row(False, f"{plural(pre5, 'quest.md file')} {'predates' if pre5 == 1 else 'predate'} format 5" if pre5 else f"quest log format {found} is below 5", SUB5))
     elif f5 or found == 5:
         label = f"tracker is format 5 ({plural(f5, 'page')})" if found != FORMAT else f"{plural(f5, 'page')} {'is' if f5 == 1 else 'are'} format 5 under a format {FORMAT} log"
-        rows.append(row(False, label, "quest doctor --fix"))
+        rows.append(row(False, label, "quest doctor --fix", regenerate_tracker, tuple(mapping_lines(qdir))))
     elif found is None:
         rows.append(row(False, "quest log exists", "quest doctor --fix", regenerate_tracker))
     else:
@@ -753,10 +857,12 @@ def doctor_checks(root: Path) -> list[Row]:
     if problem:
         rows.append(row(False, problem, "fix it by hand"))
     else:
-        missing = missing_ask_rules(data)
+        missing, stale = missing_ask_rules(data), stale_ask_rules(data)
+        wrong = missing or stale
         linked = (root / SETTINGS).is_symlink() or (root / ".claude").is_symlink()   # read through a link is fine; the write refuses it
-        label = "settings.json asks for every creator verb" + (f"; missing: {', '.join(missing)}" if missing else "") + ("; the file is a symlink" if missing and linked else "")
-        rows.append(row(not missing, label, "add them by hand" if linked else "quest doctor --fix", None if linked else write_missing_ask_rules))
+        label = ("settings.json asks for every creator verb" + (f"; missing: {', '.join(missing)}" if missing else "")
+                 + (f"; stale: {', '.join(stale)}" if stale else "") + ("; the file is a symlink" if wrong and linked else ""))
+        rows.append(row(not wrong, label, "fix them by hand" if linked else "quest doctor --fix", None if linked else write_missing_ask_rules))
     rows.extend(git_checks(root))
     return rows
 
