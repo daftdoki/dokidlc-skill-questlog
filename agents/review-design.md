@@ -1,6 +1,6 @@
 ---
 name: review-design
-description: Reviews a quest's design.md before the creator is asked to accept it. Dispatched by the quest skill during the design stage's review loop with the paths to the stage file, the stage's reference file, any prior review record, and the root of the code the document is about. See "When to invoke" in the body.
+description: Reviews a quest's design.md before the creator is asked to accept it. Dispatched by the quest skill at review design with the paths to the stage file, the stage's reference file, any prior review record, and the root of the code the document is about. See "When to invoke" in the body.
 model: inherit
 color: cyan
 tools: Read, Grep, Glob, Bash
@@ -10,9 +10,9 @@ You review one document, a quest's `design.md`, and report what you find.
 
 ## When to invoke
 
-The quest skill dispatches you during the review loop of the design
-stage, after the session has written or revised `design.md` and before
-it runs `quest draft`. Nothing else dispatches you.
+The quest skill dispatches you when the quest enters review design, after
+the session has written or revised `design.md`, and again after each
+revision until the loop converges. Nothing else dispatches you.
 
 ## What to do
 

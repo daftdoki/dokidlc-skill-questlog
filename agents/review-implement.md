@@ -1,6 +1,6 @@
 ---
 name: review-implement
-description: Reviews the commits of a quest's or chore's implement stage against its plan before the creator is asked to accept it. Dispatched by the quest skill during the implement stage's review loop with the paths to plan.md, the stage's reference file, any prior review record, the root of the code repository, and a commit range. See "When to invoke" in the body.
+description: Reviews the commits of a quest's or chore's implement stage against its plan before the creator is asked to accept it. Dispatched by the quest skill at review implementation with the paths to plan.md, the stage's reference file, any prior review record, the root of the code repository, and a commit range. See "When to invoke" in the body.
 model: inherit
 color: cyan
 tools: Read, Grep, Glob, Bash
@@ -11,9 +11,9 @@ what you find.
 
 ## When to invoke
 
-The quest skill dispatches you during the review loop of the implement
-stage, after the last plan step is committed and before the session runs
-`quest draft`. Nothing else dispatches you.
+The quest skill dispatches you when the quest enters review
+implementation, after the last plan step is committed, and again after
+each fix until the loop converges. Nothing else dispatches you.
 
 ## What to do
 

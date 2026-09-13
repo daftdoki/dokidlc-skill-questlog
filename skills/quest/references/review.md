@@ -1,17 +1,17 @@
-# Review stage
+# Evaluate goal
 
-Read this when the quest reaches review. If `quest show` or `quest
-start` printed an `overlay:` line, read that file next; it adds to this
-one and wins where they differ. The Review section at the end is the
-completion criterion for this stage; read it before you present, and run
-its loop before `quest draft`.
+Read this when the quest reaches evaluate goal. If `quest ID` or `quest
+ID start` printed an `overlay:` line, read that file next; it adds to
+this one and wins where they differ. The Review section at the end is
+the completion criterion for evaluate goal; read it before you present,
+and run its loop before you ask the creator whether the goal is met.
 
 ## What the stage produces
 
 The creator reads the result against the quest's Done when and says
-whether the work is complete. You present the result, answer questions,
-and fix what the creator finds. `quest draft ID review` says the result
-is ready to read; `quest next ID review` completes the quest.
+whether the goal is met. You present the result, answer questions, and
+fix what the creator finds. The creator's `quest ID next` completes the
+quest.
 
 ## Presenting the result
 
@@ -25,25 +25,25 @@ gap, fix it, commit, and show the fix.
 
 ## Review
 
-The completion criterion for this stage: every item in the checklist
-holds. Run the loop before `quest draft`.
+The completion criterion for evaluate goal: every item in the checklist
+holds. Run the loop before you ask the creator whether the goal is met.
 
 The loop. Dispatch `questlog:review-result` with the paths to `quest.md`
 for the Done when, `goal.md` for Success looks like, `plan.md` for the
 Deviations, this reference file, the
 prior review record `result-review.md` when it exists, and the root of the
 code repository, plus the commit range: from the earliest commit newer
-than the plan's `plan_accepted` time in `quest.md` to HEAD, found with
-`git log --since=TIME` on the working branch. The reviewer reads this
+than the `implement` entry's time in the `history` list of `quest.md` to
+HEAD, found with `git log --since=TIME` on the working branch. The reviewer reads this
 section, the Done when, the Deviations, the record, and the commits, and
 returns findings by tier with a verdict. You record the pass in
 `result-review.md`, fix what it found, and dispatch again. A pass that
 reports no blocking and no clarification findings is converged, and the
 loop stops. Three passes in one run that each report another pass also
 stop the loop, and the open findings go to the creator. A run begins
-when you start the loop and ends at `quest draft` or when the session
-ends. A converged verdict is a recommendation; the creator's `quest next`
-completes the quest.
+when you start the loop and ends when the creator's `quest ID next`
+completes the quest or when the session ends. A converged verdict is a
+recommendation; the creator's `quest ID next` completes the quest.
 
 Tiers. A blocking finding: a Done when line is not met and nothing says
 so. A clarification: a line is met with evidence the creator would have
@@ -53,7 +53,7 @@ Reviewer rules. Authorship is not evidence; a line holds when the file,
 the command, or the test shows it. Run what can be run. Report; the
 session edits.
 
-Checklist for review:
+Checklist for evaluate goal:
 
 - Every line of Done when is met, with evidence, or is marked not met
   with the reason.
@@ -65,7 +65,7 @@ The record. `result-review.md` in the quest directory, written by you,
 one section per pass:
 
 ```
-# Review record: review
+# Review record: evaluate goal
 
 ## Pass N, DATE
 

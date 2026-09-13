@@ -1,10 +1,11 @@
 # Design stage
 
-Read this before you draft `design.md`. If `quest show` or `quest start`
-printed an `overlay:` line, read that file next; it adds to this one and
-wins where they differ. The Review section at the end is the completion
-criterion for this stage; read it before you write, and run its loop
-before `quest draft`.
+Read this at design, before you write `design.md`, and again at review
+design. If `quest ID` or `quest ID start` printed an `overlay:` line, read
+that file next; it adds to this one and wins where they differ. The
+Review section at the end is the completion criterion for review design;
+read it before you write, and run its loop once `quest ID next` has
+entered review design.
 
 ## What the stage produces
 
@@ -66,8 +67,9 @@ does not build it.
 
 ## Review
 
-The completion criterion for this stage: every item in the checklist
-holds. Run the loop before `quest draft`.
+The completion criterion for review design: every item in the checklist
+holds. Run the loop at review design, before you ask the creator to
+move on.
 
 The loop. Dispatch `questlog:review-design` with four paths: the stage
 file, this reference file, the prior review record `design-review.md`
@@ -77,10 +79,10 @@ findings by tier with a verdict. You record the pass in
 `design-review.md`, fix what it found, and dispatch again. A pass that
 reports no blocking and no clarification findings is converged, and the
 loop stops. Three passes in one run that each report another pass also
-stop the loop, and the open findings go to the creator. A run begins
-when you start the loop and ends at `quest draft` or when the session
-ends. A converged verdict is a recommendation; the creator's `quest next`
-accepts the stage.
+stop the loop, and the open findings go to the creator. A run begins when you start the loop and ends
+when the creator's `quest ID next` leaves review design or when the
+session ends. A converged verdict is a recommendation; the creator's
+`quest ID next` accepts the state.
 
 Tiers. A blocking finding: the document is wrong, contradicts itself, or
 rests on a claim that fails against the code or the sources it cites. A

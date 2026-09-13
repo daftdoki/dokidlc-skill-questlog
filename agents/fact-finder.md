@@ -1,6 +1,6 @@
 ---
 name: fact-finder
-description: Answers one factual question from the code, the docs, memory, or the web, with file and line evidence, so an interview round does not wait on it and the creator is never asked for a fact the repository holds. Dispatched by the quest skill during the goal, research, design, and plan stages. See "When to invoke" in the body.
+description: Answers one factual question from the code, the docs, memory, or the web, with file and line evidence, so an interview round does not wait on it and the creator is never asked for a fact the repository holds. Dispatched by the quest skill at draft goal, research, design, and plan. See "When to invoke" in the body.
 model: inherit
 color: green
 tools: Read, Grep, Glob, Bash, WebSearch, WebFetch

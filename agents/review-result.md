@@ -1,6 +1,6 @@
 ---
 name: review-result
-description: Checks a finished quest's or chore's result against its Done when before the creator reads it. Dispatched by the quest skill during the review stage's loop with the paths to quest.md, plan.md, the stage's reference file, any prior review record, the root of the code repository, and a commit range. See "When to invoke" in the body.
+description: Checks a finished quest's or chore's result against its Done when before the creator reads it. Dispatched by the quest skill at evaluate goal with the paths to quest.md, plan.md, the stage's reference file, any prior review record, the root of the code repository, and a commit range. See "When to invoke" in the body.
 model: inherit
 color: cyan
 tools: Read, Grep, Glob, Bash
@@ -11,9 +11,9 @@ what you find.
 
 ## When to invoke
 
-The quest skill dispatches you during the loop of the review stage,
-after implementation is accepted and before the session runs `quest
-draft ID review`. Nothing else dispatches you.
+The quest skill dispatches you when the quest enters evaluate goal,
+after the creator accepted the implementation, and again after each fix
+until the loop converges. Nothing else dispatches you.
 
 ## What to do
 

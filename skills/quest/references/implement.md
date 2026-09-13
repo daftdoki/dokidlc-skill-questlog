@@ -1,10 +1,11 @@
 # Implement stage
 
-Read this before you build. If `quest show` or `quest start` printed an
-`overlay:` line, read that file next; it adds to this one and wins where
-they differ. The Review section at the end is the completion criterion
-for this stage; read it before you start, and run its loop before
-`quest draft`.
+Read this at implement, before you build, and again at review
+implementation. If `quest ID` or `quest ID start` printed an `overlay:`
+line, read that file next; it adds to this one and wins where they
+differ. The Review section at the end is the completion criterion for
+review implementation; read it before you start, and run its loop once
+`quest ID next` has entered review implementation.
 
 ## What the stage produces
 
@@ -52,28 +53,31 @@ only when it changed.
 
 Update the documentation the plan promised. Run the project's test suite
 and its code review skill when it has one, and fix what they find. Then
-run the review loop below, and `quest draft ID implement`.
+run `quest ID next`, which enters review implementation, and run the
+review loop below.
 
 ## Review
 
-The completion criterion for this stage: every item in the checklist
-holds. Run the loop before `quest draft`.
+The completion criterion for review implementation: every item in the
+checklist holds. Run the loop at review implementation, before you ask
+the creator to move on.
 
 The loop. Dispatch `questlog:review-implement` with the paths to
 `plan.md`, this reference file, the prior review record
 `implement-review.md` when it exists, and the root of the code
-repository, plus the commit range: from the earliest commit newer than
-the plan's `plan_accepted` time in `quest.md` to HEAD, found with
-`git log --since=TIME` on the working branch. The reviewer reads this
+repository, plus the commit range: from the earliest commit newer than the
+`implement` entry's time in the `history` list of `quest.md` to HEAD,
+found with `git log --since=TIME` on the working branch. The reviewer reads this
 section, the plan and its Deviations, the record, and the commits, and
 returns findings by tier with a verdict. You record the pass in
 `implement-review.md`, fix what it found, and dispatch again. A pass that
 reports no blocking and no clarification findings is converged, and the
 loop stops. Three passes in one run that each report another pass also
 stop the loop, and the open findings go to the creator. A run begins
-when you start the loop and ends at `quest draft` or when the session
-ends. A converged verdict is a recommendation; the creator's `quest next`
-accepts the stage.
+when you start the loop and ends when the creator's `quest ID next`
+leaves review implementation or when the session ends. A converged
+verdict is a recommendation; the creator's `quest ID next` accepts the
+state.
 
 Tiers. A blocking finding: the commits do not do what the plan says and
 the Deviations do not say why, a test the plan promised is missing or

@@ -1,6 +1,6 @@
 ---
 name: review-plan
-description: Reviews a quest's or chore's plan.md before the creator is asked to accept it. Dispatched by the quest skill during the plan stage's review loop with the paths to the stage file, the stage's reference file, any prior review record, and the root of the code the plan changes. See "When to invoke" in the body.
+description: Reviews a quest's or chore's plan.md before the creator is asked to accept it. Dispatched by the quest skill at review plan with the paths to the stage file, the stage's reference file, any prior review record, and the root of the code the plan changes. See "When to invoke" in the body.
 model: inherit
 color: cyan
 tools: Read, Grep, Glob, Bash
@@ -11,9 +11,9 @@ you find.
 
 ## When to invoke
 
-The quest skill dispatches you during the review loop of the plan stage,
-after the session has written or revised `plan.md` and before it runs
-`quest draft`. Nothing else dispatches you.
+The quest skill dispatches you when the quest enters review plan, after
+the session has written or revised `plan.md`, and again after each
+revision until the loop converges. Nothing else dispatches you.
 
 ## What to do
 

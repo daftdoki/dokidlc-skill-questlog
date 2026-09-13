@@ -6,7 +6,7 @@
 .claude-plugin/plugin.json   manifest; no version field, the commit is the version
 bin/quest                    the command; Python under uv run --script
 skills/quest/SKILL.md        the agent's rules; short, and points at references/
-skills/quest/references/     one file per stage: the process and the review checklist
+skills/quest/references/     one file per working state: the process and the review checklist
 agents/                      six stage reviewers and the fact finder, one markdown file each
 hooks/hooks.json             PreToolUse guard and SessionStart doctor
 scripts/guard.sh             POSIX shim: exits 0 unless the tracker is touched, 2 if uv is missing
@@ -61,9 +61,11 @@ other non-zero exits as allow, which is why the shim is POSIX sh.
 ## Format and compatibility
 
 The quest log header records `questlog format N` and the plugin commit.
-`FORMAT` in `bin/quest` is the version the code understands. Older data is
-migrated in place; newer data is refused with exit 2. Bump `FORMAT` only
-with a migration.
+`FORMAT` in `bin/quest` is the version the code understands. A format 5
+tracker is migrated by `quest doctor --fix`; older ones are refused with a
+pointer to the git tag `format-5`, the last version that carried their
+migrations; newer data is refused with exit 2. Bump `FORMAT` only with a
+migration.
 
 - Format 2 added the plan stage; the migration marks `plan_skipped` on
   work that had already reached implement.
@@ -75,21 +77,28 @@ with a migration.
 - Format 5 renamed `implement_drafted` to `implement_built`. Implement's
   product is commits, so its ready stamp says the work was built, where a
   document stage still says drafted.
+- Format 6 replaced the stage stamps with one flat machine: `state` holds
+  a verb phrase from draft goal to evaluate goal, `history` lists every
+  state entered or skipped with its time, and `resume` names where a
+  deferred entry picks up. The migration builds the history from the
+  format 5 stamps in machine order, not time order, because the format 2
+  migration dated `plan_skipped` after `implement_built` on three pages.
 
 The format number is read from the log header, but the data that changes
-lives in `quest.md`. Two paths used to skip the migration. `quest doctor
---fix` wrote a new header without touching the pages, and a missing log
-made `check_format` a no-op so the next `quest new` stamped the new format
-over old pages. Both are closed. `rename_to_format_4` keys off the page
-contents, runs whenever the log is absent, and doctor reports pages that
-predate format 4 with `--fix` as the cure. Format 5 follows that shape:
-`predates_format_5` is true when `implement_drafted` is a key,
-`format_5_frontmatter` renames it to `implement_built`, and
-`rename_to_format_5` runs beside the format 4 pass everywhere it runs.
-Keep the same shape for the next format: a predicate on the frontmatter,
-a pure rewrite, and a doctor row that carries the repair `doctor --fix`
-runs. `tracker_gate` and `settings_gate` refuse a linked or unwritable
-target before any verb writes; a new writer goes through one of them.
+lives in `quest.md`. `check_format` runs on every verb but doctor and
+refuses a tracker it cannot use: a header above `FORMAT`, a header of 5
+or any page `is_format_5` accepts (the five format 5 keys and no
+`history`), or a header below 5 or any page `predates_format_4` or
+`predates_format_5` marks. With no header, or a foreign `README.md`, the
+pages decide. The doctor reports the same cases as rows; the format 5 row
+lists the state every page would get and carries `regenerate_tracker` as
+its repair, which runs `rename_to_format_6` over the pages and rewrites
+the log. `format_6_frontmatter` is the pure rewrite. The next format keeps
+that shape: a predicate on the frontmatter, a pure rewrite, a doctor row
+that lists what `--fix` will do and carries the repair, and nothing in
+the command path that knows the old shape. `tracker_gate` and
+`settings_gate` refuse a linked or unwritable target before any verb
+writes; a new writer goes through one of them.
 
 ## Release
 

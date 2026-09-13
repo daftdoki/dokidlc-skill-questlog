@@ -1,6 +1,6 @@
 {
   "name": "questlog",
-  "description": "Quests and chores with staged review: goal, research, design, implement, review. The creator decides, the agent drafts.",
+  "description": "Quests and chores with staged review: eleven states from draft goal to evaluate goal. The creator decides, the agent drafts.",
   "author": { "name": "DaftDoki" },
   "license": "MIT"
 }

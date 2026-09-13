@@ -1,6 +1,6 @@
 ---
 name: review-goal
-description: Reviews a quest's goal.md before the creator is asked to accept it. Dispatched by the quest skill during the goal stage's review loop with the paths to the stage file, the stage's reference file, any prior review record, and the root of the code the document is about. See "When to invoke" in the body.
+description: Reviews a quest's goal.md before the creator is asked to accept it. Dispatched by the quest skill at review goal with the paths to the stage file, the stage's reference file, any prior review record, and the root of the code the document is about. See "When to invoke" in the body.
 model: inherit
 color: cyan
 tools: Read, Grep, Glob, Bash
@@ -10,9 +10,9 @@ You review one document, a quest's `goal.md`, and report what you find.
 
 ## When to invoke
 
-The quest skill dispatches you during the review loop of the goal stage,
-after the session has written or revised `goal.md` and before it runs
-`quest draft`. Nothing else dispatches you.
+The quest skill dispatches you when the quest enters review goal, after
+the session has written or revised `goal.md`, and again after each
+revision until the loop converges. Nothing else dispatches you.
 
 ## What to do
 
