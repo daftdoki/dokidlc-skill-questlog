@@ -26,8 +26,9 @@ instruction.
 You draft. The creator decides.
 
 Yours at any time: `quest log`, `quest history`, `quest ID`, `quest
-doctor`. Yours once the state's file exists: `quest ID next` out of a
-working state (draft goal, research, design, plan, implement).
+doctor`. Yours once the state's work is done: `quest ID next` out of a
+working state, when the file exists for draft goal, research, design,
+and plan, and when the commits are in for implement.
 
 The creator's, run only when the creator asked for it in this
 conversation and after you have shown the exact command: `quest new`,
