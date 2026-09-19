@@ -5,11 +5,14 @@ description: Track work as quests and chores through one flat machine of states 
 
 # Quest
 
-Work lives under `docs/quests/`, one directory per quest or chore, named
-`<id>-<slug>`. `quest.md` holds the metadata, the history, and the Goal
-and Done when. Stage files sit beside it. The quest log at
-`docs/quests/README.md` is generated; the verbs are the only writers of
-it and of any `quest.md` frontmatter. The command is `quest`, on PATH
+Work lives under `docs/quests/STATE/`, one directory per quest or chore,
+named `<id>-<slug>`, where STATE is `active`, `backlog`, `completed`, or
+`abandoned`; the verbs move the directory when the state changes, so
+`quest ID` is how you find one. `quest.md` holds the metadata, the
+history, and the Goal and Done when. Stage files sit beside it. The quest
+log at `docs/quests/README.md` is generated; the verbs are the only
+writers of it, of any `quest.md` frontmatter, and of where a directory
+sits. The command is `quest`, on PATH
 while this plugin is enabled. Read tracker files with Read and write
 stage files with Write or Edit; Bash that redirects into `docs/quests/`
 is denied.
@@ -136,6 +139,8 @@ refuses an empty one.
   plan.
 - Picking an abandoned idea up again is a new quest with a new id.
 - If `quest` refuses with "newer questlog", tell the creator to update
-  the plugin. If it refuses with "format 5", run `quest doctor` to see
-  the migration it proposes, and ask the creator before `quest doctor
-  --fix`.
+  the plugin. If it refuses with "format 6", run `quest doctor` to see
+  the moves it proposes, and ask the creator before `quest doctor --fix`.
+  If it refuses with "format-6 first", the tracker predates format 6:
+  the creator runs that tagged version's `quest doctor --fix` before this
+  one can read it.

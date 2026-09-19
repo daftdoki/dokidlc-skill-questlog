@@ -5,9 +5,11 @@ with you deciding when each step is finished. A quest moves through one
 flat machine of states, from draft goal to evaluate goal. The agent writes
 each state's document and moves the quest into review; you read, you
 iterate together, and the quest moves on when you say so. Each quest or
-chore is a directory under `docs/quests/` holding a `quest.md` and its
-stage files, and the quest log at `docs/quests/README.md` lists what is
-open, one line each.
+chore is a directory under `docs/quests/active/`, `backlog/`,
+`completed/`, or `abandoned/` holding a `quest.md` and its stage files;
+the directory moves when the state changes, so a file listing shows what
+is active. The quest log at `docs/quests/README.md` lists what is open,
+one line each.
 
 With it enabled, the agent will on its own: tell you what is open at the
 start of every session, read a quest before working on it, write the stage
@@ -46,9 +48,9 @@ cannot. A chore is a quest opened with research and design already
 skipped: it runs draft goal, review goal, plan, review plan, implement,
 review implementation, evaluate goal.
 
-At any state you can defer the work; it goes back to the backlog and
-resumes where it was. At any state you can abandon it; its files stay for
-the record, and it leaves the log.
+At any state you can defer the work; it goes back to `backlog/` and
+resumes where it was. At any state you can abandon it; its files move to
+`abandoned/` for the record, and it leaves the log.
 
 ## Usage
 
@@ -122,12 +124,23 @@ docs/quests/
   README.md                          the quest log, generated
   guidance/                          optional; your project's own rules per state
     research.md  design.md
-  2609051012-k3-discover-the-bridge/
-    quest.md                         metadata, history, and the goal, owned by the verbs
-    goal.md  research.md  design.md  plan.md      written by the agent, read by you
-    goal-review.md  design-review.md ...          one review record per review state, pass by pass
-    result-review.md                 evaluate goal's record
+  active/                            every quest at a machine state, draft goal through evaluate goal
+    2609051012-k3-discover-the-bridge/
+      quest.md                       metadata, history, and the goal, owned by the verbs
+      goal.md  research.md  design.md  plan.md      written by the agent, read by you
+      goal-review.md  design-review.md ...          one review record per review state, pass by pass
+      result-review.md               evaluate goal's record
+  backlog/                           opened or deferred, not started
+  completed/                         finished; quest history lists them
+  abandoned/                         dropped, with a reason in quest.md
+    2609042210-7q-a-second-bridge/
 ```
+
+A verb that changes the state moves the directory: `start` from
+`backlog/` to `active/`, `defer` back, the last `next` to `completed/`,
+`abandon` to `abandoned/`. Each of the four directories appears the first
+time something lands in it. `ls docs/quests/active` is the shortest
+answer to "what is going on".
 
 Before the agent works a state it reads the plugin's reference for it,
 six files under the skill's `references/`, one per working state, each
@@ -218,11 +231,12 @@ repository cannot point those at another file.
 
 ### Migrating from an older format
 
-The quest log's header names its format. This plugin writes format 6. A
-format 5 tracker is refused by every verb until `quest doctor --fix`
-migrates it; plain `quest doctor` first lists the state every page would
-get, so you can read the mapping before anything is written. A tracker
-older than format 5 is refused with a pointer to the git tag `format-5`
+The quest log's header names its format. This plugin writes format 7. A
+format 6 tracker, its entries flat under `docs/quests/`, is refused by
+every verb until `quest doctor --fix` moves each entry into the directory
+its state names; plain `quest doctor` first lists the moves, one `ID ->
+STATE/` line each, so you can read them before anything moves. A tracker
+older than format 6 is refused with a pointer to the git tag `format-6`
 on this repository, the last version that migrated those formats; run
 that version's `quest doctor --fix` first.
 
