@@ -76,14 +76,20 @@ def test_successor_skips_marked_states():
     assert quest.current([]) == "backlog"
 
 
-def _make(qdir, qid, title, kind="quest", state="backlog", history=None, **extra):
-    d = qdir / f"{qid}-{quest.slugify(title)}"
-    d.mkdir(parents=True)
+def _make(qdir, qid, title, kind="quest", state="backlog", history=None, bucket=None, **extra):
+    """A page under the bucket its state names; `bucket=""` puts it at the root of docs/quests/, the format 6 shape."""
     if history is None:
         history = [quest.entry(STAMP, "backlog")] + ([quest.entry(STAMP, state)] if state != "backlog" else [])
     fm = {"id": qid, "title": title, "kind": kind, "state": state, **extra, "history": history}
+    d = qdir / (quest.bucket(fm) if bucket is None else bucket) / f"{qid}-{quest.slugify(title)}"
+    d.mkdir(parents=True)
     (d / "quest.md").write_text(quest.render_page(fm, quest.quest_body("g", "d")))
     return d
+
+
+def _at(qdir, qid):
+    """The entry's directory now; the verbs move it."""
+    return quest.resolve(qdir, qid)[0]
 
 
 def test_log_excludes_terminal_and_sorts_newest_first(tmp_path):
@@ -95,9 +101,9 @@ def test_log_excludes_terminal_and_sorts_newest_first(tmp_path):
     _make(qdir, "2609021300-ee", "Parked", state="backlog", resume="review plan")
     lines = quest.log_lines(quest.load_quests(qdir))
     assert len(lines) == 3
-    assert lines[0] == "| [2609041432-bb](2609041432-bb-new-active/) | quest | research | New active |"
-    assert lines[1] == "| [2609021300-ee](2609021300-ee-parked/) | quest | backlog, resume at review plan | Parked |"
-    assert lines[2] == "| [2609011000-aa](2609011000-aa-old-open/) | quest | backlog | Old open |"
+    assert lines[0] == "| [2609041432-bb](active/2609041432-bb-new-active/) | quest | research | New active |"
+    assert lines[1] == "| [2609021300-ee](backlog/2609021300-ee-parked/) | quest | backlog, resume at review plan | Parked |"
+    assert lines[2] == "| [2609011000-aa](backlog/2609011000-aa-old-open/) | quest | backlog | Old open |"
     text = quest.render_log(quest.load_quests(qdir), "abc1234", NOW)
     assert text.startswith(f"# Quest log\n\n<!-- questlog format {quest.FORMAT}, written by questlog abc1234 on 2026-09-04 -->")
     assert "| Id | Kind | State | Title |" in text
@@ -144,8 +150,8 @@ def test_new_log_show_end_to_end(tmp_path, monkeypatch, capsys):
     quest.main(["new", "Build the thing", "--goal", "a working thing", "--done-when", "it runs"])
     quest.main(["new", "Fix a typo", "--chore"])
     qdir = tmp_path / "docs" / "quests"
-    dirs = [d for d in qdir.iterdir() if d.is_dir()]
-    assert len(dirs) == 2
+    dirs = [d for d in (qdir / "backlog").iterdir() if d.is_dir()]
+    assert len(dirs) == 2 and sorted(p.name for p in qdir.iterdir()) == ["README.md", "backlog"]
     log = (qdir / "README.md").read_text()
     assert "| chore | backlog | Fix a typo |" in log
     assert "| quest | backlog | Build the thing |" in log
@@ -161,6 +167,8 @@ def test_new_log_show_end_to_end(tmp_path, monkeypatch, capsys):
     assert Path(out.split("guidance: ")[1].splitlines()[0]).is_file()
     quest.main([qid, "start"]); quest.main([qid, "show"])
     assert f"{qid} is at draft goal." in capsys.readouterr().out
+    build = _at(qdir, qid)
+    assert build.parent == qdir / "active"
     (build / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); capsys.readouterr()
     quest.main([qid])
     out = capsys.readouterr().out
@@ -200,7 +208,8 @@ def test_full_quest_lifecycle(tmp_path, monkeypatch):
     with pytest.raises(SystemExit):          # cannot move on before start
         quest.main([qid, "next"])
     quest.main([qid, "start"])
-    assert _fm(d)["state"] == "draft goal"
+    d = _at(qdir, qid)
+    assert _fm(d)["state"] == "draft goal" and d.parent == qdir / "active"
     with pytest.raises(SystemExit):          # goal.md must exist to leave draft goal
         quest.main([qid, "next"])
     files = {"research": "research.md", "design": "design.md", "plan": "plan.md"}
@@ -212,7 +221,9 @@ def test_full_quest_lifecycle(tmp_path, monkeypatch):
         if expected in files:
             (d / files[expected]).write_text(f"# {expected}\n")
     quest.main([qid, "next"])
+    d = _at(qdir, qid)
     fm = _fm(d)
+    assert d.parent == qdir / "completed"
     assert fm["state"] == "completed" and len(fm["history"]) == 13 and set(fm) == {"id", "title", "kind", "state", "history"}
     assert qid not in (qdir / "README.md").read_text()
     with pytest.raises(SystemExit):          # terminal
@@ -227,6 +238,7 @@ def test_chore_lifecycle_and_log_stage(tmp_path, monkeypatch):
     assert [e["state"] for e in fm["history"] if e.get("skipped")] == list(quest.CHORE_SKIPS)
     assert all(e["note"] == "chore" for e in fm["history"] if e.get("skipped"))
     quest.main([qid, "start"])
+    d = _at(qdir, qid)
     assert "| chore | draft goal | Fix |" in (qdir / "README.md").read_text()
     (d / "goal.md").write_text("# Goal\n")
     quest.main([qid, "next"]); quest.main([qid, "next"])
@@ -235,12 +247,12 @@ def test_chore_lifecycle_and_log_stage(tmp_path, monkeypatch):
     (d / "plan.md").write_text("# Plan\n")
     for _ in range(5):
         quest.main([qid, "next"])
-    assert _fm(d)["state"] == "completed"
+    assert _fm(_at(qdir, qid))["state"] == "completed"
 
 
 def test_skip_research_skips_its_review(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _fresh(tmp_path, monkeypatch)
-    quest.main([qid, "start"]); (d / "goal.md").write_text("# Goal\n")
+    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n")
     quest.main([qid, "next"]); quest.main([qid, "next"]); capsys.readouterr()
     assert _fm(d)["state"] == "research"
     quest.main([qid, "skip"])
@@ -255,7 +267,7 @@ def test_skip_research_skips_its_review(tmp_path, monkeypatch, capsys):
 
 def test_skip_at_review_state(tmp_path, monkeypatch):
     qdir, d, qid = _fresh(tmp_path, monkeypatch)
-    quest.main([qid, "start"]); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"])
+    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"])
     assert _fm(d)["state"] == "review goal"
     quest.main([qid, "skip"])
     fm = _fm(d)
@@ -264,7 +276,7 @@ def test_skip_at_review_state(tmp_path, monkeypatch):
 
 def test_skip_refuses_unskippable(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
-    quest.main([qid, "start"])
+    quest.main([qid, "start"]); d = _at(qdir, qid)
     for state, file in (("draft goal", "goal.md"), ("plan", "plan.md"), ("implement", None), ("evaluate goal", None)):
         while _fm(d)["state"] != state:
             quest.main([qid, "skip"] if quest.BY_NAME[_fm(d)["state"]].skippable else [qid, "next"])
@@ -274,12 +286,12 @@ def test_skip_refuses_unskippable(tmp_path, monkeypatch, capsys):
         if file:
             (d / file).write_text("x\n")
         quest.main([qid, "next"])
-    assert _fm(d)["state"] == "completed"
+    assert _fm(_at(qdir, qid))["state"] == "completed"
 
 
 def test_next_refuses_missing_file(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _fresh(tmp_path, monkeypatch)
-    quest.main([qid, "start"])
+    quest.main([qid, "start"]); d = _at(qdir, qid)
     for state, file in (("draft goal", "goal.md"), ("research", "research.md"), ("design", "design.md"), ("plan", "plan.md")):
         assert _fm(d)["state"] == state
         with pytest.raises(SystemExit):
@@ -293,7 +305,7 @@ def test_next_refuses_missing_file(tmp_path, monkeypatch, capsys):
 
 def test_next_refuses_unconverged_verdict_until_confirmed(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
-    quest.main([qid, "start"]); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
+    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
     (d / "plan.md").write_text("# Plan\n"); quest.main([qid, "next"]); capsys.readouterr()
     assert _fm(d)["state"] == "review plan"
     quest.main([qid, "next"])                                     # no record yet: nothing to confirm
@@ -309,29 +321,34 @@ def test_next_refuses_unconverged_verdict_until_confirmed(tmp_path, monkeypatch,
     assert _fm(d)["state"] == "evaluate goal"
     (d / "result-review.md").write_text("Verdict: another pass\n\nVerdict: converged\n")
     quest.main([qid, "next"])                                     # the last verdict converged
-    assert _fm(d)["state"] == "completed"
+    assert _fm(_at(qdir, qid))["state"] == "completed"
     with pytest.raises(SystemExit) as e:
         quest.main([qid, "next", "--force"])
     assert e.value.code == 2
 
 
-def test_next_completes_in_one_write(tmp_path, monkeypatch):
+def test_next_writes_the_page_before_it_moves(tmp_path, monkeypatch):
     qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
-    quest.main([qid, "start"]); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
+    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
     (d / "plan.md").write_text("# Plan\n")
     for _ in range(4):
         quest.main([qid, "next"])
     assert _fm(d)["state"] == "evaluate goal"
-    writes = []
-    real = quest.update_quest
-    def counting(*a, **k):
-        writes.append(a)
-        return real(*a, **k)
-    monkeypatch.setattr(quest, "update_quest", counting)
+    events = []
+    real_write, real_move = quest.update_quest, quest.move_entry
+    def writing(*a, **k):
+        events.append("write")
+        return real_write(*a, **k)
+    def moving(*a, **k):
+        events.append("move")
+        return real_move(*a, **k)
+    monkeypatch.setattr(quest, "update_quest", writing); monkeypatch.setattr(quest, "move_entry", moving)
     quest.main([qid, "next"])
-    assert len(writes) == 1                                      # one write, so an interruption never leaves a half-moved page
+    assert events == ["write", "move"]                           # the page is the truth and the directory follows it
+    assert not d.exists()
+    d = _at(qdir, qid)
     fm = _fm(d)
-    assert fm["state"] == "completed" and fm["history"][-1]["state"] == "completed"
+    assert d.parent == qdir / "completed" and fm["state"] == "completed" and fm["history"][-1]["state"] == "completed"
 
 
 def test_abandon_requires_reason_and_keeps_files(tmp_path, monkeypatch):
@@ -341,9 +358,11 @@ def test_abandon_requires_reason_and_keeps_files(tmp_path, monkeypatch):
     with pytest.raises(SystemExit):
         quest.main([qid, "abandon"])
     quest.main([qid, "abandon", "superseded by a better idea"])
+    assert not d.exists()
+    d = _at(qdir, qid)
     fm = _fm(d)
     assert fm["state"] == "abandoned" and fm["history"][-1]["note"] == "superseded by a better idea" and "resume" not in fm
-    assert (d / "quest.md").is_file()
+    assert (d / "quest.md").is_file() and d.parent == qdir / "abandoned"
     assert qid not in (qdir / "README.md").read_text()
     with pytest.raises(SystemExit):
         quest.main([qid, "next"])
@@ -360,20 +379,24 @@ def test_start_twice_fails(tmp_path, monkeypatch):
 
 def test_defer_returns_to_backlog_and_start_resumes(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _fresh(tmp_path, monkeypatch, "Park", chore=True)
-    quest.main([qid, "start"]); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
+    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
     (d / "plan.md").write_text("# Plan\n"); quest.main([qid, "next"])
     assert _fm(d)["state"] == "review plan"
     capsys.readouterr()
     quest.main([qid, "defer"])
     assert f"{qid} is in the backlog, to resume at review plan. Start it with: quest {qid} start" in capsys.readouterr().out
+    d = _at(qdir, qid)
     fm = _fm(d)
+    assert d.parent == qdir / "backlog"
     assert fm["state"] == "backlog" and fm["resume"] == "review plan" and fm["history"][-1]["state"] == "backlog"
     assert "| chore | backlog, resume at review plan | Park |" in (qdir / "README.md").read_text()
     for argv in ([qid, "next"], [qid, "skip"], [qid, "defer"]):
         with pytest.raises(SystemExit):
             quest.main(argv)
     quest.main([qid, "start"])
+    d = _at(qdir, qid)
     fm = _fm(d)
+    assert d.parent == qdir / "active"
     assert fm["state"] == "review plan" and "resume" not in fm and fm["history"][-1]["state"] == "review plan"
     _make(qdir, "2609040000-zz", "Over", state="completed")
     with pytest.raises(SystemExit):                              # finished entries do not defer
@@ -423,13 +446,11 @@ def test_unknown_command_and_verb_exit_2(tmp_path, monkeypatch, capsys):
     assert "quest ID next [--confirmed]" in out and "States, in order: draft goal, review goal" in out and "evaluate goal" in out
 
 
-def test_update_quest_none_deletes_in_merge_mode_only(tmp_path):
+def test_update_quest_none_deletes_the_key(tmp_path):
     d = _make(tmp_path / "docs" / "quests", "2609040000-aa", "Keys", resume="review plan", note=None)
     fm = quest.update_quest(d, {"resume": None, "missing": None, "state": "review plan"})
     assert "resume" not in fm and "missing" not in fm and fm["state"] == "review plan"
     assert "note" in fm                                          # a page value of None survives a merge
-    fm = quest.update_quest(d, {"id": "2609040000-aa", "note": None}, replace=True)
-    assert "note" in fm                                          # replace mode keeps None-valued keys
 
 
 def test_init_is_idempotent_and_appends_paragraph(tmp_path, monkeypatch, capsys):
@@ -512,7 +533,7 @@ def test_doctor_reports_and_fixes(tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor", "--fix"])
     assert e.value.code == 0                      # a tracked file that is modified still counts as committed
-    d = next(p for p in (tmp_path / "docs/quests").iterdir() if p.is_dir())
+    d = next(p for p in (tmp_path / "docs/quests/backlog").iterdir() if p.is_dir())
     good = (d / "quest.md").read_text()
     (d / "quest.md").write_text("---\nid: nope\n---\nbody\n")
     with pytest.raises(SystemExit) as e:
@@ -557,13 +578,13 @@ def test_memory_hits_fail_open_and_parse(monkeypatch):
 
 def test_next_prints_memory_nudge_after_a_document_state(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
-    quest.main([qid, "start"]); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
+    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
     (d / "plan.md").write_text("# Plan\n"); capsys.readouterr()
     monkeypatch.setattr(quest.shutil, "which", lambda name: "/x/memory")
     monkeypatch.setattr(quest, "memory_hits", lambda q: [])
     quest.main([qid, "next"])
     out = capsys.readouterr().out
-    assert "memory: what did you learn while planning on your own?" in out and f"--ref {d.name}/plan.md" in out
+    assert "memory: what did you learn while planning on your own?" in out and f"--ref docs/quests/active/{d.name}/plan.md" in out
     quest.main([qid, "next"])
     assert "memory:" not in capsys.readouterr().out            # implement gets no write prompt
 
@@ -596,7 +617,7 @@ def test_symlinked_log_and_quest_are_refused(tmp_path, monkeypatch, capsys):
     (qdir / "README.md").write_text("Not our file\n")
     quest.main(["log"])                                   # unrecognised file: left alone
     assert (qdir / "README.md").read_text() == "Not our file\n"
-    real = _make(qdir, "2609041432-bb", "Real"); link = qdir / "2609041433-cc-link"; link.symlink_to(real)
+    real = _make(qdir, "2609041432-bb", "Real"); link = qdir / "backlog" / "2609041433-cc-link"; link.symlink_to(real)
     assert [fm["id"] for _, fm in quest.load_quests(qdir)] == ["2609041432-bb"]
 
 
@@ -669,7 +690,7 @@ def test_next_line_passes_over_skipped_research():
 
 def test_next_prints_state_line(tmp_path, capsys, monkeypatch):
     qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
-    quest.main([qid, "start"]); (d / "goal.md").write_text("# Goal\n"); capsys.readouterr()
+    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); capsys.readouterr()
     quest.main([qid, "next"])
     assert f"{qid} is at review goal. Run the review-goal loop into goal-review.md, then ask the creator: move on to planning?" in capsys.readouterr().out
     quest.main([qid, "next"]); (d / "plan.md").write_text("# Plan\n"); quest.main([qid, "next"]); capsys.readouterr()
@@ -764,26 +785,17 @@ def test_settings_shapes_are_refused_without_a_traceback(tmp_path, monkeypatch, 
     assert e.value.code == 2 and ".claude is not a directory" in capsys.readouterr().err
 
 
-def _format5_page(qdir, qid, title, **stamps):
-    """A page as format 5 wrote it: five keys plus stage stamps, no history."""
-    d = qdir / f"{qid}-{quest.slugify(title)}"
-    d.mkdir(parents=True)
-    fm = {"id": qid, "title": title, "kind": stamps.pop("kind", "quest"), "state": stamps.pop("state", "backlog"), "created": STAMP, **stamps}
-    (d / "quest.md").write_text(quest.render_page(fm, quest.quest_body("g", "d")))
-    return d
-
-
 def test_init_refuses_settings_before_migrating(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     qdir = tmp_path / "docs" / "quests"
-    d = _format5_page(qdir, "2609011000-aa", "At plan", state="active", goal_accepted="x")
-    (qdir / "README.md").write_text("# Quest log\n\n<!-- questlog format 5, written by questlog old on 2026-09-04 -->\n")
+    d = _make(qdir, "2609011000-aa", "At plan", state="plan", bucket="")
+    (qdir / "README.md").write_text("# Quest log\n\n<!-- questlog format 6, written by questlog old on 2026-09-04 -->\n")
     (tmp_path / ".claude").mkdir(); (tmp_path / ".claude" / "settings.json").write_text("{")
     page = (d / "quest.md").read_text()
     with pytest.raises(SystemExit) as e:
         quest.main(["init"])
     assert e.value.code == 2
-    assert (d / "quest.md").read_text() == page and "format 5" in (qdir / "README.md").read_text()   # nothing written
+    assert (d / "quest.md").read_text() == page and "format 6" in (qdir / "README.md").read_text()   # nothing written, nothing moved
 
 
 def test_symlinked_settings_is_a_row_with_no_repair(tmp_path, monkeypatch, capsys):
@@ -847,8 +859,8 @@ def test_doctor_fix_runs_every_repair_and_leaves_a_foreign_or_newer_log_alone(tm
 def test_linked_tracker_is_refused_before_any_migration(tmp_path, monkeypatch, capsys):
     # a clone can link docs/quests, or docs, outside the project; no verb may write pages there, read verbs included
     outside = tmp_path / "outside"; oq = outside / "docs" / "quests"
-    d = _format5_page(oq, "2609011000-aa", "At plan", state="active", goal_accepted="x")
-    (oq / "README.md").write_text("# Quest log\n\n<!-- questlog format 5, written by questlog old on 2026-09-04 -->\n")
+    d = _make(oq, "2609011000-aa", "At plan", state="plan", bucket="")
+    (oq / "README.md").write_text("# Quest log\n\n<!-- questlog format 6, written by questlog old on 2026-09-04 -->\n")
     page = (d / "quest.md").read_text()
     for link, target in (("docs/quests", oq), ("docs", outside / "docs")):
         repo = tmp_path / link.replace("/", "-"); (repo / "docs").mkdir(parents=True) if link != "docs" else repo.mkdir()
@@ -862,7 +874,7 @@ def test_linked_tracker_is_refused_before_any_migration(tmp_path, monkeypatch, c
             with pytest.raises(SystemExit) as e:
                 quest.main(verb)
             assert f"{link} is a symlink" in capsys.readouterr().out, (link, verb)
-            assert (d / "quest.md").read_text() == page and "format 5" in (oq / "README.md").read_text(), (link, verb)
+            assert (d / "quest.md").read_text() == page and d.parent == oq and "format 6" in (oq / "README.md").read_text(), (link, verb)
     # a linked docs with no tracker behind it: new must not create one there
     empty = tmp_path / "empty"; empty.mkdir()
     repo = tmp_path / "repo-new"; repo.mkdir(); (repo / "docs").symlink_to(empty)
@@ -971,183 +983,196 @@ def test_guidance_dir_is_not_a_quest(tmp_path, monkeypatch, capsys):
     assert "FAIL guidance/ holds only STAGE.md files; stray: notes.txt" in capsys.readouterr().out
 
 
-# --- format 5 to 6 ------------------------------------------------------------
+# --- state directories and format 6 to 7 -----------------------------------------
 
 
-def _fresh_format5_tracker(tmp_path, monkeypatch, **pages):
-    """A format 5 tracker: a header at format 5 and the given pages, each a dict of format 5 stamps."""
+def _log_header(qdir, fmt):
+    (qdir / "README.md").write_text(f"# Quest log\n\n<!-- questlog format {fmt}, written by questlog old on 2026-09-04 -->\n")
+
+
+def test_verbs_move_the_directory(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch, "Move", chore=True)
+    assert d.parent == qdir / "backlog"
+    quest.main([qid, "start"])
+    assert not d.exists() and _at(qdir, qid).parent == qdir / "active"
+    quest.main([qid, "defer"])
+    assert _at(qdir, qid).parent == qdir / "backlog" and not (qdir / "active" / d.name).exists()
+    quest.main([qid, "start"]); d = _at(qdir, qid)
+    assert d.parent == qdir / "active"
+    (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
+    (d / "plan.md").write_text("# Plan\n")
+    for _ in range(4):
+        quest.main([qid, "next"])
+    assert _at(qdir, qid) == d                                   # a state change inside active/ moves nothing
+    quest.main([qid, "next"])
+    assert not d.exists() and _at(qdir, qid).parent == qdir / "completed"
+    assert f"| [{qid}]" not in (qdir / "README.md").read_text()
+    # a finished entry cannot be abandoned, so a second chore carries that leg
+    quest.main(["new", "Drop", "--chore"]); other = quest.load_quests(qdir)[0][1]["id"] if quest.load_quests(qdir)[0][1]["id"] != qid else quest.load_quests(qdir)[1][1]["id"]
+    quest.main([other, "start"]); capsys.readouterr()
+    quest.main([other, "abandon", "not worth it"])
+    assert f"Files stay in abandoned/{_at(qdir, other).name}/." in capsys.readouterr().out
+    assert _at(qdir, other).parent == qdir / "abandoned" and not (qdir / "active" / _at(qdir, other).name).exists()
+    assert sorted(p.name for p in qdir.iterdir()) == ["README.md", "abandoned", "active", "backlog", "completed"]
+
+
+def test_format_6_refused_until_doctor_fix(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     qdir = tmp_path / "docs" / "quests"
-    made = {qid: _format5_page(qdir, qid, stamps.pop("title", qid), **stamps) for qid, stamps in pages.items()}
-    (qdir / "README.md").write_text("# Quest log\n\n<!-- questlog format 5, written by questlog old on 2026-09-04 -->\n")
-    return qdir, made
-
-
-def test_format_5_refused_until_doctor_fix(tmp_path, monkeypatch, capsys):
-    qdir, made = _fresh_format5_tracker(tmp_path, monkeypatch, **{"2609011000-aa": {"state": "active", "started": "2026-09-04T01:00:00Z", "goal_drafted": "2026-09-04T02:00:00Z"}})
+    a = _make(qdir, "2609011000-aa", "At plan", state="plan", bucket="")
+    b = _make(qdir, "2609011001-bb", "Done", kind="chore", state="completed", bucket="")
+    _log_header(qdir, 6)
+    pages = (a / "quest.md").read_text(), (b / "quest.md").read_text()
     for argv in (["log"], ["2609011000-aa"], ["new", "x"], ["history"]):
         with pytest.raises(SystemExit) as e:
             quest.main(argv)
-        assert e.value.code == 2 and "this tracker is format 5; run: quest doctor --fix" in capsys.readouterr().err, argv
-    assert "history" not in _fm(made["2609011000-aa"])              # nothing written
-    with pytest.raises(SystemExit) as e:
+        assert e.value.code == 2 and "this tracker is format 6; run: quest doctor --fix" in capsys.readouterr().err, argv
+    assert a.is_dir() and b.is_dir()                                             # nothing moved
+    with pytest.raises(SystemExit):
         quest.main(["doctor", "--brief"])
-    assert "tracker is format 5 (1 page) (quest doctor --fix)" in capsys.readouterr().out
-    with pytest.raises(SystemExit) as e:
+    assert "tracker is format 6 (2 entries at the root of docs/quests) (quest doctor --fix)" in capsys.readouterr().out
+    with pytest.raises(SystemExit):
         quest.main(["doctor"])
     out = capsys.readouterr().out
-    assert "FAIL tracker is format 5 (1 page)  (quest doctor --fix)" in out and "     2609011000-aa: review goal" in out
-    assert "history" not in _fm(made["2609011000-aa"])              # the report wrote nothing
+    assert "FAIL tracker is format 6 (2 entries at the root of docs/quests)  (quest doctor --fix)" in out
+    assert "     2609011000-aa -> active/\n" in out and "     2609011001-bb -> completed/\n" in out
+    assert a.is_dir() and b.is_dir()                                             # the report moved nothing
     with pytest.raises(SystemExit):
         quest.main(["doctor", "--fix"])
-    fm = _fm(made["2609011000-aa"])
-    assert fm["state"] == "review goal" and "created" not in fm and "goal_drafted" not in fm
-    assert f"format {quest.FORMAT}" in (qdir / "README.md").read_text()
+    assert not a.exists() and not b.exists()
+    assert (qdir / "active" / a.name / "quest.md").read_text() == pages[0] and (qdir / "completed" / b.name / "quest.md").read_text() == pages[1]
+    log = (qdir / "README.md").read_text()
+    assert f"<!-- questlog format {quest.FORMAT}" in log and f"[2609011000-aa](active/{a.name}/)" in log and "2609011001-bb" not in log
     quest.main(["log"])
-    assert "review goal" in capsys.readouterr().out
-    # no header, format 5 pages: the same refusal and the same repair
-    (qdir / "README.md").unlink()
-    _format5_page(qdir, "2609011001-bb", "Fresh", state="backlog")
+    assert "2609011000-aa  quest  plan" in capsys.readouterr().out
+    # a root entry dropped under a format 7 log: the same refusal and the same repair
+    c = _make(qdir, "2609011002-cc", "Late", state="backlog", bucket="")
     with pytest.raises(SystemExit) as e:
         quest.main(["log"])
-    assert e.value.code == 2 and "format 5" in capsys.readouterr().err
+    assert e.value.code == 2 and "format 6; run: quest doctor --fix" in capsys.readouterr().err
+    with pytest.raises(SystemExit):
+        quest.main(["doctor"])
+    assert f"FAIL 1 entry sits at the root of docs/quests under a format {quest.FORMAT} log  (quest doctor --fix)" in capsys.readouterr().out
     with pytest.raises(SystemExit):
         quest.main(["doctor", "--fix"])
-    assert _fm(qdir / "2609011001-bb-fresh")["history"][0]["state"] == "backlog"
-    # a format 5 page dropped under a format 6 header
-    _format5_page(qdir, "2609011002-cc", "Late", state="backlog")
+    assert not c.exists() and (qdir / "backlog" / c.name / "quest.md").is_file()
+    # no header, entries at the root: the pages and their places decide
+    (qdir / "README.md").unlink()
+    _make(qdir, "2609011003-dd", "Fresh", state="backlog", bucket="")
     with pytest.raises(SystemExit) as e:
-        quest.main(["doctor"])
-    assert f"1 page is format 5 under a format {quest.FORMAT} log" in capsys.readouterr().out
-    with pytest.raises(SystemExit) as e:
+        quest.main(["log"])
+    assert e.value.code == 2 and "format 6" in capsys.readouterr().err
+    with pytest.raises(SystemExit):
         quest.main(["doctor", "--fix"])
-    assert e.value.code == 1 and "history" in _fm(qdir / "2609011002-cc-late")   # only the CLAUDE.md rows are left failing
+    assert (qdir / "backlog" / "2609011003-dd-fresh" / "quest.md").is_file()
+    # a format 6 header over entries that are all placed: the count is zero and --fix rewrites the header alone
+    _log_header(qdir, 6)
+    with pytest.raises(SystemExit):
+        quest.main(["doctor"])
+    assert "FAIL tracker is format 6 (0 entries at the root of docs/quests)  (quest doctor --fix)" in capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        quest.main(["doctor", "--fix"])
+    assert f"format {quest.FORMAT}" in (qdir / "README.md").read_text()
 
 
-def test_format_below_5_points_at_tag(tmp_path, monkeypatch, capsys):
+def test_format_below_6_points_at_tag(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     qdir = tmp_path / "docs" / "quests"
-    old = _format5_page(qdir, "2609011000-aa", "Old done", kind="chore", state="done", plan_closed="x")
-    page = (old / "quest.md").read_text()
-    for header in ("# Quest log\n\n<!-- questlog format 3, written by questlog old on 2026-09-04 -->\n", "Not our file\n", None):
+    old = qdir / "2609011000-aa-old"; old.mkdir(parents=True)
+    page = "---\nid: 2609011000-aa\ntitle: Old\nkind: chore\nstate: backlog\ncreated: '2026-09-04T00:00:00Z'\n---\n## Goal\n\ng\n"
+    (old / "quest.md").write_text(page)
+    for header in (5, 3, None):
         if header is None:
             (qdir / "README.md").unlink()
         else:
-            (qdir / "README.md").write_text(header)
+            _log_header(qdir, header)
         with pytest.raises(SystemExit) as e:
             quest.main(["log"])
-        assert e.value.code == 2 and "migrate with questlog format-5 first" in capsys.readouterr().err, header
-        with pytest.raises(SystemExit) as e:
+        err = capsys.readouterr().err
+        assert e.value.code == 2 and "migrate with questlog format-6 first" in err, header
+        assert (f"format {header}" if header else "format below 6") in err, header
+        with pytest.raises(SystemExit):
             quest.main(["doctor", "--fix"])
-        out = capsys.readouterr().out
-        assert "predates format 5  (migrate with questlog format-5 first)" in out or "not a quest log" in out, header
-        assert (old / "quest.md").read_text() == page, header                      # never rewritten
-    # a format 4 page (implement_drafted) under no header is older too
+        assert "FAIL 1 quest.md file predates format 6  (migrate with questlog format-6 first)" in capsys.readouterr().out, header
+        assert (old / "quest.md").read_text() == page and old.parent == qdir, header   # never rewritten, never moved
+    # the older marks are format cases too
+    for marks in ("state: done\n", "plan_closed: x\n", "implement_drafted: x\n"):
+        (old / "quest.md").write_text(page.replace("state: backlog\n", marks if "state" in marks else "state: backlog\n" + marks))
+        with pytest.raises(SystemExit) as e:
+            quest.main(["log"])
+        assert e.value.code == 2 and "format-6" in capsys.readouterr().err, marks
+    # a header below 6 with no pages at all is still refused by the header
     (old / "quest.md").unlink(); old.rmdir()
-    _format5_page(qdir, "2609011001-bb", "Format four", state="active", started="x", plan_accepted="x", implement_drafted="x")
-    with pytest.raises(SystemExit) as e:
-        quest.main(["log"])
-    assert e.value.code == 2 and "format-5" in capsys.readouterr().err
-    # a header below 5 with no pages at all is still refused by the header
-    (qdir / "2609011001-bb-format-four" / "quest.md").unlink(); (qdir / "2609011001-bb-format-four").rmdir()
-    (qdir / "README.md").write_text("# Quest log\n\n<!-- questlog format 4, written by questlog old on 2026-09-04 -->\n")
+    _log_header(qdir, 4)
     with pytest.raises(SystemExit) as e:
         quest.main(["log"])
     assert e.value.code == 2 and "this tracker is format 4" in capsys.readouterr().err
 
 
-def _history(fm):
-    return [(e["state"], e.get("skipped", False)) for e in fm["history"]]
-
-
-def test_format_6_frontmatter_mapping():
-    f6 = quest.format_6_frontmatter
-    base = {"id": "2609011000-aa", "title": "T", "created": "2026-09-01T00:00:00Z"}
-    # never-started quest
-    out = f6({**base, "kind": "quest", "state": "backlog"})
-    assert out == {"id": "2609011000-aa", "title": "T", "kind": "quest", "state": "backlog", "history": [quest.entry("2026-09-01T00:00:00Z", "backlog")]}
-    # never-started chore: six skipped entries and resume at plan
-    out = f6({**base, "kind": "chore", "state": "backlog"})
-    assert out["state"] == "backlog" and out["resume"] == "plan"
-    assert _history(out) == [("backlog", False)] + [(n, True) for n in ("draft goal", "review goal", *quest.CHORE_SKIPS)]
-    assert all(e.get("note") == "chore under format 5" for e in out["history"] if e.get("skipped"))
-    # active quest at goal, no ready stamp
-    out = f6({**base, "kind": "quest", "state": "active", "started": "2026-09-01T01:00:00Z"})
-    assert out["state"] == "draft goal" and _history(out) == [("backlog", False), ("draft goal", False)] and "resume" not in out
-    # active quest, goal drafted: review goal
-    out = f6({**base, "kind": "quest", "state": "active", "started": "2026-09-01T01:00:00Z", "goal_drafted": "2026-09-01T02:00:00Z"})
-    assert out["state"] == "review goal" and out["history"][-1]["at"] == "2026-09-01T02:00:00Z"
-    # research skipped: two skipped entries at the time the machine reached research, then design
-    out = f6({**base, "kind": "quest", "state": "active", "started": "2026-09-01T01:00:00Z", "goal_drafted": "2026-09-01T02:00:00Z",
-              "goal_accepted": "2026-09-01T03:00:00Z", "research_skipped": "2026-09-01T03:30:00Z"})
-    assert out["state"] == "design"
-    assert _history(out)[-3:] == [("research", True), ("review research", True), ("design", False)]
-    assert out["history"][-2]["at"] == "2026-09-01T03:00:00Z" and out["history"][-2]["note"] == "skipped"
-    # the mf shape: plan_skipped dated after implement_built, active with implement_built
-    mf = {**base, "kind": "quest", "state": "active", "started": "2026-09-02T01:28:19Z",
-          "goal_drafted": "2026-09-02T01:28:19Z", "goal_accepted": "2026-09-02T01:28:19Z",
-          "research_drafted": "2026-09-02T01:53:07Z", "research_accepted": "2026-09-02T01:53:07Z",
-          "design_drafted": "2026-09-02T02:22:13Z", "design_accepted": "2026-09-02T02:22:13Z",
-          "implement_built": "2026-09-02T02:39:42Z", "plan_skipped": "2026-09-04T23:44:35Z", "plan_note": "predates the plan stage (format 2)"}
-    out = f6(mf)
-    assert out["state"] == "review implementation"
-    assert [e["state"] for e in out["history"]] == ["backlog", "draft goal", "review goal", "research", "review research", "design", "review design", "plan", "review plan", "implement", "review implementation"]
-    plan = next(e for e in out["history"] if e["state"] == "plan")
-    assert plan["skipped"] and plan["note"] == "predates the plan stage (format 2)" and plan["at"] == "2026-09-02T02:22:13Z"   # not the stamp's time
-    assert out["history"][-1]["at"] == "2026-09-02T02:39:42Z"
-    # completed chore: every stage accepted, review_drafted dropped, history ends completed at review_accepted
-    out = f6({**base, "kind": "chore", "state": "completed", "started": "t1", "plan_drafted": "t2", "plan_accepted": "t3",
-              "implement_built": "t4", "implement_accepted": "t5", "review_drafted": "t6", "review_accepted": "t7"})
-    assert out["state"] == "completed" and "resume" not in out
-    assert [e["state"] for e in out["history"] if not e.get("skipped")] == ["backlog", "plan", "review plan", "implement", "review implementation", "evaluate goal", "completed"]
-    assert out["history"][-1]["at"] == "t7" and out["history"][-2]["at"] == "t5"
-    # completed with thin stamps: state said completed, no started
-    out = f6({**base, "kind": "quest", "state": "completed", "review_accepted": "t9"})
-    assert out["state"] == "completed" and _history(out) == [("backlog", False), ("completed", False)]
-    # deferred at review plan, then never resumed: backlog with resume, non-monotonic times accepted
-    out = f6({**base, "kind": "quest", "state": "backlog", "started": "2026-09-05T00:00:00Z", "goal_drafted": "t", "goal_accepted": "t",
-              "research_skipped": "t", "design_drafted": "t", "design_accepted": "t", "plan_drafted": "2026-09-01T00:00:00Z", "deferred": "2026-09-06T00:00:00Z"})
-    assert out["state"] == "backlog" and out["resume"] == "review plan" and out["history"][-1] == quest.entry("2026-09-06T00:00:00Z", "backlog")
-    # abandoned after deferral: no resume survives
-    out = f6({**base, "kind": "quest", "state": "abandoned", "started": "t", "deferred": "t2", "abandoned": "t3", "abandoned_reason": "no"})
-    assert out["state"] == "abandoned" and "resume" not in out and out["history"][-1] == quest.entry("t3", "abandoned", note="no")
-    # never-started chore abandoned
-    out = f6({**base, "kind": "chore", "state": "abandoned", "abandoned": "t3", "abandoned_reason": "no"})
-    assert out["state"] == "abandoned" and "resume" not in out
-
-
-def test_doctor_reports_old_format_and_fix_migrates_pages(tmp_path, monkeypatch, capsys):
-    """The report lists the mapped state of every page before anything is written; --fix writes exactly that."""
-    qdir, made = _fresh_format5_tracker(
-        tmp_path, monkeypatch,
-        **{"2609011000-aa": {"title": "At plan", "state": "active", "started": "t", "goal_drafted": "t", "goal_accepted": "t", "research_skipped": "t", "design_drafted": "t", "design_accepted": "t"},
-           "2609011001-cc": {"title": "Thin", "kind": "chore", "state": "completed", "review_accepted": "2026-09-03T00:00:00Z"},
-           "2609011002-ee": {"title": "Never", "kind": "chore", "state": "backlog"}})
+def test_doctor_places_a_half_moved_entry(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    quest.main(["init"])
+    qdir = tmp_path / "docs" / "quests"
     (tmp_path / "CLAUDE.md").write_text(quest.CLAUDE_MD_PARAGRAPH.lstrip("\n"))
     _git_commit_all(tmp_path)
+    # the page says completed but the directory never moved: the verbs still find it, the doctor names it, --fix moves it
+    half = _make(qdir, "2609011000-aa", "Half", state="completed", bucket="active")
+    quest.main(["log"]); capsys.readouterr()
+    quest.main(["2609011000-aa"])
+    assert "2609011000-aa is completed." in capsys.readouterr().out
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor"])
     out = capsys.readouterr().out
     assert e.value.code == 1
-    assert "FAIL tracker is format 5 (3 pages)" in out
-    assert "     2609011000-aa: plan\n" in out and "     2609011001-cc: completed\n" in out and "     2609011002-ee: backlog, resume at plan\n" in out
-    assert "(was" not in out                                    # completed stays completed, active is not a format 6 state
-    assert "created" in _fm(made["2609011000-aa"])              # nothing written yet
+    assert "FAIL every entry sits under the directory named for its state; misplaced: 2609011000-aa (active/ -> completed/)  (quest doctor --fix)" in out
+    assert "ok   1 quest.md files valid" in out
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor", "--fix"])
-    out = capsys.readouterr().out
-    assert e.value.code == 0, out
-    assert _fm(made["2609011000-aa"])["state"] == "plan" and _fm(made["2609011002-ee"])["resume"] == "plan"
-    assert set(_fm(made["2609011001-cc"])) == {"id", "title", "kind", "state", "history"}
-    assert f"<!-- questlog format {quest.FORMAT}" in (qdir / "README.md").read_text()
-    quest.main(["2609011002-ee", "start"])
-    assert _fm(made["2609011002-ee"])["state"] == "plan"        # resumed at plan, not draft goal
-    # a page whose old state disagrees with its stamps shows (was OLD)
-    _format5_page(qdir, "2609011003-ff", "Odd", state="active", started="t", goal_drafted="t", goal_accepted="t", research_drafted="t", research_accepted="t",
-                  design_drafted="t", design_accepted="t", plan_drafted="t", plan_accepted="t", implement_built="t", implement_accepted="t", review_accepted="t")
+    assert e.value.code == 0
+    assert not half.exists() and (qdir / "completed" / half.name / "quest.md").is_file()
+    # the same name already in the destination: --fix refuses and leaves both
+    again = _make(qdir, "2609011000-aa", "Half", state="completed", bucket="active")
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor", "--fix"])
+    out = capsys.readouterr()
+    assert e.value.code == 1 and "misplaced: 2609011000-aa" in out.out and "refusing to move" in out.err and "completed/2609011000-aa-half exists" in out.err
+    assert again.is_dir() and (qdir / "completed" / half.name).is_dir()
+    again.joinpath("quest.md").unlink(); again.rmdir()
+    # a page with a state the machine does not know has no bucket: the frontmatter row names it, the placement row does not
+    odd = _make(qdir, "2609011001-bb", "Odd", state="paused", bucket="active")
     with pytest.raises(SystemExit):
         quest.main(["doctor"])
-    assert "     2609011003-ff: completed (was active)" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert f"FAIL active/{odd.name}/quest.md frontmatter invalid" in out and "ok   every entry sits under the directory named for its state" in out
+    quest.main(["log"])                                           # the verbs work around it
+    # the same page at the root is not a format case either
+    odd.rename(qdir / odd.name)
+    quest.main(["log"]); capsys.readouterr()
+    with pytest.raises(SystemExit):
+        quest.main(["doctor"])
+    out = capsys.readouterr().out
+    assert f"ok   quest log format {quest.FORMAT}" in out and f"FAIL {odd.name}/quest.md frontmatter invalid" in out
+
+
+def test_bucket_dirs_are_not_entries(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch)
+    for name in quest.BUCKETS:
+        (qdir / name).mkdir(exist_ok=True)
+    (qdir / "stray").mkdir(); (qdir / "active" / "2609019999-zz-stray").mkdir()
+    (tmp_path / "CLAUDE.md").write_text(quest.CLAUDE_MD_PARAGRAPH.lstrip("\n"))
+    _git_commit_all(tmp_path); capsys.readouterr()
+    quest.main(["log"])
+    out = capsys.readouterr().out
+    assert qid in out and "stray" not in out
+    with pytest.raises(SystemExit):
+        quest.main(["doctor"])
+    out = capsys.readouterr().out
+    assert "FAIL stray/ has no quest.md" in out and "FAIL active/2609019999-zz-stray/ has no quest.md" in out
+    assert "active/ has no quest.md" not in out and "backlog/ has no quest.md" not in out and "abandoned/ has no quest.md" not in out
+    assert "ok   every entry sits under the directory named for its state" in out
+    _make(qdir, "2609011000-aa", "Done", state="completed")
+    _make(qdir, "2609011001-bb", "Dropped", state="abandoned")
+    assert quest.existing_ids(qdir) == {qid, "2609011000-aa", "2609011001-bb", "2609019999-zz"}   # a directory name is taken, page or not
 
 
 def test_stale_ask_rules_are_dropped(tmp_path, monkeypatch, capsys):

@@ -7,9 +7,10 @@
 
 A quest moves through one flat machine of states, from draft goal to
 evaluate goal. The agent writes each state's file and moves on; the creator
-reviews and moves on. Every quest or chore is a directory under docs/quests/
-holding quest.md and its stage files. The quest log, docs/quests/README.md,
-is generated.
+reviews and moves on. Every quest or chore is a directory under
+docs/quests/STATE/, where STATE is active, backlog, completed, or abandoned,
+holding quest.md and its stage files; the verbs move the directory when the
+state changes. The quest log, docs/quests/README.md, is generated.
 """
 
 import argparse
@@ -27,7 +28,7 @@ from pathlib import Path
 
 import yaml
 
-FORMAT = 6
+FORMAT = 7
 ROOT_NAME = "docs/quests"
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 # Lowercase alphanumerics without the characters that read alike: 0 1 i l o.
@@ -37,6 +38,10 @@ SHAPE = re.compile(r"^\d{1,10}(-\S*)?$")   # an id prefix, or a directory-name p
 KINDS = ("quest", "chore")
 BACKLOG, COMPLETED, ABANDONED = "backlog", "completed", "abandoned"
 FINISHED = (COMPLETED, ABANDONED)
+ACTIVE = "active"                           # the directory for every machine state
+BUCKETS = (ACTIVE, BACKLOG, COMPLETED, ABANDONED)
+GUIDANCE_DIR = "guidance"                   # docs/quests/guidance/STAGE.md: a project's own rules for a stage, read after the reference file
+RESERVED = (*BUCKETS, GUIDANCE_DIR)         # names under docs/quests/ that are never an entry
 HISTORY_LIMIT = 10
 SLUG_MAX = 40
 GENERATED_HEAD = "# Quest log\n"
@@ -201,7 +206,72 @@ def new_id(existing: set[str], now: datetime | None = None, rng: random.Random |
 
 
 def existing_ids(qdir: Path) -> set[str]:
-    return {p.name[:13] for p in qdir.iterdir() if p.is_dir() and ID_RE.match(p.name[:13])} if qdir.is_dir() else set()
+    return {d.name[:13] for d in entry_dirs(qdir) if ID_RE.match(d.name[:13])}
+
+
+# --- where an entry lives ------------------------------------------------------
+
+
+def entry_dirs(qdir: Path) -> list[Path]:
+    """Every directory that may be an entry, sorted: the children of docs/quests/ that are not reserved names, and the children of each bucket."""
+    if not qdir.is_dir():
+        return []
+    out = [p for p in qdir.iterdir() if p.is_dir() and p.name not in RESERVED]
+    for bucket in BUCKETS:
+        if (qdir / bucket).is_dir():
+            out += [p for p in (qdir / bucket).iterdir() if p.is_dir()]
+    return sorted(out)
+
+
+def bucket(fm: dict) -> str | None:
+    """The directory an entry belongs in, from its state; None for a state the machine does not know."""
+    state = str(fm.get("state"))
+    if state in BY_NAME:
+        return ACTIVE
+    return state if state in (BACKLOG, *FINISHED) else None
+
+
+def home(qdir: Path, d: Path, fm: dict) -> Path:
+    """Where the entry belongs; callers pass only an entry whose bucket is not None."""
+    return qdir / str(bucket(fm)) / d.name
+
+
+def misplaced(qdir: Path) -> list[tuple[Path, dict]]:
+    """The loaded entries that do not sit in the bucket their state names. An entry at the root of docs/quests/ counts."""
+    return [(d, fm) for d, fm in load_quests(qdir) if bucket(fm) and d.parent != qdir / str(bucket(fm))]
+
+
+def at_root(qdir: Path) -> list[tuple[Path, dict]]:
+    """The bucketed entries directly under docs/quests/: the format 6 layout."""
+    return [(d, fm) for d, fm in load_quests(qdir) if bucket(fm) and d.parent == qdir]
+
+
+def move_entry(qdir: Path, d: Path, fm: dict) -> Path:
+    """Move the entry to the bucket its state names, and return where it is now. A target that exists refuses."""
+    target = home(qdir, d, fm)
+    if d == target:
+        return d
+    safe_write_path(qdir, d)
+    safe_write_path(qdir, target)
+    if os.path.lexists(target):
+        die(f"refusing to move {d.name}: {log_link(target).rstrip('/')} exists")
+    target.parent.mkdir(exist_ok=True)
+    d.rename(target)
+    return target
+
+
+def place_entries(root: Path) -> int:
+    """The doctor's repair for entries out of place: move each, then write the log. Returns how many moved."""
+    qdir = tracker_gate(root)
+    moved = 0
+    for d, fm in misplaced(qdir):
+        new = move_entry(qdir, d, fm)
+        print(f"quest: {fm['id']} -> {new.parent.name}/", file=sys.stderr)
+        moved += 1
+    write_log(root)
+    if moved:
+        print(f"quest: moved {entries(moved)} into the directory named for the state", file=sys.stderr)
+    return moved
 
 
 # --- pages ------------------------------------------------------------------
@@ -254,13 +324,11 @@ def quest_body(goal: str, done_when: str) -> str:
 
 def load_quests(qdir: Path) -> list[tuple[Path, dict]]:
     out = []
-    if not qdir.is_dir():
-        return out
-    for d in sorted(qdir.iterdir()):
+    for d in entry_dirs(qdir):
         page = d / "quest.md"
         if d.is_symlink() or page.is_symlink():
             continue
-        if d.is_dir() and page.is_file():
+        if page.is_file():
             try:
                 fm, _ = parse_page(page.read_text(encoding="utf-8"))
             except (OSError, UnicodeDecodeError):
@@ -313,117 +381,21 @@ def current(history: list[dict]) -> str:
 
 def append_history(fm: dict, name: str, skipped: bool = False, note: str | None = None, at: str | None = None) -> list[dict]:
     return [*(fm.get("history") or []), entry(at or now_iso(), name, skipped, note)]
+def predates_format_6(fm: dict) -> bool:
+    """A page written by a plugin before format 6: the format 5 shape (five keys, a known kind, no history) or an older mark.
 
-
-def predates_format_4(fm: dict) -> bool:
-    """Frontmatter written before format 4: the state `done` or any `STAGE_closed` key."""
-    return fm.get("state") == "done" or any(k.endswith("_closed") for k in fm)
-
-
-def predates_format_5(fm: dict) -> bool:
-    """Frontmatter written before format 5: the stamp `implement_drafted`, which format 5 renamed to `implement_built`."""
-    return "implement_drafted" in fm
-
-
-def is_format_5(fm: dict) -> bool:
-    """A format 5 page: no history, the five format 5 keys, a known kind, and neither older mark."""
-    return ("history" not in fm and {"id", "title", "kind", "state", "created"} <= fm.keys()
-            and fm.get("kind") in KINDS and not predates_format_4(fm) and not predates_format_5(fm))
+    A page that is neither, such as a hand-broken one, is not a format case; the doctor's frontmatter row names it."""
+    if fm.get("state") == "done" or any(k.endswith("_closed") for k in fm) or "implement_drafted" in fm:
+        return True
+    return "history" not in fm and {"id", "title", "kind", "state", "created"} <= fm.keys() and fm.get("kind") in KINDS
 
 
 def plural(n: int, noun: str) -> str:
     return f"{n} {noun}{'' if n == 1 else 's'}"
 
 
-# --- format 5 to 6 ------------------------------------------------------------
-
-STAGES_5 = {"quest": ("goal", "research", "design", "plan", "implement", "review"), "chore": ("plan", "implement", "review")}
-WORK = {"goal": "draft goal", "research": "research", "design": "design", "plan": "plan", "implement": "implement", "review": "evaluate goal"}
-REVIEW = {"goal": "review goal", "research": "review research", "design": "review design", "plan": "review plan", "implement": "review implementation", "review": None}
-READY5 = {"implement": "implement_built"}   # every other stage's ready stamp was STAGE_drafted
-
-
-def format_6_frontmatter(fm: dict) -> dict:
-    """A format 5 page as format 6: state, resume when it applies, and a history built in machine order from the stamps.
-
-    Machine order, not time order: the format 2 migration dated `plan_skipped`
-    at migration time, after `implement_built` on three pages, so a skipped
-    stage takes the time the machine reached it and keeps its own stamp only
-    as a note. Stamps win over the page's `state`; nothing reads the times as
-    an order.
-    """
-    kind = str(fm.get("kind", "quest"))
-    stages = STAGES_5.get(kind, STAGES_5["quest"])
-    created = str(fm.get("created", ""))
-    hist = [entry(created, BACKLOG)]
-    if kind == "chore":
-        hist += [entry(created, n, True, "chore under format 5") for n in ("draft goal", "review goal", *CHORE_SKIPS)]
-    resume = None
-    if "started" in fm:
-        t = str(fm["started"])
-        for st in stages:
-            if f"{st}_skipped" in fm:
-                note = str(fm.get(f"{st}_note") or "skipped")
-                hist.append(entry(t, WORK[st], True, note))
-                if REVIEW[st]:
-                    hist.append(entry(t, REVIEW[st], True, note))
-                continue                                   # the next stage is entered at the same t
-            hist.append(entry(t, WORK[st]))
-            ready = fm.get(READY5.get(st, f"{st}_drafted"))
-            if ready and REVIEW[st]:
-                hist.append(entry(str(ready), REVIEW[st]))
-            if f"{st}_accepted" not in fm:
-                break
-            t = str(fm[f"{st}_accepted"])
-        else:
-            hist.append(entry(t, COMPLETED))               # every stage accepted; t is review_accepted
-        if "deferred" in fm:
-            resume = current(hist)
-            hist.append(entry(str(fm["deferred"]), BACKLOG))
-    elif kind == "chore":
-        resume = "plan"
-    if "review_accepted" in fm and current(hist) != COMPLETED:   # state said completed, stamps were thin
-        hist.append(entry(str(fm["review_accepted"]), COMPLETED))
-    if "abandoned" in fm:
-        hist.append(entry(str(fm["abandoned"]), ABANDONED, note=fm.get("abandoned_reason") or None))
-    state = current(hist)
-    out = {"id": fm["id"], "title": fm.get("title", ""), "kind": kind, "state": state}
-    if resume and state == BACKLOG:
-        out["resume"] = resume
-    out["history"] = hist
-    return out
-
-
-def mapping_line(fm: dict, new: dict) -> str:
-    """`ID: STATE`, with `(was OLD)` when the page's old state disagrees with its stamps and `, resume at X` when one applies."""
-    old = str(fm.get("state"))
-    agrees = new["state"] in BY_NAME if old == "active" else old == new["state"]
-    was = "" if agrees else f" (was {old})"
-    return f"{fm['id']}: {new['state']}{was}" + (f", resume at {new['resume']}" if new.get("resume") else "")
-
-
-def mapping_lines(qdir: Path) -> list[str]:
-    """One line per format 5 page: what the migration would make of it."""
-    return [mapping_line(fm, format_6_frontmatter(fm)) for _, fm in load_quests(qdir) if is_format_5(fm)]
-
-
-def rename_to_format_6(root: Path) -> int:
-    """Rewrite every format 5 page as format 6 and write the log. Returns how many changed. Pages older than format 5 refuse the run."""
-    qdir = tracker_gate(root)
-    pre5, _ = page_formats(qdir)
-    if pre5:
-        die(f"{plural(pre5, 'quest.md file')} {'predates' if pre5 == 1 else 'predate'} format 5; {SUB5}", 2)
-    changed = 0
-    for d, fm in load_quests(qdir):
-        if is_format_5(fm):
-            new = format_6_frontmatter(fm)
-            update_quest(d, new, replace=True)
-            print(f"quest: {mapping_line(fm, new)}", file=sys.stderr)
-            changed += 1
-    write_log(root)
-    if changed:
-        print(f"quest: migrated {plural(changed, 'quest.md file')} from format 5 to {FORMAT}", file=sys.stderr)
-    return changed
+def entries(n: int) -> str:
+    return f"{n} {'entry' if n == 1 else 'entries'}"
 
 
 def resolve(qdir: Path, prefix: str) -> tuple[Path, dict]:
@@ -477,16 +449,21 @@ def history_rows(quests: list[tuple[Path, dict]], include_abandoned: bool = Fals
     return [table_row(d, fm, str(fm.get("state")), str(last_entry(fm).get("at", ""))[:10]) for d, fm in rows[:limit]]
 
 
+def log_link(d: Path) -> str:
+    """The entry's directory relative to docs/quests/, with a trailing slash: `active/ID-slug/`, or `ID-slug/` for an entry at the root."""
+    return f"{d.parent.name}/{d.name}/" if d.parent.name in BUCKETS else f"{d.name}/"
+
+
 def table_row(d: Path, fm: dict, *cells: str) -> tuple[str, ...]:
     """(id, directory, kind, CELLS..., title)."""
-    return (str(fm["id"]), d.name, str(fm.get("kind", "quest")), *cells, str(fm.get("title", "")))
+    return (str(fm["id"]), log_link(d), str(fm.get("kind", "quest")), *cells, str(fm.get("title", "")))
 
 
 def log_lines(quests: list[tuple[Path, dict]]) -> list[str]:
     """Markdown table rows, one per open entry. The id links to the directory. A pipe in a title is escaped."""
     def cell(title: str) -> str:
         return " ".join(title.split()).replace("|", "\\|")   # one line, pipes escaped
-    return [f"| [{qid}]({dirname}/) | {kind} | {state} | {cell(title)} |" for qid, dirname, kind, state, title in log_rows(quests)]
+    return [f"| [{qid}]({link}) | {kind} | {state} | {cell(title)} |" for qid, link, kind, state, title in log_rows(quests)]
 
 
 LOG_TABLE_HEAD = "| Id | Kind | State | Title |\n|---|---|---|---|"
@@ -555,21 +532,21 @@ def read_format(qdir: Path) -> int | None:
     return 0 if text.lstrip().startswith(GENERATED_HEAD.strip()) else None
 
 
-SUB5 = "migrate with questlog format-5 first"
-F5 = "run: quest doctor --fix"
+SUB6 = "migrate with questlog format-6 first"
+F6 = "run: quest doctor --fix"
 
 
-def page_formats(qdir: Path) -> tuple[int, int]:
-    """(pages older than format 5, format 5 pages) among the tracker's pages."""
-    pages = [fm for _, fm in load_quests(qdir)]
-    return sum(1 for fm in pages if predates_format_4(fm) or predates_format_5(fm)), sum(1 for fm in pages if is_format_5(fm))
+def pre6_pages(qdir: Path) -> int:
+    """How many of the tracker's pages predate format 6."""
+    return sum(1 for _, fm in load_quests(qdir) if predates_format_6(fm))
 
 
 def check_format(root: Path) -> None:
-    """Refuse data newer than this script, and data older than it; the doctor migrates format 5, nothing migrates below that.
+    """Refuse data newer than this script, and data older than it; the doctor migrates format 6, nothing migrates below that.
 
-    The format number lives in the log header, but the data that changes lives
-    in each quest.md, so with no header the pages decide.
+    The format number lives in the log header, but what changed between 6 and
+    7 is where each quest.md sits, so with no header the pages and their
+    places decide.
     """
     qdir = tracker_gate(root)          # every verb writes through here, so a linked docs or tracker is refused before anything is read or created
     if not qdir.exists():
@@ -577,11 +554,10 @@ def check_format(root: Path) -> None:
     found = read_format(qdir)
     if found is not None and found > FORMAT:
         die(f"this repository was last written by a newer questlog (format {found}, this is {FORMAT}); update the plugin", 2)
-    pre5, f5 = page_formats(qdir)
-    if pre5 or (found is not None and found < 5):
-        die(f"this tracker is format {found if found is not None and found < 5 else 'below 5'}; {SUB5}", 2)
-    if f5 or found == 5:
-        die(f"this tracker is format 5; {F5}", 2)
+    if pre6_pages(qdir) or (found is not None and found < 6):
+        die(f"this tracker is format {found if found is not None and found < 6 else 'below 6'}; {SUB6}", 2)
+    if at_root(qdir) or found == 6:
+        die(f"this tracker is format 6; {F6}", 2)
 
 
 # --- init and doctor --------------------------------------------------------
@@ -768,20 +744,17 @@ def git_add(root: Path, paths: list[str]) -> None:
 
 
 def regenerate_tracker(root: Path) -> None:
-    """The doctor's repair for a stale tracker: rewrite the log. A log that is not ours, or is newer, and pages below format 5 are left alone."""
+    """The doctor's repair for a stale tracker: place the entries and rewrite the log. A log that is not ours, or is newer, and pages below format 6 are left alone."""
     qdir = tracker_gate(root)
     found = read_format(qdir)
     if found is None and os.path.lexists(qdir / "README.md"):
         die(f"refusing to rewrite {ROOT_NAME}/README.md: it is not a quest log, or cannot be read")
     if found is not None and found > FORMAT:
         die(f"refusing to rewrite a log written by a newer questlog (format {found}, this is {FORMAT}); update the plugin", 2)
-    pre5, f5 = page_formats(qdir)
-    if pre5:
-        die(f"{plural(pre5, 'quest.md file')} {'predates' if pre5 == 1 else 'predate'} format 5; {SUB5}", 2)
-    if f5 or found == 5:
-        rename_to_format_6(root)       # writes the log too
-    else:
-        write_log(root)
+    pre6 = pre6_pages(qdir)
+    if pre6:
+        die(f"{plural(pre6, 'quest.md file')} {'predates' if pre6 == 1 else 'predate'} format 6; {SUB6}", 2)
+    place_entries(root)                # writes the log too
 
 
 def doctor_checks(root: Path) -> list[Row]:
@@ -795,22 +768,27 @@ def doctor_checks(root: Path) -> list[Row]:
         return [row(False, f"{ROOT_NAME}/ exists", "quest init")]
     found = read_format(qdir)
     quests = load_quests(qdir)
-    pre5 = sum(1 for _, fm in quests if predates_format_4(fm) or predates_format_5(fm))
-    f5 = sum(1 for _, fm in quests if is_format_5(fm))
+    pre6 = sum(1 for _, fm in quests if predates_format_6(fm))
+    root_entries = at_root(qdir)
     if found is None and os.path.lexists(qdir / "README.md"):
         rows.append(row(False, f"{ROOT_NAME}/README.md is not a quest log, or cannot be read", "fix it by hand"))
     elif found is not None and found > FORMAT:
         rows.append(row(False, f"quest log format {found} is newer than this plugin's {FORMAT}", "update the plugin"))
-    elif pre5 or (found is not None and found < 5):
-        rows.append(row(False, f"{plural(pre5, 'quest.md file')} {'predates' if pre5 == 1 else 'predate'} format 5" if pre5 else f"quest log format {found} is below 5", SUB5))
-    elif f5 or found == 5:
-        label = f"tracker is format 5 ({plural(f5, 'page')})" if found != FORMAT else f"{plural(f5, 'page')} {'is' if f5 == 1 else 'are'} format 5 under a format {FORMAT} log"
-        rows.append(row(False, label, "quest doctor --fix", regenerate_tracker, tuple(mapping_lines(qdir))))
+    elif pre6 or (found is not None and found < 6):
+        rows.append(row(False, f"{plural(pre6, 'quest.md file')} {'predates' if pre6 == 1 else 'predate'} format 6" if pre6 else f"quest log format {found} is below 6", SUB6))
+    elif root_entries or found == 6:
+        n = len(root_entries)
+        label = f"tracker is format 6 ({entries(n)} at the root of {ROOT_NAME})" if found != FORMAT else f"{entries(n)} {'sits' if n == 1 else 'sit'} at the root of {ROOT_NAME} under a format {FORMAT} log"
+        rows.append(row(False, label, "quest doctor --fix", regenerate_tracker, tuple(f"{fm['id']} -> {bucket(fm)}/" for _, fm in root_entries)))
     elif found is None:
         rows.append(row(False, "quest log exists", "quest doctor --fix", regenerate_tracker))
     else:
         rows.append(row(True, f"quest log format {found}"))
     format_ok = rows[-1][0]
+    if format_ok:
+        out_of_place = misplaced(qdir)
+        detail = "; ".join(f"{fm['id']} ({d.parent.name}/ -> {bucket(fm)}/)" for d, fm in out_of_place)
+        rows.append(row(not out_of_place, "every entry sits under the directory named for its state" + (f"; misplaced: {detail}" if detail else ""), "quest doctor --fix", place_entries))
     overlay_dir = qdir / GUIDANCE_DIR
     if overlay_dir.is_dir():
         references = {s.reference for s in STATES}
@@ -818,24 +796,25 @@ def doctor_checks(root: Path) -> list[Row]:
         rows.append(row(not stray, f"{GUIDANCE_DIR}/ holds only STAGE.md files" + (f"; stray: {', '.join(stray)}" if stray else ""), "name overlays after a stage, or remove them"))
     bad = 0
     loaded = {d: fm for d, fm in quests}
-    for d in sorted(p for p in qdir.iterdir() if p.is_dir() and p.name != GUIDANCE_DIR):
+    for d in entry_dirs(qdir):
+        name = log_link(d).rstrip("/")
         page = d / "quest.md"
         if not page.is_file():
-            rows.append(row(False, f"{d.name}/ has no quest.md", "add one or remove the directory")); bad += 1; continue
+            rows.append(row(False, f"{name}/ has no quest.md", "add one or remove the directory")); bad += 1; continue
         if d not in loaded:
-            rows.append(row(False, f"{d.name}/quest.md is not UTF-8 or cannot be read", "fix it by hand")); bad += 1; continue
+            rows.append(row(False, f"{name}/quest.md is not UTF-8 or cannot be read", "fix it by hand")); bad += 1; continue
         fm = loaded[d]
-        if is_format_5(fm) or predates_format_4(fm) or predates_format_5(fm):
+        if predates_format_6(fm):
             continue                                    # the format row counts these
         missing = [k for k in REQUIRED_KEYS if k not in fm]
         history = fm.get("history")
         history_ok = isinstance(history, list) and history and all(isinstance(e, dict) and e.get("state") and e.get("at") for e in history)
         if missing or fm.get("kind") not in KINDS or fm.get("state") not in VALID_STATES or not ID_RE.match(str(fm.get("id", ""))) or not history_ok:
-            rows.append(row(False, f"{d.name}/quest.md frontmatter invalid" + (f", missing {', '.join(missing)}" if missing else ""), "fix the frontmatter")); bad += 1
+            rows.append(row(False, f"{name}/quest.md frontmatter invalid" + (f", missing {', '.join(missing)}" if missing else ""), "fix the frontmatter")); bad += 1
         elif current(history) != fm["state"]:
-            rows.append(row(False, f"{d.name}/quest.md state {fm['state']} disagrees with its history ({current(history)})", "fix the frontmatter")); bad += 1
+            rows.append(row(False, f"{name}/quest.md state {fm['state']} disagrees with its history ({current(history)})", "fix the frontmatter")); bad += 1
         elif not d.name.startswith(str(fm["id"])):
-            rows.append(row(False, f"{d.name}/ does not start with its id {fm['id']}", "rename the directory")); bad += 1
+            rows.append(row(False, f"{name}/ does not start with its id {fm['id']}", "rename the directory")); bad += 1
     rows.append(row(bad == 0, f"{len(quests)} quest.md files valid"))
     if format_ok:
         current_log = (qdir / "README.md").read_text()
@@ -925,7 +904,6 @@ def print_memory_hits(query: str) -> None:
 # --- guidance ---------------------------------------------------------------
 
 REFERENCES = PLUGIN_ROOT / "skills" / "quest" / "references"
-GUIDANCE_DIR = "guidance"   # docs/quests/guidance/STAGE.md: a project's own rules for a stage, read after the reference file
 
 
 def print_guidance(fm: dict, root: Path) -> None:
@@ -953,17 +931,11 @@ def last_verdict(d: Path, record: str) -> str | None:
     return verdicts[-1] if verdicts else None
 
 
-def update_quest(d: Path, changes: dict, replace: bool = False) -> dict:
-    """Merge `changes` into the frontmatter, or with replace=True make `changes` the whole frontmatter. The body is kept.
-
-    In merge mode a None value in `changes` deletes that key. Replace mode keeps None as a value: the format
-    migration passes a dict loaded from the page, where an empty key such as `abandoned_reason:` is None."""
+def update_quest(d: Path, changes: dict) -> dict:
+    """Merge `changes` into the frontmatter; a None value in `changes` deletes that key. The body is kept."""
     page = safe_write_path(d.parent, d / "quest.md")
     fm, body = parse_page(page.read_text())
-    if replace:
-        fm = dict(changes)
-    else:
-        fm = {k: v for k, v in {**fm, **changes}.items() if not (k in changes and v is None)}
+    fm = {k: v for k, v in {**fm, **changes}.items() if not (k in changes and v is None)}
     page.write_text(render_page(fm, body))
     return fm
 
@@ -1004,6 +976,7 @@ def cmd_start(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     if target not in BY_NAME:
         die(f"{fm['id']} resumes at {target!r}, which is not a state; fix the frontmatter")
     fm = update_quest(d, {"state": target, "resume": None, "history": append_history(fm, target)})
+    move_entry(quests_dir(root), d, fm)
     write_log(root)
     print(say(fm))
     print_guidance(fm, root)
@@ -1015,6 +988,7 @@ def cmd_defer(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     no_args(rest, "defer")
     s = require_at_state(fm)
     fm = update_quest(d, {"state": BACKLOG, "resume": s.name, "history": append_history(fm, BACKLOG)})
+    move_entry(quests_dir(root), d, fm)
     write_log(root)
     print(say(fm))
 
@@ -1030,11 +1004,14 @@ def cmd_next(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
         if verdict and not verdict.lower().startswith("converged") and not rest:
             die(f"last verdict: {verdict}\nconfirm with the creator, then run: quest {fm['id']} next --confirmed")
     nxt = successor(fm, s.name)
-    fm = update_quest(d, {"state": nxt, "history": append_history(fm, nxt)})   # one write, so an interruption never leaves a half-moved page
+    # the page is written first and the directory follows it: an interruption between the two leaves a page whose
+    # state names one bucket while it sits in another, which the doctor's placement row names and --fix moves
+    fm = update_quest(d, {"state": nxt, "history": append_history(fm, nxt)})
+    d = move_entry(quests_dir(root), d, fm)
     write_log(root)
     print(say(fm))
     if nxt in BY_NAME and BY_NAME[nxt].nudge and shutil.which("memory"):
-        print(f"memory: what did you learn while {s.doing} on your own? One page per finding, `--ref {d.name}/{s.file}`, before the creator moves on.")
+        print(f"memory: what did you learn while {s.doing} on your own? One page per finding, `--ref {d.relative_to(root)}/{s.file}`, before the creator moves on.")
 
 
 def cmd_skip(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
@@ -1049,6 +1026,7 @@ def cmd_skip(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     nxt = successor({"history": history}, s.name)
     history = append_history({"history": history}, nxt, at=at)
     fm = update_quest(d, {"state": nxt, "history": history})
+    move_entry(quests_dir(root), d, fm)
     write_log(root)
     print(say(fm))
 
@@ -1060,8 +1038,9 @@ def cmd_abandon(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     if not reason:
         die("abandon needs a reason, in the creator's words")
     fm = update_quest(d, {"state": ABANDONED, "resume": None, "history": append_history(fm, ABANDONED, note=reason)})
+    d = move_entry(quests_dir(root), d, fm)
     write_log(root)
-    print(say(fm) + f" Files stay in {d.name}/.")
+    print(say(fm) + f" Files stay in {log_link(d)}.")
 
 
 # --- commands: quest VERB ------------------------------------------------------
@@ -1081,8 +1060,8 @@ def cmd_new(rest: list[str]) -> None:
     kind = "chore" if args.chore else "quest"
     safe_write_path(qdir, qdir / "README.md")      # refuse before creating anything if the log cannot be written
     qid = new_id(existing_ids(qdir))
-    d = safe_write_path(qdir, qdir / f"{qid}-{slugify(args.title)}")
-    d.mkdir()
+    d = safe_write_path(qdir, qdir / BACKLOG / f"{qid}-{slugify(args.title)}")
+    d.mkdir(parents=True)
     at = now_iso()
     history = [entry(at, BACKLOG)] + ([entry(at, n, skipped=True, note="chore") for n in CHORE_SKIPS] if kind == "chore" else [])
     fm = {"id": qid, "title": args.title, "kind": kind, "state": BACKLOG, "history": history}

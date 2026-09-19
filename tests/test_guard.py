@@ -25,6 +25,9 @@ def repo(tmp_path):
     d = tmp_path / "docs" / "quests" / "2609041432-7k-thing"
     d.mkdir(parents=True)
     (d / "quest.md").write_text("---\nid: 2609041432-7k\ntitle: Thing\nkind: quest\nstate: backlog\ncreated: '2026-09-04T14:32:00Z'\n---\n## Goal\n\ng\n\n## Done when\n\nd\n")
+    moved = tmp_path / "docs" / "quests" / "active" / "2609041433-8m-moved"      # an entry under a state directory, format 7
+    moved.mkdir(parents=True)
+    (moved / "quest.md").write_text("---\nid: 2609041433-8m\ntitle: Moved\nkind: quest\nstate: plan\n---\n## Goal\n\ng\n")
     (tmp_path / "docs" / "quests" / "README.md").write_text("# Quest log\n")
     return tmp_path
 
@@ -47,11 +50,16 @@ def test_allows_stage_files_and_quest_body(repo):
     q = "docs/quests/2609041432-7k-thing/"
     assert guard.decide(ev("Write", repo, file_path=q + "goal.md", content="# Goal\n")) is None
     assert guard.decide(ev("Edit", repo, file_path=q + "quest.md", old_string="## Goal\n\ng\n", new_string="## Goal\n\na better goal\n")) is None
+    m = "docs/quests/active/2609041433-8m-moved/"
+    assert guard.decide(ev("Write", repo, file_path=m + "plan.md", content="# Plan\n")) is None
+    assert guard.decide(ev("Edit", repo, file_path=m + "quest.md", old_string="## Goal\n\ng\n", new_string="## Goal\n\nmore\n")) is None
 
 
 def test_denies_frontmatter_edits(repo):
     q = "docs/quests/2609041432-7k-thing/quest.md"
     d, _ = guard.decide(ev("Edit", repo, file_path=q, old_string="state: backlog", new_string="state: active"))
+    assert d == "deny"
+    d, _ = guard.decide(ev("Edit", repo, file_path="docs/quests/active/2609041433-8m-moved/quest.md", old_string="state: plan", new_string="state: completed"))
     assert d == "deny"
     assert guard.decide(ev("Edit", repo, file_path=q, old_string="---\nid:", new_string="---\nid:")) is None   # a no-op edit changes nothing
     d, _ = guard.decide(ev("Edit", repo, file_path=q, old_string="id: 2609041432-7k", new_string="id: 2609041432-7x"))
