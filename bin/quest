@@ -117,6 +117,7 @@ USAGE = """Usage:
   quest ID abandon "reason"      terminal; files stay, the entry leaves the log
 
 States, in order: {states}
+An entry sits under docs/quests/active/, backlog/, completed/, or abandoned/; the verbs move it.
 init, new, start, defer, next, skip, and abandon prompt the creator.
 """.format(states=", ".join(s.name for s in STATES))
 
