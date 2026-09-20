@@ -1311,6 +1311,16 @@ def test_next_refuses_a_converged_diff_pass(tmp_path, monkeypatch, capsys):
     assert _fm(_at(qdir, qid))["state"] == "implement"
 
 
+def test_next_refusal_without_a_pass_heading_prints_no_last_pass(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
+    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"])
+    (d / "goal-review.md").write_text("Verdict: another pass\n"); capsys.readouterr()
+    with pytest.raises(SystemExit):
+        quest.main([qid, "next"])
+    err = capsys.readouterr().err
+    assert "last verdict: another pass" in err and "None" not in err and "last pass:" not in err
+
+
 def test_guidance_names_the_writing_skill(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _fresh(tmp_path, monkeypatch)
     quest.main([qid, "start"]); out = capsys.readouterr().out

@@ -54,7 +54,7 @@ only when it changed.
 Update the documentation the plan promised. Run the project's test suite
 and its code review skill when it has one, and fix what they find. Then
 run `quest ID next`, which enters review implementation, and run the
-review loop below.
+review loop in `review-loop.md`.
 
 ## Review
 
