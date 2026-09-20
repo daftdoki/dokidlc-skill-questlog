@@ -82,35 +82,15 @@ design space, not a line count.
 
 ## Review
 
-The completion criterion for review research: every item in the checklist
-holds. Run the loop at review research, before you ask the creator to
-move on.
+The loop, the tiers, the session's steps, the dispatch list, the
+reviewer rules, and the record template are in `review-loop.md`, read
+before this section. The reviewer is `questlog:review-research` and the
+record is `research-review.md`.
 
-The loop. Dispatch `questlog:review-research` with four paths: the stage
-file, this reference file, the prior review record `research-review.md`
-when it exists, and the root of the code the document is about. The
-reviewer reads this section, the document, and the record, and returns
-findings by tier with a verdict. You record the pass in
-`research-review.md`, fix what it found, and dispatch again. A pass that
-reports no blocking and no clarification findings is converged, and the
-loop stops. Three passes in one run that each report another pass also
-stop the loop, and the open findings go to the creator. A run begins when you start the loop and ends
-when the creator's `quest ID next` leaves review research or when the
-session ends. A converged verdict is a recommendation; the creator's
-`quest ID next` accepts the state.
-
-Tiers. A blocking finding: the document is wrong, contradicts itself, or
-rests on a claim that fails against the code or the sources it cites. A
-clarification: a reader would have to ask before acting. Polish: wording,
-order, style; fixed on sight and not counted.
-
-Reviewer rules. Authorship is not evidence; a claim holds when the file
-or the cited source says so. Verify the claims the recommendation rests
-on: counts, paths, tool behaviour, anything marked verified. Report; the
-session edits. The document reads as one pass by an author who knew the
-answer all along, so a passage that narrates its own revisions is a
-clarification finding. Two of the checks below are generative: a review
-that only attacks has done half the job.
+Findings at this stage. Blocking: a Recommendation that contradicts a
+section above it, or a count the code gives differently on which an
+option's viability rests. Clarification: a design question raised and
+then dropped.
 
 Checklist for research:
 
@@ -122,33 +102,10 @@ Checklist for research:
 - Every approach says how it fits with the cataloged capabilities.
 - Load-bearing counts, paths, and behaviours hold against the code.
 - Options the document did not consider are named, from other domains
-  where they exist.
+  where they exist. Checked at pass 1 of the record and at a full pass
+  after a creator revision that touches an Approaches section.
 - Simpler options are named: a smaller deliverable that covers most of
-  the need, or two proposals that solve one problem.
+  the need, or two proposals that solve one problem. Checked at the
+  same passes as the item above.
 - Design questions are settled or explicitly deferred; none is raised
   and dropped.
-
-The record. `research-review.md` beside the stage file, written by you,
-one section per pass:
-
-```
-# Review record: research
-
-## Pass N, DATE
-
-Reviewer: questlog:review-research
-Document: research.md at HASH, document changed since pass N-1
-
-Blocking
-- location: finding. Fixed: what changed.
-Clarification
-- ...
-Polish
-- fixed on sight
-Verdict: converged | another pass
-```
-
-HASH is the first seven characters of `git hash-object research.md`. The
-"document changed" suffix appears when HASH differs from the previous
-pass's. A later run reads the record, counts the passes, and appends
-pass N+1.

@@ -58,33 +58,15 @@ listed.
 
 ## Review
 
-The completion criterion for review plan: every item in the checklist
-holds. Run the loop at review plan, before you ask the creator to
-move on.
+The loop, the tiers, the session's steps, the dispatch list, the
+reviewer rules, and the record template are in `review-loop.md`, read
+before this section. The reviewer is `questlog:review-plan` and the
+record is `plan-review.md`. For a quest, the reviewer reads the design's
+Implementation plan beside the plan.
 
-The loop. Dispatch `questlog:review-plan` with four paths: the stage
-file, this reference file, the prior review record `plan-review.md` when
-it exists, and the root of the code the plan changes. The reviewer reads
-this section, the document, and the record, and returns findings by tier
-with a verdict. You record the pass in `plan-review.md`, fix what it
-found, and dispatch again. A pass that reports no blocking and no
-clarification findings is converged, and the loop stops. Three passes in
-one run that each report another pass also stop the loop, and the open
-findings go to the creator. A run begins when you start the loop and ends
-when the creator's `quest ID next` leaves review plan or when the
-session ends. A converged verdict is a recommendation; the creator's
-`quest ID next` accepts the state.
-
-Tiers. A blocking finding: the document is wrong, contradicts itself, or
-rests on a claim that fails against the code, the design, or the sources
-it cites. A clarification: an implementer would have to ask before
-acting. Polish: wording, order, style; fixed on sight and not counted.
-
-Reviewer rules. Authorship is not evidence; a claim holds when the file
-or the cited source says so. Verify function names, file paths, test
-names, and commands against the code. Report; the session edits. The
-document reads as one pass by an author who knew the answer all along,
-so a passage that narrates its own revisions is a clarification finding.
+Findings at this stage. Blocking: a step whose commit leaves the tree
+failing, or a step that contradicts the design or the code. Clarification:
+a step an implementer would have to ask about before acting.
 
 Checklist for plan:
 
@@ -96,28 +78,3 @@ Checklist for plan:
   difference is named.
 - Every function, file, test, and command the plan names exists or is
   named as new.
-
-The record. `plan-review.md` beside the stage file, written by you, one
-section per pass:
-
-```
-# Review record: plan
-
-## Pass N, DATE
-
-Reviewer: questlog:review-plan
-Document: plan.md at HASH, document changed since pass N-1
-
-Blocking
-- location: finding. Fixed: what changed.
-Clarification
-- ...
-Polish
-- fixed on sight
-Verdict: converged | another pass
-```
-
-HASH is the first seven characters of `git hash-object plan.md`. The
-"document changed" suffix appears when HASH differs from the previous
-pass's. A later run reads the record, counts the passes, and appends
-pass N+1.

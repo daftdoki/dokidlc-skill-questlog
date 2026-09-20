@@ -67,34 +67,18 @@ does not build it.
 
 ## Review
 
-The completion criterion for review design: every item in the checklist
-holds. Run the loop at review design, before you ask the creator to
-move on.
+The loop, the tiers, the session's steps, the dispatch list, the
+reviewer rules, and the record template are in `review-loop.md`, read
+before this section. The reviewer is `questlog:review-design` and the
+record is `design-review.md`. The reviewer reads the source for every
+code claim: the files the design names first, then the imports they
+lead to.
 
-The loop. Dispatch `questlog:review-design` with four paths: the stage
-file, this reference file, the prior review record `design-review.md`
-when it exists, and the root of the code the document is about. The
-reviewer reads this section, the document, and the record, and returns
-findings by tier with a verdict. You record the pass in
-`design-review.md`, fix what it found, and dispatch again. A pass that
-reports no blocking and no clarification findings is converged, and the
-loop stops. Three passes in one run that each report another pass also
-stop the loop, and the open findings go to the creator. A run begins when you start the loop and ends
-when the creator's `quest ID next` leaves review design or when the
-session ends. A converged verdict is a recommendation; the creator's
-`quest ID next` accepts the state.
-
-Tiers. A blocking finding: the document is wrong, contradicts itself, or
-rests on a claim that fails against the code or the sources it cites. A
-clarification: a reader would have to ask before acting. Polish: wording,
-order, style; fixed on sight and not counted.
-
-Reviewer rules. Authorship is not evidence; a claim holds when the file
-or the cited source says so. Read the source for every code claim: start
-with the files the design names and follow the imports where they lead.
-Report; the session edits. The document reads as one pass by an author
-who knew the answer all along, so a passage that narrates its own
-revisions is a clarification finding.
+Findings at this stage. Blocking: a described behaviour, function, or
+commit order that fails against the code, or a decision that departs
+from the research with no reason. Clarification: an edge case, an
+ambiguous requirement, or a manual step an implementer would have to
+ask about.
 
 Checklist for design:
 
@@ -108,28 +92,3 @@ Checklist for design:
 - Nothing an implementer would have to ask: no missing edge case, no
   ambiguous requirement, no manual step that should be a script.
 - Stories are the creator's, and none was invented.
-
-The record. `design-review.md` beside the stage file, written by you, one
-section per pass:
-
-```
-# Review record: design
-
-## Pass N, DATE
-
-Reviewer: questlog:review-design
-Document: design.md at HASH, document changed since pass N-1
-
-Blocking
-- location: finding. Fixed: what changed.
-Clarification
-- ...
-Polish
-- fixed on sight
-Verdict: converged | another pass
-```
-
-HASH is the first seven characters of `git hash-object design.md`. The
-"document changed" suffix appears when HASH differs from the previous
-pass's. A later run reads the record, counts the passes, and appends
-pass N+1.

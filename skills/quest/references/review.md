@@ -25,33 +25,24 @@ gap, fix it, commit, and show the fix.
 
 ## Review
 
-The completion criterion for evaluate goal: every item in the checklist
-holds. Run the loop before you ask the creator whether the goal is met.
+The loop, the tiers, the session's steps, the dispatch list, the
+reviewer rules, and the record template are in `review-loop.md`, read
+before this section. The reviewer is `questlog:review-result` and the
+record is `result-review.md`. Run the loop before you ask the creator
+whether the goal is met; the creator's `quest ID next` completes the
+quest.
 
-The loop. Dispatch `questlog:review-result` with the paths to `quest.md`
-for the Done when, `goal.md` for Success looks like, `plan.md` for the
-Deviations, this reference file, the
-prior review record `result-review.md` when it exists, and the root of the
-code repository, plus the commit range: from the earliest commit newer
-than the `implement` entry's time in the `history` list of `quest.md` to
-HEAD, found with `git log --since=TIME` on the working branch. The reviewer reads this
-section, the Done when, the Deviations, the record, and the commits, and
-returns findings by tier with a verdict. You record the pass in
-`result-review.md`, fix what it found, and dispatch again. A pass that
-reports no blocking and no clarification findings is converged, and the
-loop stops. Three passes in one run that each report another pass also
-stop the loop, and the open findings go to the creator. A run begins
-when you start the loop and ends when the creator's `quest ID next`
-completes the quest or when the session ends. A converged verdict is a
-recommendation; the creator's `quest ID next` completes the quest.
+Dispatch adds: `plan.md` is the stage file, and the prompt names
+`quest.md` for the Done when, `goal.md` for Success looks like, the root
+of the code repository, and the commit range, from the earliest commit
+newer than the `implement` entry's time in the `history` list of
+`quest.md` to HEAD, found with `git log --since=TIME` on the working
+branch. The reviewer reads the Done when, the Deviations, the record,
+and the commits, and runs what can be run.
 
-Tiers. A blocking finding: a Done when line is not met and nothing says
-so. A clarification: a line is met with evidence the creator would have
-to ask about. Polish: presentation; fixed on sight and not counted.
-
-Reviewer rules. Authorship is not evidence; a line holds when the file,
-the command, or the test shows it. Run what can be run. Report; the
-session edits.
+Findings at this stage. Blocking: a Done when line not met with nothing
+saying so. Clarification: a line met with evidence the creator would
+have to ask about.
 
 Checklist for evaluate goal:
 
@@ -61,29 +52,14 @@ Checklist for evaluate goal:
 - Every deviation is recorded, and none hides an unmet line.
 - The documentation the work changed reads as current.
 
-The record. `result-review.md` in the quest directory, written by you,
-one section per pass:
+The record adds two lines under `Document:`:
 
 ```
-# Review record: evaluate goal
-
-## Pass N, DATE
-
-Reviewer: questlog:review-result
-Document: plan.md at HASH, document changed since pass N-1
 Code: /path/to/repository
-Commits: OLDEST^..HEAD
-
-Blocking
-- Done when line: finding. Fixed: what changed.
-Clarification
-- ...
-Polish
-- fixed on sight
-Verdict: converged | another pass
+Commits: OLDEST^..NEWEST
 ```
 
-HASH is the first seven characters of `git hash-object plan.md`. Commits
-holds `OLDEST^..HEAD` with OLDEST the earliest commit `--since` returned,
-or `none` when it returned nothing. A later run reads the record, counts
-the passes, and appends pass N+1.
+OLDEST is the earliest commit `--since` returned, or `none` when it
+returned nothing; NEWEST is the sha HEAD resolved to when the pass was
+recorded. A diff pass's Scope line reads `diff from HASH1, commits
+NEWEST..HEAD-NOW`.

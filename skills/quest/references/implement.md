@@ -58,35 +58,22 @@ review loop below.
 
 ## Review
 
-The completion criterion for review implementation: every item in the
-checklist holds. Run the loop at review implementation, before you ask
-the creator to move on.
+The loop, the tiers, the session's steps, the dispatch list, the
+reviewer rules, and the record template are in `review-loop.md`, read
+before this section. The reviewer is `questlog:review-implement` and
+the record is `implement-review.md`.
 
-The loop. Dispatch `questlog:review-implement` with the paths to
-`plan.md`, this reference file, the prior review record
-`implement-review.md` when it exists, and the root of the code
-repository, plus the commit range: from the earliest commit newer than the
-`implement` entry's time in the `history` list of `quest.md` to HEAD,
-found with `git log --since=TIME` on the working branch. The reviewer reads this
-section, the plan and its Deviations, the record, and the commits, and
-returns findings by tier with a verdict. You record the pass in
-`implement-review.md`, fix what it found, and dispatch again. A pass that
-reports no blocking and no clarification findings is converged, and the
-loop stops. Three passes in one run that each report another pass also
-stop the loop, and the open findings go to the creator. A run begins
-when you start the loop and ends when the creator's `quest ID next`
-leaves review implementation or when the session ends. A converged
-verdict is a recommendation; the creator's `quest ID next` accepts the
-state.
+Dispatch adds: `plan.md` is the stage file, and the prompt names the
+root of the code repository and the commit range, from the earliest
+commit newer than the `implement` entry's time in the `history` list of
+`quest.md` to HEAD, found with `git log --since=TIME` on the working
+branch. The reviewer reads the plan and its Deviations, the record, and
+the commits, and runs the suite.
 
-Tiers. A blocking finding: the commits do not do what the plan says and
-the Deviations do not say why, a test the plan promised is missing or
-fails, or a claim fails against the code. A clarification: the creator
-would have to ask before reviewing. Polish: naming, wording, commit
-message style; fixed on sight and not counted.
-
-Reviewer rules. Authorship is not evidence; a claim holds when the code
-or the test says so. Run the suite. Report; the session edits.
+Findings at this stage. Blocking: a commit that does not do what the
+plan says with no Deviation saying why, or a test the plan promised
+that is missing or fails. Clarification: a deviation the creator would
+have to ask about before reviewing.
 
 Checklist for implement:
 
@@ -97,29 +84,14 @@ Checklist for implement:
 - The project's code review ran, where the project has one, and its
   findings are fixed or recorded.
 
-The record. `implement-review.md` in the quest directory, written by you,
-one section per pass:
+The record adds two lines under `Document:`:
 
 ```
-# Review record: implement
-
-## Pass N, DATE
-
-Reviewer: questlog:review-implement
-Document: plan.md at HASH, document changed since pass N-1
 Code: /path/to/repository
-Commits: OLDEST^..HEAD
-
-Blocking
-- location: finding. Fixed: what changed.
-Clarification
-- ...
-Polish
-- fixed on sight
-Verdict: converged | another pass
+Commits: OLDEST^..NEWEST
 ```
 
-HASH is the first seven characters of `git hash-object plan.md`. Commits
-holds `OLDEST^..HEAD` with OLDEST the earliest commit `--since` returned,
-or `none` when it returned nothing. A later run reads the record, counts
-the passes, and appends pass N+1.
+OLDEST is the earliest commit `--since` returned, or `none` when it
+returned nothing; NEWEST is the sha HEAD resolved to when the pass was
+recorded. A diff pass's Scope line reads `diff from HASH1, commits
+NEWEST..HEAD-NOW`.

@@ -955,13 +955,18 @@ def test_reference_files_exist_for_every_stage():
 
 
 def test_review_sections_state_the_stop_rule():
+    """The loop, the tiers, and the caps live once, in review-loop.md; each stage's Review section points at it and keeps its own names."""
+    loop = (REFERENCES / "review-loop.md").read_text().lower()
+    for word in ("blocking", "clarification", "fact", "polish", "converged", "three", "fixes", "scope:", "diff from"):
+        assert word in loop, f"review-loop.md lacks {word}"
     for s in quest.STATES:
         if not s.reviewer:
             continue
         text = (REFERENCES / s.reference).read_text()
-        review = text[text.index("\n## Review\n"):].lower()
-        for word in ("blocking", "clarification", "polish", "converged", "three passes", f"questlog:{s.reviewer}", s.record):
+        review = text[text.index("\n## Review\n"):]
+        for word in ("review-loop.md", f"questlog:{s.reviewer}", s.record):
             assert word in review, f"{s.reference} Review section lacks {word}"
+        assert "three passes" not in review.lower(), f"{s.reference} restates the cap"
 
 
 def test_agents_exist_with_required_frontmatter():
