@@ -194,6 +194,17 @@ def _fm(d):
     return quest.parse_page((d / "quest.md").read_text())[0]
 
 
+@pytest.fixture(autouse=True)
+def writing_plugin_present(tmp_path_factory, monkeypatch):
+    """Every test sees the writing plugin installed and enabled at user scope, so the doctor row and the skill line hold on a host with no plugins, CI included."""
+    home = tmp_path_factory.mktemp("claude-home")
+    (home / "plugins").mkdir()
+    (home / "plugins" / "installed_plugins.json").write_text(json.dumps({"version": 2, "plugins": {"writing-for-agents@dokidlc": [{"scope": "user"}]}}))
+    (home / "settings.json").write_text(json.dumps({"enabledPlugins": {"writing-for-agents@dokidlc": True}}))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(home))
+    return home
+
+
 def _git_commit_all(tmp_path):
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     (tmp_path / ".claude").mkdir(exist_ok=True)
@@ -316,6 +327,7 @@ def test_next_refuses_unconverged_verdict_until_confirmed(tmp_path, monkeypatch,
         quest.main([qid, "next"])
     err = capsys.readouterr().err
     assert e.value.code == 1 and "last verdict: another pass" in err and f"quest {qid} next --confirmed" in err
+    assert "last pass: 0 blocking, 0 clarification, 0 fact" in err
     assert _fm(d)["state"] == "review implementation"
     quest.main([qid, "next", "--confirmed"])
     assert _fm(d)["state"] == "evaluate goal"
@@ -1193,3 +1205,147 @@ def test_stale_ask_rules_are_dropped(tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor", "--fix"])
     assert e.value.code == 0 and "Bash(quest skip *)" not in settings.read_text()
+
+
+RECORD = """# Review record: plan
+
+## Pass 1, 2026-09-19
+
+Reviewer: questlog:review-plan
+Scope: full, new run
+Document: plan.md at aaaaaaa
+
+Blocking
+- step 1: wrong. Fixed.
+- step 2: wrong. Fixed.
+Clarification
+- none
+Fact
+- was 3, is 4. Fixed.
+Polish
+- fixed on sight
+Verdict: another pass
+Fixes
+- step 1. Also at: none. Check: true
+
+## Pass 2, 2026-09-19
+
+Reviewer: questlog:review-plan
+Scope: diff from aaaaaaa
+Document: plan.md at bbbbbbb
+
+Blocking
+- step 3: still wrong. Fixed.
+Clarification
+- step 4: which? Open.
+- step 5: how? Fixed.
+Fact
+- none
+Polish
+- one line wrapped. Fixed.
+Verdict: another pass
+"""
+
+
+def test_last_pass_counts_tiers_and_markers(tmp_path):
+    (tmp_path / "plan-review.md").write_text(RECORD)
+    assert quest.last_pass(tmp_path, "plan-review.md") == {"scope": "diff from aaaaaaa", "verdict": "another pass",
+        "Blocking": (1, 1), "Clarification": (2, 1), "Fact": (0, 0), "Polish": (1, 1)}
+
+
+def test_last_pass_reads_an_old_record(tmp_path):
+    (tmp_path / "plan-review.md").write_text("# Review record: plan\n\n## Pass 1, 2026-09-05\n\nReviewer: questlog:review-plan\nDocument: plan.md at ccccccc\n\nBlocking\n- (none)\nClarification\n- a: b. Fixed: c.\nPolish\n- fixed on sight\nVerdict: another pass\n")
+    assert quest.last_pass(tmp_path, "plan-review.md") == {"scope": "", "verdict": "another pass",
+        "Blocking": (0, 0), "Clarification": (1, 0), "Fact": (0, 0), "Polish": (1, 0)}
+    assert quest.last_pass(tmp_path, "goal-review.md") is None
+    (tmp_path / "goal-review.md").write_text("# Review record: goal\n")
+    assert quest.last_pass(tmp_path, "goal-review.md") is None
+
+
+def test_last_pass_line_prints_only_when_not_converged(tmp_path):
+    review = quest.BY_NAME["review plan"]
+    assert quest.last_pass_line(tmp_path, review) is None                                    # no record
+    (tmp_path / "plan-review.md").write_text(RECORD)
+    assert quest.last_pass_line(tmp_path, review) == "last pass: 1 blocking (fixed), 2 clarification (1 of 2 fixed), 0 fact"
+    assert quest.last_pass_line(tmp_path, quest.BY_NAME["plan"]) is None                    # a working state has no record
+    (tmp_path / "plan-review.md").write_text(RECORD.replace("Verdict: another pass\n", "Verdict: converged\n"))
+    assert quest.last_pass_line(tmp_path, review) == "last pass: 1 blocking (fixed), 2 clarification (1 of 2 fixed), 0 fact; a diff pass, so a full pass is owed"
+    (tmp_path / "plan-review.md").write_text(RECORD.replace("Verdict: another pass\n", "Verdict: converged\n").replace("Scope: diff from aaaaaaa", "Scope: full"))
+    assert quest.last_pass_line(tmp_path, review) is None                                    # a converged full pass
+
+
+def test_show_and_start_print_last_pass(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
+    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
+    (d / "plan.md").write_text("# Plan\n"); quest.main([qid, "next"])
+    (d / "plan-review.md").write_text(RECORD); capsys.readouterr()
+    quest.main([qid])
+    out = capsys.readouterr().out
+    assert out.splitlines()[0] == f"{qid} is at review plan. Run the review-plan loop into plan-review.md, then ask: move on to implementing?"
+    assert out.splitlines()[1] == "last pass: 1 blocking (fixed), 2 clarification (1 of 2 fixed), 0 fact"
+    quest.main([qid, "defer"]); capsys.readouterr()
+    quest.main([qid, "start"])
+    out = capsys.readouterr().out
+    assert out.splitlines()[1] == "last pass: 1 blocking (fixed), 2 clarification (1 of 2 fixed), 0 fact"
+
+
+def test_next_refuses_a_converged_diff_pass(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
+    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
+    (d / "plan.md").write_text("# Plan\n"); quest.main([qid, "next"])
+    (d / "plan-review.md").write_text(RECORD.replace("Verdict: another pass\n", "Verdict: converged\n")); capsys.readouterr()
+    with pytest.raises(SystemExit) as e:
+        quest.main([qid, "next"])
+    err = capsys.readouterr().err
+    assert e.value.code == 1 and "last verdict: converged, on a diff pass; a full pass is owed" in err and "last pass: 1 blocking (fixed)" in err
+    assert _fm(d)["state"] == "review plan"
+    quest.main([qid, "next", "--confirmed"])
+    assert _fm(_at(qdir, qid))["state"] == "implement"
+
+
+def test_guidance_names_the_writing_skill(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch)
+    quest.main([qid, "start"]); out = capsys.readouterr().out
+    assert f"skill: {quest.WRITING_SKILL}" in out and "guidance:" in out
+    d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); capsys.readouterr()
+    quest.main([qid, "next"]); out = capsys.readouterr().out
+    assert f"skill: {quest.WRITING_SKILL}" in out and "guidance:" in out and "reviewer: questlog:review-goal" in out
+    quest.main([qid]); out = capsys.readouterr().out
+    assert f"skill: {quest.WRITING_SKILL}" in out
+
+
+def test_guidance_warns_when_the_writing_skill_is_absent(tmp_path, monkeypatch, capsys, writing_plugin_present):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch)
+    (writing_plugin_present / "plugins" / "installed_plugins.json").unlink()
+    quest.main([qid]); out = capsys.readouterr().out
+    assert f"skill: writing-for-agents is not installed; run: claude plugin install {quest.WRITING_PLUGIN}" in out
+    (writing_plugin_present / "plugins" / "installed_plugins.json").write_text(json.dumps({"version": 2, "plugins": {quest.WRITING_PLUGIN: []}}))
+    (tmp_path / ".claude").mkdir(exist_ok=True)
+    (tmp_path / ".claude" / "settings.json").write_text(json.dumps({"enabledPlugins": {quest.WRITING_PLUGIN: False}}))
+    quest.main([qid]); out = capsys.readouterr().out
+    assert "skill: writing-for-agents is not enabled; set" in out and ".claude/settings.json" in out and quest.WRITING_SKILL not in out
+    (tmp_path / ".claude" / "settings.local.json").write_text("{")                              # unreadable local scope is skipped; the project file decides
+    quest.main([qid]); out = capsys.readouterr().out
+    assert "is not enabled" in out
+    (tmp_path / ".claude" / "settings.json").write_text("{}")                                    # no key at any project scope: the user file enables it
+    quest.main([qid]); out = capsys.readouterr().out
+    assert f"skill: {quest.WRITING_SKILL}" in out
+    (writing_plugin_present / "settings.json").write_text("{}")                                  # no key at any scope: enabled by default
+    quest.main([qid]); out = capsys.readouterr().out
+    assert f"skill: {quest.WRITING_SKILL}" in out
+
+
+def test_doctor_reports_the_writing_skill(tmp_path, monkeypatch, capsys, writing_plugin_present):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    quest.main(["init"]); quest.main(["new", "Thing"]); _git_commit_all(tmp_path); capsys.readouterr()
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    assert e.value.code == 0 and "ok   writing-for-agents is installed and enabled" in capsys.readouterr().out
+    (writing_plugin_present / "plugins" / "installed_plugins.json").unlink()
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    out = capsys.readouterr().out
+    assert e.value.code == 1 and f"FAIL writing-for-agents is installed and enabled  (claude plugin install {quest.WRITING_PLUGIN})" in out
+    with pytest.raises(SystemExit):
+        quest.main(["doctor", "--brief"])
+    assert capsys.readouterr().out.startswith("questlog: writing-for-agents is installed and enabled (claude plugin install")

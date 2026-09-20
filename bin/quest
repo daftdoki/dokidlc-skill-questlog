@@ -95,6 +95,10 @@ ASK_RULES = ("Bash(quest init *)", "Bash(quest new *)",
              *(f"Bash(quest * {v})" for v in ("start", "defer", "next", "skip")),
              "Bash(quest * next --confirmed)", "Bash(quest * abandon *)")
 SETTINGS = ".claude/settings.json"
+LOCAL_SETTINGS = ".claude/settings.local.json"
+WRITING_PLUGIN = "writing-for-agents@dokidlc"       # every stage file is read by an agent, so the session writes it under this skill
+WRITING_SKILL = "writing-for-agents:writing-for-agents"
+TIERS = ("Blocking", "Clarification", "Fact", "Polish")   # the record's headings, in order; the printed line omits Polish
 CLAUDE_MD_MARK = "<!-- questlog -->"
 CLAUDE_MD_PARAGRAPH = f"""
 ## Quests {CLAUDE_MD_MARK}
@@ -564,23 +568,30 @@ def check_format(root: Path) -> None:
 # --- init and doctor --------------------------------------------------------
 
 
-def load_settings(root: Path) -> tuple[dict, str | None]:
-    """The project settings and why they cannot take ask rules, or None. An absent file loads as {}; init creates it."""
-    path = root / SETTINGS
+def load_json_object(path: Path, name: str) -> tuple[dict, str | None]:
+    """A JSON file as a dict and why it cannot be one, or None. An absent file loads as {}."""
     if path.parent.exists() and not path.parent.is_dir():
         return {}, f"{path.parent.name} is not a directory"
     if not os.path.lexists(path):
         return {}, None
     if not path.is_file():
-        return {}, f"{SETTINGS} is not a file"
+        return {}, f"{name} is not a file"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except OSError:
-        return {}, f"{SETTINGS} cannot be read"
+        return {}, f"{name} cannot be read"
     except (json.JSONDecodeError, UnicodeDecodeError):
-        return {}, f"{SETTINGS} is not valid JSON"
+        return {}, f"{name} is not valid JSON"
     if not isinstance(data, dict):
-        return {}, f"{SETTINGS} is not a JSON object"
+        return {}, f"{name} is not a JSON object"
+    return data, None
+
+
+def load_settings(root: Path) -> tuple[dict, str | None]:
+    """The project settings and why they cannot take ask rules, or None. An absent file loads as {}; init creates it."""
+    data, problem = load_json_object(root / SETTINGS, SETTINGS)
+    if problem:
+        return {}, problem
     perms = data.get("permissions", {})
     if not isinstance(perms, dict):
         return {}, f"{SETTINGS} permissions is not an object"
@@ -844,6 +855,8 @@ def doctor_checks(root: Path) -> list[Row]:
                  + (f"; stale: {', '.join(stale)}" if stale else "") + ("; the file is a symlink" if wrong and linked else ""))
         rows.append(row(not wrong, label, "fix them by hand" if linked else "quest doctor --fix", None if linked else write_missing_ask_rules))
     rows.extend(git_checks(root))
+    problem = writing_skill_problem(root)
+    rows.append(row(problem is None, "writing-for-agents is installed and enabled", problem[1].removeprefix("run: ") if problem else ""))
     return rows
 
 
@@ -902,6 +915,30 @@ def print_memory_hits(query: str) -> None:
         print("memory: " + " · ".join(hits))
 
 
+# --- the writing skill ------------------------------------------------------
+
+
+def claude_home() -> Path:
+    """The harness config directory: CLAUDE_CONFIG_DIR when set, else ~/.claude."""
+    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+
+
+def writing_skill_problem(root: Path) -> tuple[str, str] | None:
+    """None when the writing plugin is installed and enabled; else (problem, fix). A file that cannot be read as a JSON object is skipped."""
+    installed, problem = load_json_object(claude_home() / "plugins" / "installed_plugins.json", "installed_plugins.json")
+    if problem or not isinstance(installed.get("plugins"), dict) or WRITING_PLUGIN not in installed["plugins"]:
+        return "writing-for-agents is not installed", f"run: claude plugin install {WRITING_PLUGIN}"
+    # the first file with the key decides, in the harness's precedence order; no key at any scope means enabled, the plugin's default
+    for path, name in ((root / LOCAL_SETTINGS, LOCAL_SETTINGS), (root / SETTINGS, SETTINGS), (claude_home() / "settings.json", "~/.claude/settings.json")):
+        data, problem = load_json_object(path, name)
+        enabled = data.get("enabledPlugins") if not problem else None
+        if isinstance(enabled, dict) and WRITING_PLUGIN in enabled:
+            if enabled[WRITING_PLUGIN] is True:
+                return None
+            return "writing-for-agents is not enabled", f'set "{WRITING_PLUGIN}": true under enabledPlugins in {name}'
+    return None
+
+
 # --- guidance ---------------------------------------------------------------
 
 REFERENCES = PLUGIN_ROOT / "skills" / "quest" / "references"
@@ -921,6 +958,8 @@ def print_guidance(fm: dict, root: Path) -> None:
     overlay = quests_dir(root) / GUIDANCE_DIR / s.reference
     if overlay.is_file():
         print(f"overlay: {overlay}")
+    problem = writing_skill_problem(root)
+    print(f"skill: {WRITING_SKILL}" if problem is None else f"skill: {problem[0]}; {problem[1]}")
 
 
 def last_verdict(d: Path, record: str) -> str | None:
@@ -930,6 +969,48 @@ def last_verdict(d: Path, record: str) -> str | None:
         return None
     verdicts = [l.partition(":")[2].strip() for l in path.read_text().splitlines() if l.startswith("Verdict:")]
     return verdicts[-1] if verdicts else None
+
+
+def last_pass(d: Path, record: str) -> dict | None:
+    """The record's last pass: its scope, its verdict, and per tier (bullets, bullets marked `Fixed.`); None without a record or a pass.
+    A tier whose first bullet starts with "none" is empty; a tier the pass lacks counts zero, so an old record reads."""
+    path = d / record
+    if not path.is_file():
+        return None
+    sections = re.split(r"^## Pass ", path.read_text(), flags=re.M)
+    if len(sections) < 2:
+        return None
+    text = sections[-1]
+    scope = re.search(r"^Scope: (.*)$", text, flags=re.M)
+    verdict = re.search(r"^Verdict: (.*)$", text, flags=re.M)
+    out = {"scope": scope.group(1).strip() if scope else "", "verdict": verdict.group(1).strip() if verdict else ""}
+    for tier in TIERS:
+        m = re.search(rf"^{tier}\s*\n((?:- .*\n(?:  .*\n)*)*)", text, flags=re.M)
+        bullets = [b for b in re.split(r"^- ", m.group(1), flags=re.M) if b.strip()] if m else []
+        if bullets and bullets[0].strip("() .").lower().startswith("none"):
+            bullets = []
+        out[tier] = (len(bullets), sum(1 for b in bullets if b.rstrip().endswith("Fixed.")))
+    return out
+
+
+def last_pass_line(d: Path, s: State) -> str | None:
+    """`last pass: 1 blocking (fixed), 0 clarification, 2 fact (fixed)` when the state has a record whose last pass is not a converged
+    full pass; else None, including at a working state, where s.record is None."""
+    if not s.record:
+        return None
+    p = last_pass(d, s.record)
+    if p is None:
+        return None
+    diff = p["scope"].startswith("diff")
+    if p["verdict"].lower().startswith("converged") and not diff:
+        return None
+    parts = []
+    for tier in TIERS[:3]:
+        n, fixed = p[tier]
+        suffix = " (fixed)" if n and fixed == n else f" ({fixed} of {n} fixed)" if fixed else ""
+        parts.append(f"{n} {tier.lower()}{suffix}")
+    line = "last pass: " + ", ".join(parts)
+    return line + "; a diff pass, so a full pass is owed" if diff and p["verdict"].lower().startswith("converged") else line
 
 
 def update_quest(d: Path, changes: dict) -> dict:
@@ -961,6 +1042,9 @@ def require_at_state(fm: dict) -> State:
 def cmd_show(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     no_args(rest, "show")
     print(say(fm))
+    line = state_of(fm) and last_pass_line(d, state_of(fm))
+    if line:
+        print(line)
     print()
     sys.stdout.write((d / "quest.md").read_text())
     files = sorted(p.name for p in d.iterdir() if p.is_file() and p.name != "quest.md")
@@ -977,9 +1061,12 @@ def cmd_start(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     if target not in BY_NAME:
         die(f"{fm['id']} resumes at {target!r}, which is not a state; fix the frontmatter")
     fm = update_quest(d, {"state": target, "resume": None, "history": append_history(fm, target)})
-    move_entry(quests_dir(root), d, fm)
+    d = move_entry(quests_dir(root), d, fm)
     write_log(root)
     print(say(fm))
+    line = last_pass_line(d, BY_NAME[target])
+    if line:
+        print(line)
     print_guidance(fm, root)
     print_memory_hits(str(fm.get("title", "")))
 
@@ -1000,10 +1087,14 @@ def cmd_next(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     s = require_at_state(fm)
     if s.file and not (d / s.file).is_file():
         die(f"{d.name}/{s.file} does not exist yet")
-    if s.reviewer:
+    if s.reviewer and not rest:
         verdict = last_verdict(d, s.record)
-        if verdict and not verdict.lower().startswith("converged") and not rest:
-            die(f"last verdict: {verdict}\nconfirm with the creator, then run: quest {fm['id']} next --confirmed")
+        line = last_pass_line(d, s)
+        p = last_pass(d, s.record)
+        if verdict and p and p["scope"].startswith("diff") and verdict.lower().startswith("converged"):
+            die(f"last verdict: {verdict}, on a diff pass; a full pass is owed\n{line}\nconfirm with the creator, then run: quest {fm['id']} next --confirmed")
+        if verdict and not verdict.lower().startswith("converged"):
+            die(f"last verdict: {verdict}\n{line}\nconfirm with the creator, then run: quest {fm['id']} next --confirmed")
     nxt = successor(fm, s.name)
     # the page is written first and the directory follows it: an interruption between the two leaves a page whose
     # state names one bucket while it sits in another, which the doctor's placement row names and --fix moves
@@ -1011,6 +1102,7 @@ def cmd_next(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     d = move_entry(quests_dir(root), d, fm)
     write_log(root)
     print(say(fm))
+    print_guidance(fm, root)
     if nxt in BY_NAME and BY_NAME[nxt].nudge and shutil.which("memory"):
         print(f"memory: what did you learn while {s.doing} on your own? One page per finding, `--ref {d.relative_to(root)}/{s.file}`, before the creator moves on.")
 
