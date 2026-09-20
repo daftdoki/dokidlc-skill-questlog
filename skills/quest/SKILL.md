@@ -102,7 +102,8 @@ Fixes list the session wrote, until a clean diff pass earns one more
 full pass. A Fact finding, a wrong count or line or sha, is fixed and
 verified and never a pass on its own. The run stops at three full
 passes without convergence or three diff passes in a row with
-something open, and the open findings go to the creator. The steps,
+something under Blocking or Clarification, and the open findings go
+to the creator. The steps,
 the tiers, the dispatch list, and the record template are in
 `references/review-loop.md`.
 
