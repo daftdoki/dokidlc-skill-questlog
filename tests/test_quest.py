@@ -1332,6 +1332,24 @@ def test_guidance_names_the_writing_skill(tmp_path, monkeypatch, capsys):
     assert f"skill: {quest.WRITING_SKILL}" in out
 
 
+def test_guidance_names_the_document(tmp_path, monkeypatch, capsys):
+    """`document:` is the absolute path of the file under review: the stage file at a document state, plan.md from implement on."""
+    qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
+    quest.main([qid]); assert f"document: {d / 'goal.md'}" in capsys.readouterr().out                        # backlog: the state start would enter
+    quest.main([qid, "start"]); d = _at(qdir, qid); assert f"document: {d / 'goal.md'}" in capsys.readouterr().out
+    (d / "goal.md").write_text("# Goal\n"); capsys.readouterr()
+    quest.main([qid, "next"]); assert f"document: {d / 'goal.md'}" in capsys.readouterr().out               # review goal, on entry
+    quest.main([qid]); assert f"document: {d / 'goal.md'}" in capsys.readouterr().out
+    quest.main([qid, "defer"]); d = _at(qdir, qid); capsys.readouterr()
+    quest.main([qid]); assert f"document: {d / 'goal.md'}" in capsys.readouterr().out                        # deferred: the resume state's file
+    quest.main([qid, "start"]); d = _at(qdir, qid); assert f"document: {d / 'goal.md'}" in capsys.readouterr().out
+    quest.main([qid, "next"]); (d / "plan.md").write_text("# Plan\n"); quest.main([qid, "next"]); capsys.readouterr()
+    quest.main([qid]); assert f"document: {d / 'plan.md'}" in capsys.readouterr().out                        # review plan
+    quest.main([qid, "next"]); assert f"document: {d / 'plan.md'}" in capsys.readouterr().out               # implement
+    quest.main([qid, "next"]); assert f"document: {d / 'plan.md'}" in capsys.readouterr().out               # review implementation
+    quest.main([qid, "next"]); assert f"document: {d / 'plan.md'}" in capsys.readouterr().out               # evaluate goal
+
+
 def test_guidance_warns_when_the_writing_skill_is_absent(tmp_path, monkeypatch, capsys, writing_plugin_present):
     qdir, d, qid = _fresh(tmp_path, monkeypatch)
     (writing_plugin_present / "plugins" / "installed_plugins.json").unlink()

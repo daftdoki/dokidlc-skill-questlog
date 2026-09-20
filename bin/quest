@@ -944,7 +944,15 @@ def writing_skill_problem(root: Path) -> tuple[str, str] | None:
 REFERENCES = PLUGIN_ROOT / "skills" / "quest" / "references"
 
 
-def print_guidance(fm: dict, root: Path) -> None:
+def document_for(s: State) -> str:
+    """The file under review at a state: its own, or the nearest earlier state's. plan.md from implement on."""
+    for candidate in reversed(STATES[:STATES.index(s) + 1]):
+        if candidate.file:
+            return candidate.file
+    return STATES[0].file or ""
+
+
+def print_guidance(fm: dict, root: Path, d: Path) -> None:
     """The guidance lines for the current state; for a backlog entry, the state `start` would enter; nothing for a finished entry."""
     s = state_of(fm)
     if s is None and fm.get("state") == BACKLOG:
@@ -952,6 +960,7 @@ def print_guidance(fm: dict, root: Path) -> None:
     if s is None:
         return
     print(f"guidance: {REFERENCES / s.reference}")
+    print(f"document: {d / document_for(s)}")
     if s.reviewer:
         print(f"reviewer: questlog:{s.reviewer}")
         print(f"record: {s.record}")
@@ -1050,7 +1059,7 @@ def cmd_show(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     sys.stdout.write((d / "quest.md").read_text())
     files = sorted(p.name for p in d.iterdir() if p.is_file() and p.name != "quest.md")
     print("\nstage files: " + (", ".join(files) if files else "none"))
-    print_guidance(fm, root)
+    print_guidance(fm, root, d)
     print_memory_hits(str(fm.get("title", "")))
 
 
@@ -1068,7 +1077,7 @@ def cmd_start(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     line = last_pass_line(d, BY_NAME[target])
     if line:
         print(line)
-    print_guidance(fm, root)
+    print_guidance(fm, root, d)
     print_memory_hits(str(fm.get("title", "")))
 
 
@@ -1104,7 +1113,7 @@ def cmd_next(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     d = move_entry(quests_dir(root), d, fm)
     write_log(root)
     print(say(fm))
-    print_guidance(fm, root)
+    print_guidance(fm, root, d)
     if nxt in BY_NAME and BY_NAME[nxt].nudge and shutil.which("memory"):
         print(f"memory: what did you learn while {s.doing} on your own? One page per finding, `--ref {d.relative_to(root)}/{s.file}`, before the creator moves on.")
 
