@@ -68,7 +68,8 @@ evaluate goal.
 | evaluate goal | the result, against Done when | `references/review.md` | `questlog:review-result` | `result-review.md` |
 
 `quest ID` and `quest ID start` print `guidance:` with the reference to
-read first, `reviewer:` and `record:` in a review state, and `overlay:`
+read first, `document:` with the absolute path of the file under
+review, `reviewer:` and `record:` in a review state, and `overlay:`
 when the project has `docs/quests/guidance/STAGE.md`, which is read
 second and wins where they differ.
 
@@ -87,10 +88,18 @@ A state is a loop, not a gate.
    pass converges or a cap stops it. Done when the record's last
    verdict says so; `quest ID` prints no `last pass:` line after a
    converged full pass and prints one after a cap stop.
-5. Ask the creator the question the state line printed, in those words,
+5. Offer the file `document:` names, with its full path: "open it in
+   a Herdr pane, in the default viewer, or read on?". The Herdr pane
+   is offered when `HERDR_ENV=1` and opens through the
+   `herdr-file-viewer` skill, given the path relative to the
+   repository `quest` ran in; the default viewer is `open PATH` on
+   macOS and `xdg-open PATH` on Linux. Comments the creator gives
+   after opening are changes for step 7. Done when the creator read
+   on, or opened the file and said they have no further comments.
+6. Ask the creator the question the state line printed, in those words,
    with the last verdict beside it. Wait.
-6. On changes: revise, loop, ask again. On "move on": show and run
-   `quest ID next`. The quest moves only then.
+7. On changes: revise, loop, offer, ask again. On "move on": show and
+   run `quest ID next`. The quest moves only then.
 
 When `next` refuses, because the last verdict has not converged or the
 last pass was a diff pass, put the verdict and the `last pass:` line to
