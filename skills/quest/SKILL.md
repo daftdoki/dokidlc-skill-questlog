@@ -77,31 +77,34 @@ second and wins where they differ.
 A state is a loop, not a gate.
 
 1. Read the reference the state line names, and the overlay when there
-   is one.
+   is one. Load the skill the `skill:` line names, or tell the creator
+   it is missing; every stage file is read by an agent.
 2. In a working state, write the file. Done when the file exists and
    says what the reference asks for.
 3. Run `quest ID next`. The quest enters the review state and the state
    line names the reviewer, the record, and the question to ask.
-4. Run the review loop below until it converges or three passes have
-   run. Done when the record's last verdict says so.
+4. Run the review loop below until a full pass converges or a cap
+   stops it. Done when the record's last verdict says so and `quest
+   ID` prints no `last pass:` line.
 5. Ask the creator the question the state line printed, in those words,
    with the last verdict beside it. Wait.
 6. On changes: revise, loop, ask again. On "move on": show and run
    `quest ID next`. The quest moves only then.
 
-When `next` refuses because the last verdict has not converged, put the
-verdict to the creator; run `quest ID next --confirmed` only on their
-word.
+When `next` refuses, because the last verdict has not converged or the
+last pass was a diff pass, put the verdict and the `last pass:` line to
+the creator; run `quest ID next --confirmed` only on their word.
 
 ## Review loop
 
-Dispatch the state's reviewer with the paths its reference lists. It
-reports findings as blocking, clarification, or polish, and a verdict.
-Record the pass in the state's record beside the stage file, fix what it
-found, and dispatch again. A pass with no blocking and no clarification
-findings is converged. Three passes in one run without one stop the
-loop, and the open findings go to the creator. A converged verdict is a
-recommendation; the creator's `next` accepts the state.
+The first pass is full; each later pass reviews the diff against the
+Fixes list the session wrote, until a clean diff pass earns one more
+full pass. A Fact finding, a wrong count or line or sha, is fixed and
+verified and never a pass on its own. The run stops at three full
+passes without convergence or three diff passes in a row with
+something open, and the open findings go to the creator. The steps,
+the tiers, the dispatch list, and the record template are in
+`references/review-loop.md`.
 
 ## Walk-throughs for creator verbs
 

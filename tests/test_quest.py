@@ -982,6 +982,9 @@ def test_agents_exist_with_required_frontmatter():
         assert fm["name"] == name and fm["description"] and fm["model"], name
         for banned in ("hooks", "mcpServers", "permissionMode"):
             assert banned not in fm, f"{name}: plugin agents ignore {banned}"
+        if name != "fact-finder":
+            assert quest.WRITING_SKILL in fm["skills"], f"{name}: every reviewer preloads the writing skill"
+            assert "Fact" in text and "diff from" in text and "review-loop.md" in text, f"{name}: the diff pass and the Fact tier"
 
 
 def test_guidance_dir_is_not_a_quest(tmp_path, monkeypatch, capsys):
