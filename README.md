@@ -246,7 +246,8 @@ that version's `quest doctor --fix` first.
 The plugin ships seven subagents, named `questlog:NAME` once it is
 enabled. Six are reviewers, `review-goal` through `review-plan`,
 `review-implement`, and `review-result`, one per review state and one for
-evaluate goal; each reads only the checklist for its state and reports.
+evaluate goal; each reads `references/review-loop.md` and then its
+stage's Review section, and reports.
 The seventh, `fact-finder`, answers a factual question from the code, the
 docs, memory, or the web, so the agent asks you only what you alone know.
 Each agent's model and effort are set in its own file under `agents/`;
@@ -257,6 +258,10 @@ all inherit the session's until you change one.
 - Claude Code 2.1.195 or later
 - `uv` on PATH (https://docs.astral.sh/uv/)
 - A git repository to track work in
+- The `writing-for-agents@dokidlc` plugin, installed and enabled. Every
+  stage file is read by an agent, so the agent writes each one under
+  that skill; `quest` names it at every state and `quest doctor` fails
+  a row without it.
 
 ## Installation
 
@@ -265,6 +270,7 @@ From the `dokidlc` marketplace, once per machine:
 ```
 /plugin marketplace add daftdoki/dokidlc-plugins
 claude plugin install questlog@dokidlc
+claude plugin install writing-for-agents@dokidlc
 ```
 
 Then start a session in a repository and say "set up quests." The agent

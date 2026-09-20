@@ -85,7 +85,8 @@ A state is a loop, not a gate.
    line names the reviewer, the record, and the question to ask.
 4. Run the review loop in `references/review-loop.md` until a full
    pass converges or a cap stops it. Done when the record's last
-   verdict says so and `quest ID` prints no `last pass:` line.
+   verdict says so; `quest ID` prints no `last pass:` line after a
+   converged full pass and prints one after a cap stop.
 5. Ask the creator the question the state line printed, in those words,
    with the last verdict beside it. Wait.
 6. On changes: revise, loop, ask again. On "move on": show and run
