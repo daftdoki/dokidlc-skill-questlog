@@ -71,9 +71,10 @@ branch. The reviewer reads the plan and its Deviations, the record, and
 the commits, and runs the suite.
 
 Findings at this stage. Blocking: a commit that does not do what the
-plan says with no Deviation saying why, or a test the plan promised
-that is missing or fails. Clarification: a deviation the creator would
-have to ask about before reviewing.
+plan says with no Deviation saying why, a test the plan promised that
+is missing or fails, or a claim that fails against the code.
+Clarification: a deviation the creator would have to ask about before
+reviewing.
 
 Checklist for implement:
 

@@ -929,7 +929,7 @@ def writing_skill_problem(root: Path) -> tuple[str, str] | None:
     if problem or not isinstance(installed.get("plugins"), dict) or WRITING_PLUGIN not in installed["plugins"]:
         return "writing-for-agents is not installed", f"run: claude plugin install {WRITING_PLUGIN}"
     # the first file with the key decides, in the harness's precedence order; no key at any scope means enabled, the plugin's default
-    for path, name in ((root / LOCAL_SETTINGS, LOCAL_SETTINGS), (root / SETTINGS, SETTINGS), (claude_home() / "settings.json", "~/.claude/settings.json")):
+    for path, name in ((root / LOCAL_SETTINGS, LOCAL_SETTINGS), (root / SETTINGS, SETTINGS), (claude_home() / "settings.json", str(claude_home() / "settings.json"))):
         data, problem = load_json_object(path, name)
         enabled = data.get("enabledPlugins") if not problem else None
         if isinstance(enabled, dict) and WRITING_PLUGIN in enabled:
@@ -1042,7 +1042,8 @@ def require_at_state(fm: dict) -> State:
 def cmd_show(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     no_args(rest, "show")
     print(say(fm))
-    line = state_of(fm) and last_pass_line(d, state_of(fm))
+    s = state_of(fm)
+    line = last_pass_line(d, s) if s else None
     if line:
         print(line)
     print()
@@ -1091,10 +1092,11 @@ def cmd_next(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
         verdict = last_verdict(d, s.record)
         line = last_pass_line(d, s)
         p = last_pass(d, s.record)
+        detail = f"{line}\n" if line else ""
         if verdict and p and p["scope"].startswith("diff") and verdict.lower().startswith("converged"):
-            die(f"last verdict: {verdict}, on a diff pass; a full pass is owed\n{line}\nconfirm with the creator, then run: quest {fm['id']} next --confirmed")
+            die(f"last verdict: {verdict}, on a diff pass; a full pass is owed\n{detail}confirm with the creator, then run: quest {fm['id']} next --confirmed")
         if verdict and not verdict.lower().startswith("converged"):
-            die(f"last verdict: {verdict}\n{line}\nconfirm with the creator, then run: quest {fm['id']} next --confirmed")
+            die(f"last verdict: {verdict}\n{detail}confirm with the creator, then run: quest {fm['id']} next --confirmed")
     nxt = successor(fm, s.name)
     # the page is written first and the directory follows it: an interruption between the two leaves a page whose
     # state names one bucket while it sits in another, which the doctor's placement row names and --fix moves

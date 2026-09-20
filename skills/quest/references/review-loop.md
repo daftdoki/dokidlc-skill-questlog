@@ -127,8 +127,8 @@ A tier with nothing under it holds one bullet, `- none`. HASH is the
 first seven characters of `git hash-object STAGE.md`, taken after step
 1's commit. A Check command's pattern excludes the line that states it,
 or it counts itself. `quest ID` reads the last pass and prints
-`last pass: 1 blocking (fixed), 0 clarification, 2 fact (fixed)` while
-the state is not accepted. Review implementation and evaluate goal add
+`last pass: 1 blocking (fixed), 0 clarification, 2 fact (fixed)` until
+a full pass converges. Review implementation and evaluate goal add
 `Code:` and `Commits:` lines under `Document:`; the range's end is the
 sha HEAD resolved to when the pass was recorded, never the word `HEAD`,
 so a later diff pass has a fixed B to start from.

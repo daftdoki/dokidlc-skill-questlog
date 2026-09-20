@@ -153,9 +153,10 @@ holds only files named after a reference.
 Each stage file is reviewed before you see it. The agent dispatches a
 fresh-context reviewer, records the findings by tier in the review record
 beside the file, fixes them, and repeats until a pass finds nothing
-blocking and nothing to clarify, or three passes have run. The record
-shows you how the document converged, and a later session picks the loop
-up from the last pass.
+blocking and nothing to clarify, or a cap stops it: three full passes
+without convergence, or three diff passes in a row with something open.
+The record shows you how the document converged, and a later session
+picks the loop up from the last pass.
 
 `quest.md` is frontmatter and a short body:
 
