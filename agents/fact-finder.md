@@ -23,10 +23,12 @@ problem.
 1. Restate the question in one line, so the answer is checkable against
    it.
 2. Look in the code root you were given first, with Grep, Glob, and
-   Read, then in `docs/` and `.memory/` when the project has them, then
-   on the web when the question is about the world outside the
-   repository. Use Bash to read, with `git log`, `wc`, and the like; the
-   session makes every edit.
+   Read, then in `docs/`, then in memory with `memory search QUERY` and
+   `memory read NAME` when the project has the memory plugin, then on
+   the web when the question is about the world outside the repository.
+   A page is read with `memory read`, so it arrives with its trust
+   markers; the file under `.memory/` stays closed. Use Bash to read,
+   with `git log`, `wc`, and the like; the session makes every edit.
 3. Answer with the evidence: a file and line, a command and its output,
    or a URL and the sentence that answers. Where the evidence is
    incomplete, say what is established and what is still assumed.
