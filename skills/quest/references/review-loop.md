@@ -2,70 +2,88 @@
 
 Read this at every review state, before you dispatch a reviewer. Each
 stage's reference points here from its Review section and keeps only
-what is its own: the reviewer's name, the record's name, two example
-findings, and the checklist. This file holds the rest.
+what is its own: the reviewer's name, the record's name, and the
+rubric. This file holds the rest.
 
-## Passes
+## Two loops
 
-A full pass reads the whole document against the stage checklist. A
-diff pass reads the diff between two committed blobs, the prior pass's
-findings, and its Fixes list, and nothing else of the document.
-
-The first pass of a run is full. After a pass with something under
-Blocking or Clarification, the next pass is a diff pass. When a diff
-pass reports nothing under Blocking or Clarification, the session
-claims convergence and dispatches one full pass. A converged full pass
-ends the loop. A converged diff pass ends nothing; `quest ID next`
-refuses it because a full pass is owed.
-
-## Runs and caps
-
-A run begins at the session's first pass and after a creator revision.
-A creator revision starts with a full pass; if the revision touches an
-Approaches section of `research.md`, the generative checklist items run
-again. The run stops, and the open findings go to the creator, after
-three full passes without convergence or three diff passes in a row
-with something under Blocking or Clarification. A converged verdict is
-a recommendation; the creator's `quest ID next` accepts the state.
+A document stage, goal, research, design, and plan, gets the short
+loop: one full pass against the rubric, fixes, and at most one diff
+pass over the fixes. A code stage, review implementation and evaluate
+goal, gets the long loop: passes until one converges or a cap stops
+it. The difference is the signal. Code has the tests; prose has only
+the next reader, and a fresh reader always finds one more sentence to
+question. Measured on 73 records in 2026-09, the long loop on prose ran
+six passes per record and two thirds of its reruns had no Blocking
+finding.
 
 ## Tiers
 
 Blocking: the finding changes what gets built; the document is wrong or
-contradicts itself on something an implementer would act on.
-Clarification: a reader would have to ask before acting. Fact: a count,
-line number, date, sha, or name the source gives differently. Polish:
-wording, order, style. Converged means Blocking and Clarification are
-empty; Fact and Polish never gate a verdict.
+contradicts itself on something an implementer would act on. A rubric
+row marked Blocking that fails is a Blocking finding. Clarification: a
+reader would have to ask before acting; a rubric row marked
+Clarification that fails is one. Fact: a count, line number, date,
+sha, or name the source gives differently. Polish: wording, order,
+style. A reviewer reports Blocking and Clarification findings only
+against a rubric row, and each bullet opens with the row's number; a
+sentence that fails no row is Polish or nothing. Converged means
+Blocking is empty and every Clarification bullet is marked `Answered.`
+or `Open.`; Fact and Polish never gate a verdict.
 
-## The session's steps
+## The short loop, document stages
 
 1. Commit the stage file. Done when `git rev-parse HEAD:PATH` equals
    `git hash-object PATH`.
-2. Dispatch the reviewer with the Dispatch list below, the pass number,
-   and the scope: `full, new run`, `full`, or `diff from HASH1`. Done
-   when the report is in hand.
+2. Dispatch the reviewer with the Dispatch list below, pass 1, scope
+   `full`. Done when the report is in hand.
 3. Record the pass: the Scope line, the Document line, the report by
    tier, the verdict. Done when the section matches the template.
-4. For each Blocking, Clarification, and Fact finding, and for each
-   Polish item whose fix adds a claim: run the finding's own check (the
-   grep, the count, the command) before editing. Write a Fixes line:
-   the location, the edit, `Also at:` every other place the fact
-   appears, `Check:` the command that shows the edit holds. Mark the
-   bullet `Fixed.` or `Open.` Done when every such bullet carries a
-   marker and every `Fixed.` bullet has a Fixes line whose check
-   passes.
-5. Apply the edits, commit, and go to step 2: with `diff from HASH1`
-   when the pass had something under Blocking or Clarification, with
-   `full` when it was a diff pass with nothing there. Done when the
-   loop ends or a cap stops it.
+4. For each finding, run its own check, the grep, the count, the
+   command, before editing, and record the result. A finding whose
+   check fails is marked `Disputed.` with the check's output and is not
+   applied. Done when every bullet carries a marker.
+5. Fact and Polish findings whose check holds: apply, write the Fixes
+   line, mark `Fixed.`. A Polish fix that adds a sentence or a claim
+   goes on the diff pass beside the Blocking fixes.
+6. Clarification findings. At a creator gate, review goal and review
+   design, hold each as a numbered question, mark it `Open.`, and ask
+   it beside the accept question. At an agent gate, review research
+   and review plan, answer it yourself from the goal, the code, or a
+   fact-finder, write the answer into the stage file with the date,
+   and mark it `Answered.` with the location. Done when no
+   Clarification bullet is unmarked.
+7. Blocking findings whose check holds: apply, write the Fixes line,
+   mark `Fixed.`, commit, and dispatch pass 2 with scope `diff from
+   HASH1`. The diff pass reads the fixes and nothing else and is the
+   last pass. Done when its report is recorded. With no Blocking
+   finding, or after pass 2, the loop ends.
+8. At an agent gate run `quest ID next`. At a creator gate, name the
+   document's path and the viewers in the same message as the accept
+   question, with the open Clarifications numbered beside it.
+
+A Blocking finding still open after pass 2, because its fix failed its
+check or the diff pass raised a new one, stops an unattended run: put
+it to the creator with the `last pass:` line, and run `quest ID next
+--confirmed` only on their word.
+
+## The long loop, code stages
+
+The first pass is full. After a pass with a Blocking finding, or a
+Clarification the session could not answer, the next pass is a diff
+pass. A converged pass, full or diff, ends the loop. The run stops, and
+the open findings go to the creator, after three passes without
+convergence. Steps 1 to 5 are the short loop's; Clarifications are
+answered by the session and marked `Answered.`; each diff pass is
+dispatched with `diff from HASH1, commits B..C` as the diff pass below
+describes.
 
 ## Dispatch
 
 The prompt names: the stage file and its hash, the stage reference,
 this file, the record when it exists, the root of the code the
 document is about, the pass number, the scope, and the creator's words
-the stage checklist asks about. A stage's Review section adds its own
-items.
+the rubric asks about. A stage's Review section adds its own items.
 
 ## Reviewer rules
 
@@ -74,7 +92,7 @@ source says so. One fact, one place: a fact stated twice is a Polish
 finding that names both places. A number the code can change is
 written as the command that produces it or with the commit it was
 taken at. A passage that narrates the document's own revisions is a
-Clarification finding. Report; the session edits.
+Polish finding. Report; the session edits.
 
 A memory page is read with `memory read NAME`, so it arrives with its
 trust markers; the file under `.memory/` stays closed. A document that
@@ -90,7 +108,7 @@ code; each line where an old value from a Fixes line still appears,
 found with `git cat-file -p HASH2 | grep -n`; each line that cites a
 passage the diff deleted, found by grepping a distinctive word of the
 deleted text. Under Verified it lists the greps it ran and what each
-returned.
+returned. It reads nothing else of the document.
 
 At review implementation and evaluate goal the document is `plan.md`
 and the work is commits. A diff pass there reads two diffs: `git diff
@@ -112,13 +130,14 @@ run over `plan.md`.
 ## Pass N, DATE
 
 Reviewer: questlog:review-STAGE
-Scope: full, new run | full | diff from HASH1
+Scope: full | diff from HASH1
 Document: STAGE.md at HASH
 
 Blocking
-- location: finding, one sentence why. Fixed.
+- row 3, location: finding, one sentence why. Fixed.
 Clarification
-- location: finding. Open.
+- row 5, location: finding. Answered: Background, 2026-09-29.
+- row 5, location: finding. Open: question 2 to the creator.
 Fact
 - location: was X, is Y. Fixed.
 Polish
@@ -131,9 +150,9 @@ Fixes
 A tier with nothing under it holds one bullet, `- none`. HASH is the
 first seven characters of `git hash-object STAGE.md`, taken after step
 1's commit. A Check command's pattern excludes the line that states it,
-or it counts itself. `quest ID` reads the last pass and prints
-`last pass: 1 blocking (fixed), 0 clarification, 2 fact (fixed)` until
-a full pass converges. Review implementation and evaluate goal add
-`Code:` and `Commits:` lines under `Document:`; the range's end is the
-sha HEAD resolved to when the pass was recorded, never the word `HEAD`,
-so a later diff pass has a fixed B to start from.
+or it counts itself. `quest ID` reads the last pass and prints `last
+pass: 1 blocking (fixed), 0 clarification, 2 fact (fixed)` until a
+pass converges. Review implementation and evaluate goal add `Code:` and
+`Commits:` lines under `Document:`; the range's end is the sha HEAD
+resolved to when the pass was recorded, never the word `HEAD`, so a
+later diff pass has a fixed B to start from.

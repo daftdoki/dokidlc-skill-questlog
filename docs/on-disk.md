@@ -27,7 +27,7 @@ answer to "what is going on".
 
 Before the agent works a state it reads the plugin's reference for it,
 six files under the skill's `references/`, one per working state, each
-with the interview, the document's sections, and a review checklist.
+with the interview, the document's sections, and a review rubric.
 `quest ID` prints the path. A file at `docs/quests/guidance/STAGE.md`
 adds your project's rules; the agent reads it after the plugin's file,
 and it wins where they differ. `quest doctor` checks that the directory
@@ -35,11 +35,12 @@ holds only files named after a reference.
 
 Each stage file is reviewed before you see it. The agent dispatches a
 fresh-context reviewer, records the findings by tier in the review record
-beside the file, fixes them, and repeats until a pass finds nothing
-blocking and nothing to clarify, or a cap stops it: three full passes
-without convergence, or three diff passes in a row with something under
-Blocking or Clarification. The record shows you how the document
-converged, and a later session picks the loop up from the last pass.
+beside the file, and fixes them. A document gets one full pass against
+the stage's rubric and at most one diff pass over the fixes; the
+questions a reviewer raised that only you can answer come to you at the
+gate. Commits get passes until one converges or three are spent. The
+record shows you what was found and fixed, and a later session picks
+the loop up from the last pass.
 
 `quest.md` is frontmatter and a short body:
 
@@ -92,14 +93,15 @@ and Bash tools enforces the first three rows; the `ask` rules in
 | Edit or Write to `docs/quests/README.md` | denied |
 | Edit or Write that touches a `quest.md` frontmatter block | denied; the body below it is fine |
 | Bash that redirects into `docs/quests`, or runs `sed -i`, `tee`, `cp`, `mv`, `dd`, or an inline script (`python3 -c`, `sh -c`) that names a file there | denied; the redirect's target is what counts, so `2>/dev/null` beside a tracker path passes |
-| Bash that runs `quest init`, `quest new`, or `quest ID start`, `defer`, `next`, `skip`, or `abandon` | you are asked to approve, by the `ask` rules `quest init` writes to `.claude/settings.json`; a `*` in a rule stands for the id, and the rules match the command, so a commit message or heredoc that names a verb does not prompt |
+| Bash that runs `quest init`, `quest new`, or `quest ID start`, `defer`, `accept`, `skip`, or `abandon` | you are asked to approve, by the `ask` rules `quest init` writes to `.claude/settings.json`; a `*` in a rule stands for the id, and the rules match the command, so a commit message or heredoc that names a verb does not prompt. `quest ID next` is the agent's and does not prompt; it refuses at the three creator gates |
 | Anything else, including the agent writing a stage file | allowed |
 
 A `SessionStart` hook runs `quest doctor --brief`, one line telling the
 agent how many entries are open, that the tracker needs migrating, or
-that the log was written by a newer plugin. A project initialized before
-the rules existed gets them from `quest doctor --fix`, which the agent
-may run on its own, since adding a prompt cannot loosen anything. If `uv`
+that the log was written by a newer plugin. A project initialized by an
+older plugin gets the current rules from `quest doctor --fix`; the
+agent asks you first when a stale rule would be dropped, since that
+removes a prompt. If `uv`
 is missing, guarded actions are refused rather than allowed, and
 everything else proceeds.
 

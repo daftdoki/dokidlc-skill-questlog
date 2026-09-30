@@ -1,6 +1,6 @@
 ---
 name: quest
-description: Track work as quests and chores through one flat machine of states with creator review. Use when the creator asks to open, start, defer, move on, skip, or abandon work, when a state's file is written and the quest should move, or when a session needs to know what is open or completed.
+description: Track work as quests and chores through one flat machine of states with three creator gates. Use when the creator asks to open, start, defer, accept, skip, or abandon work, when a state's file is written and the quest should move, or when a session needs to know what is open or completed.
 ---
 
 # Quest
@@ -12,34 +12,32 @@ named `<id>-<slug>`, where STATE is `active`, `backlog`, `completed`, or
 history, and the Goal and Done when. Stage files sit beside it. The quest
 log at `docs/quests/README.md` is generated; the verbs are the only
 writers of it, of any `quest.md` frontmatter, and of where a directory
-sits. The command is `quest`, on PATH
-while this plugin is enabled. Read tracker files with Read and write
-stage files with Write or Edit; Bash that redirects into `docs/quests/`
-is denied.
+sits. The command is `quest`, on PATH while this plugin is enabled. Read
+tracker files with Read and write stage files with Write or Edit; Bash
+that redirects into `docs/quests/` is denied.
 
 Two command shapes. `quest log`, `quest history`, `quest new`, `quest
 doctor`, and `quest init` stand alone. Everything about one quest puts
-its id first: `quest ID`, `quest ID start`, `quest ID next`. Run
-`quest --help` for the list; every verb prints one state line that says
-where the quest is and what to do next, and that line is your next
-instruction.
+its id first: `quest ID`, `quest ID start`, `quest ID next`, `quest ID
+accept`. Run `quest --help` for the list; every verb prints one state
+line that says where the quest is and what to do next, and that line is
+your next instruction.
 
 ## Who does what
 
-You draft. The creator decides.
+You draft and run the states. The creator decides at three gates.
 
 Yours at any time: `quest log`, `quest history`, `quest ID`, `quest
-doctor`. Yours once the state's work is done: `quest ID next` out of a
-working state, when the file exists for draft goal, research, design,
-and plan, and when the commits are in for implement.
+doctor`. Yours once a state's work is done: `quest ID next`, which
+leaves every state but the three gates. It refuses at a gate.
 
 The creator's, run only when the creator asked for it in this
 conversation and after you have shown the exact command: `quest new`,
-`quest ID start`, `quest ID defer`, `quest ID next` out of a review state
-or evaluate goal, `quest ID skip`, `quest ID abandon`, `quest init`. The
-`ask` rules in the project's settings prompt the creator on every one of
-these; no permission mode approves one on its own, and your own `next`
-prompts too.
+`quest ID start`, `quest ID defer`, `quest ID accept`, `quest ID skip`,
+`quest ID abandon`, `quest init`. The `ask` rules in the project's
+settings prompt the creator on every one of these; no permission mode
+approves one on its own. `quest ID next --confirmed`, which leaves an
+agent gate whose loop stopped short, is run on the creator's word too.
 
 ## States
 
@@ -53,29 +51,49 @@ opened with research and design already marked skipped, so it runs draft
 goal, review goal, plan, review plan, implement, review implementation,
 evaluate goal.
 
-| State | Writes | Reference | Reviewer | Record |
-|---|---|---|---|---|
-| draft goal | `goal.md` | `references/goal.md` | | |
-| review goal | | `references/goal.md` | `questlog:review-goal` | `goal-review.md` |
-| research | `research.md` | `references/research.md` | | |
-| review research | | `references/research.md` | `questlog:review-research` | `research-review.md` |
-| design | `design.md` | `references/design.md` | | |
-| review design | | `references/design.md` | `questlog:review-design` | `design-review.md` |
-| plan | `plan.md` | `references/plan.md` | | |
-| review plan | | `references/plan.md` | `questlog:review-plan` | `plan-review.md` |
-| implement | commits, deviations in `plan.md` | `references/implement.md` | | |
-| review implementation | | `references/implement.md` | `questlog:review-implement` | `implement-review.md` |
-| evaluate goal | the result, against Done when | `references/review.md` | `questlog:review-result` | `result-review.md` |
+| State | Writes | Reference | Reviewer | Record | Gate |
+|---|---|---|---|---|---|
+| draft goal | `goal.md` | `references/goal.md` | | | agent |
+| review goal | | `references/goal.md` | `questlog:review-goal` | `goal-review.md` | creator |
+| research | `research.md` | `references/research.md` | | | agent |
+| review research | | `references/research.md` | `questlog:review-research` | `research-review.md` | agent |
+| design | `design.md` | `references/design.md` | | | agent |
+| review design | | `references/design.md` | `questlog:review-design` | `design-review.md` | creator |
+| plan | `plan.md` | `references/plan.md` | | | agent |
+| review plan | | `references/plan.md` | `questlog:review-plan` | `plan-review.md` | agent |
+| implement | commits, deviations in `plan.md` | `references/implement.md` | | | agent |
+| review implementation | | `references/implement.md` | `questlog:review-implement` | `implement-review.md` | agent |
+| evaluate goal | the result, against Done when | `references/review.md` | `questlog:review-result` | `result-review.md` | creator |
 
 `quest ID` and `quest ID start` print `guidance:` with the reference to
 read first, `document:` with the absolute path of the file under
-review, `reviewer:` and `record:` in a review state, and `overlay:`
-when the project has `docs/quests/guidance/STAGE.md`, which is read
-second and wins where they differ.
+review, `gate:` with who leaves the state, `reviewer:` and `record:` in
+a review state, and `overlay:` when the project has
+`docs/quests/guidance/STAGE.md`, which is read second and wins where
+they differ.
 
-## The loop
+## The run
 
-A state is a loop, not a gate.
+The creator accepts the goal, and you run: research, its review,
+design, and you stop at review design. The creator accepts the design,
+and you run: plan, its review, implement, its review, and you stop at
+evaluate goal. For a chore, accepting the goal runs plan through review
+implementation. Between gates you do not ask the creator whether to
+move on; the state line says `next` and you run it.
+
+The run pauses for four things and nothing else, and each is put to the
+creator with its evidence:
+
+- A Blocking finding still open after the loop's last pass: the
+  `last pass:` line.
+- A Deviation that touches a Done when line or a Success item: the
+  Deviations section.
+- A question the stage files do not answer and only the creator can: the
+  numbered question, with a recommended answer.
+- An action outside the repository that cannot be undone: the command,
+  shown and not run.
+
+## A state
 
 1. Read the reference the state line names, and the overlay when there
    is one. Load the skill the `skill:` line names, or tell the creator
@@ -83,39 +101,21 @@ A state is a loop, not a gate.
 2. In a working state, write the file. Done when the file exists and
    says what the reference asks for.
 3. Run `quest ID next`. The quest enters the review state and the state
-   line names the reviewer, the record, and the question to ask.
-4. Run the review loop in `references/review-loop.md` until a full
-   pass converges or a cap stops it. Done when the record's last
-   verdict says so; `quest ID` prints no `last pass:` line after a
-   converged full pass and prints one after a cap stop.
-5. Offer the file `document:` names, with its full path: "open it in
-   a Herdr pane, in the default viewer, or read on?". The Herdr pane
-   is offered when `HERDR_ENV=1` and opens through the
-   `herdr-file-viewer` skill, given the path relative to the
-   repository `quest` ran in; the default viewer is `open PATH` on
-   macOS and `xdg-open PATH` on Linux. Comments the creator gives
-   after opening are changes for step 7. Done when the creator read
-   on, or opened the file and said they have no further comments.
-6. Ask the creator the question the state line printed, in those words,
-   with the last verdict beside it. Wait.
-7. On changes: revise, loop, offer, ask again. On "move on": show and
-   run `quest ID next`. The quest moves only then.
-
-When `next` refuses, because the last verdict has not converged or the
-last pass was a diff pass, put the verdict and the `last pass:` line to
-the creator; run `quest ID next --confirmed` only on their word.
-
-## Review loop
-
-The first pass is full; each later pass reviews the diff against the
-Fixes list the session wrote, until a clean diff pass earns one more
-full pass. A Fact finding, a wrong count or line or sha, is fixed and
-verified and never a pass on its own. The run stops at three full
-passes without convergence or three diff passes in a row with
-something under Blocking or Clarification, and the open findings go
-to the creator. The steps,
-the tiers, the dispatch list, and the record template are in
-`references/review-loop.md`.
+   line names the reviewer and the record.
+4. Run the loop in `references/review-loop.md`: the short loop at a
+   document state, the long loop at a code state. Done when the loop
+   ends; `quest ID` prints no `last pass:` line after a converged pass.
+5. At an agent gate, run `quest ID next` and go to step 1 of the next
+   state. At a creator gate, one message: the document's full path,
+   with "open it in a Herdr pane, in the default viewer, or read on?",
+   the open Clarifications as numbered questions, and the question the
+   state line printed, in those words. The Herdr pane is offered when
+   `HERDR_ENV=1` and opens through the `herdr-file-viewer` skill, given
+   the path relative to the repository `quest` ran in; the default
+   viewer is `open PATH` on macOS and `xdg-open PATH` on Linux. Wait.
+6. On changes: revise, run the loop again, ask again. On "move on" or
+   "the goal is met": show and run `quest ID accept`. The quest moves
+   only then.
 
 ## Walk-throughs for creator verbs
 
@@ -124,8 +124,9 @@ quest or chore; the Goal, what they want to accomplish; and Done when,
 how we will know. Then show and run `quest new "Title" --goal "..."
 --done-when "..."`, with `--chore` for a chore.
 
-When the creator says to move on, name the state and summarize in one
-line what they are accepting, then show and run `quest ID next`.
+When the creator says to move on at a gate, name the state and
+summarize in one line what they are accepting, then show and run
+`quest ID accept`.
 
 When the creator asks to park or defer work, show and run `quest ID
 defer`. Nothing is lost; `quest ID start` resumes the entry at the state
@@ -139,6 +140,9 @@ refuses an empty one.
 - A fact that the code, the docs, or memory holds goes to
   `questlog:fact-finder`, and the creator is asked only what the creator
   alone knows.
+- A numbered question carries a recommended answer, and a bare "yes"
+  from the creator takes it. Word a yes-or-no question so that "yes" is
+  the recommendation.
 - If the project has the memory plugin: `quest ID start` and `quest ID`
   name matching memory pages; read them. Search memory again at each
   state: the title before draft goal, each design question during
@@ -146,15 +150,17 @@ refuses an empty one.
   tool the plan touches. When `next` leaves research, design, or plan,
   the script prints the memory prompt: write one page per finding you
   established on your own, citing the stage file with `--ref`, before
-  you ask the creator whether to move on.
+  you run the next state.
 - A chore is for small features, troubleshooting, and other chores. When
   the creator is unsure which to open, recommend a chore if the Goal fits
   in two sentences and needs no design. A chore still gets a goal and a
   plan.
 - Picking an abandoned idea up again is a new quest with a new id.
 - If `quest` refuses with "newer questlog", tell the creator to update
-  the plugin. If it refuses with "format 6", run `quest doctor` to see
-  the moves it proposes, and ask the creator before `quest doctor --fix`.
-  If it refuses with "format-6 first", the tracker predates format 6:
-  the creator runs that tagged version's `quest doctor --fix` before this
-  one can read it.
+  the plugin. If `quest doctor` reports stale ask rules, show the rules
+  it will drop and ask the creator before `quest doctor --fix`; dropping
+  a rule removes a prompt. If it refuses with "format 6", run `quest
+  doctor` to see the moves it proposes, and ask the creator before
+  `quest doctor --fix`. If it refuses with "format-6 first", the tracker
+  predates format 6: the creator runs that tagged version's `quest
+  doctor --fix` before this one can read it.

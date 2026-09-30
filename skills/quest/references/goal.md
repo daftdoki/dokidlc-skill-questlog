@@ -55,18 +55,28 @@ none the creator did not give.
 The loop, the tiers, the session's steps, the dispatch list, the
 reviewer rules, and the record template are in `review-loop.md`, read
 before this section. The reviewer is `questlog:review-goal` and the
-record is `goal-review.md`.
+record is `goal-review.md`. Review goal is a creator gate: open
+Clarifications go to the creator as numbered questions beside the
+accept question.
 
-Findings at this stage. Blocking: an answer recorded that is not what
-the creator said, or a Success item that cannot be judged true or false.
-Clarification: a Background claim with no source a reader can open.
+Rubric for goal. Each row is graded pass or fail; a failure is a
+finding at the row's tier, and the fail beside each row is an example.
 
-Checklist for goal:
-
-- Every question asked has its answer recorded, and the answer matches
-  what the creator said.
-- Every item under Success looks like can be judged true or false against
-  the finished work.
-- No decision that would change every downstream option is assumed.
-- Background names what exists and cites where it is shown.
-- Where the creator drew a line, out of scope says so.
+1. Blocking. Every Answer matches the creator's words. Fail: an answer
+   recorded as "yes" where the creator wrote "your call".
+2. Blocking. Every item under Success looks like can be judged true or
+   false against the finished work by someone who did not do it. Fail:
+   "the viewer offer works well".
+3. Clarification. No decision that would change every downstream option
+   is assumed. Fail: the goal picks one of two skills without a question
+   recording the choice.
+4. Clarification. Background names what exists and cites where a reader
+   sees it. Fail: "the hook prompts on prose" with no transcript, file,
+   or command named.
+5. Clarification, belongs to plan. The goal names no file path, command,
+   flag, or count, unless the Goal is itself technical and the creator
+   gave the name. Fail: a goal for a viewer offer that names `open` and
+   `xdg-open` and a launch flag.
+6. Clarification. A hypothesis the goal turns on has its test and result
+   in Background. Fail: "if Claude Code can put the marketplace name in
+   the prefix" with no test run.

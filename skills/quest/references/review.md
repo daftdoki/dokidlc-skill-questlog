@@ -10,8 +10,8 @@ and run its loop before you ask the creator whether the goal is met.
 
 The creator reads the result against the quest's Done when and says
 whether the goal is met. You present the result, answer questions, and
-fix what the creator finds. The creator's `quest ID next` completes the
-quest.
+fix what the creator finds. The creator's `quest ID accept` completes
+the quest.
 
 ## Presenting the result
 
@@ -28,9 +28,10 @@ gap, fix it, commit, and show the fix.
 The loop, the tiers, the session's steps, the dispatch list, the
 reviewer rules, and the record template are in `review-loop.md`, read
 before this section. The reviewer is `questlog:review-result` and the
-record is `result-review.md`. Run the loop before you ask the creator
-whether the goal is met; the creator's `quest ID next` completes the
-quest.
+record is `result-review.md`. Evaluate goal runs the long loop and is a
+creator gate: run the loop before you ask the creator whether the goal
+is met, and put open Clarifications beside that question. The creator's
+`quest ID accept` completes the quest.
 
 Dispatch adds: `plan.md` is the stage file, and the prompt names
 `quest.md` for the Done when, `goal.md` for Success looks like, the root
@@ -40,17 +41,20 @@ newer than the `implement` entry's time in the `history` list of
 branch. The reviewer reads the Done when, the Deviations, the record,
 and the commits, and runs what can be run.
 
-Findings at this stage. Blocking: a Done when line not met with nothing
-saying so. Clarification: a line met with evidence the creator would
-have to ask about.
+Rubric for evaluate goal.
 
-Checklist for evaluate goal:
-
-- Every line of Done when is met, with evidence, or is marked not met
-  with the reason.
-- Every item under Success looks like in `goal.md` is met or marked.
-- Every deviation is recorded, and none hides an unmet line.
-- The documentation the work changed reads as current.
+1. Blocking. Every line of Done when is met, with evidence, or is marked
+   not met with the reason. Fail: a line with no evidence and no mark.
+2. Blocking. Every item under Success looks like in `goal.md` is met or
+   marked. Fail: an item the presentation skips.
+3. Clarification. No deviation hides an unmet line. Fail: a Deviation
+   that narrows a Done when line without saying the line is not met.
+4. Clarification. The documentation the work changed reads as current
+   and is about the product, not the process: the README says what it
+   does, how to install and start it, and where the rest is; a fact is
+   stated once. Fail: a README section that narrates the quest.
+5. Clarification. The working tree is clean and the branch is where the
+   plan said it would be. Fail: uncommitted files under `docs/`.
 
 The record adds two lines under `Document:`:
 

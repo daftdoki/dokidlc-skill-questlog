@@ -61,7 +61,8 @@ review loop in `review-loop.md`.
 The loop, the tiers, the session's steps, the dispatch list, the
 reviewer rules, and the record template are in `review-loop.md`, read
 before this section. The reviewer is `questlog:review-implement` and
-the record is `implement-review.md`.
+the record is `implement-review.md`. Review implementation runs the
+long loop and is an agent gate.
 
 Dispatch adds: `plan.md` is the stage file, and the prompt names the
 root of the code repository and the commit range, from the earliest
@@ -70,20 +71,20 @@ commit newer than the `implement` entry's time in the `history` list of
 branch. The reviewer reads the plan and its Deviations, the record, and
 the commits, and runs the suite.
 
-Findings at this stage. Blocking: a commit that does not do what the
-plan says with no Deviation saying why, a test the plan promised that
-is missing or fails, or a claim that fails against the code.
-Clarification: a deviation the creator would have to ask about before
-reviewing.
+Rubric for implement.
 
-Checklist for implement:
-
-- Each commit matches a plan step, or the Deviations say why not.
-- Every test the plan named exists and passes; the suite passes.
-- Every document the plan promised is updated.
-- Each deviation is recorded with its date and reason.
-- The project's code review ran, where the project has one, and its
-  findings are fixed or recorded.
+1. Blocking. Each commit does what its plan step says, or a Deviation
+   says why not. Fail: step 3's commit adds a flag the step never named
+   and Deviations is silent.
+2. Blocking. Every test the plan named exists and passes, and the suite
+   passes. Fail: a test the plan promised is absent.
+3. Blocking. Every claim in Deviations holds against the code. Fail: a
+   Deviation says a helper was reused where the commit adds a new one.
+4. Clarification. Every document the plan promised is updated. Fail:
+   the README section the plan named is unchanged.
+5. Clarification. Each deviation carries its date and reason, and the
+   project's code review ran where the project has one. Fail: a
+   Deviation with no date.
 
 The record adds two lines under `Document:`:
 

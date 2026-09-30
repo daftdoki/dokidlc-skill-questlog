@@ -27,11 +27,10 @@ each step touches, so the plan names real functions and real files.
 Search memory for each tool the plan touches: the build, the test runner,
 the package manager, the deploy path.
 
-A fact that lives in the code, the docs, or memory goes to
-`questlog:fact-finder`. A question only the creator can answer goes to
-the creator in one numbered round with a recommended answer each. A
-round is one message that asks every question you can ask now and then
-waits.
+Plan runs without the creator. A fact that lives in the code, the docs,
+or memory goes to `questlog:fact-finder`. A question the design and the
+goal do not answer and only the creator can pauses the run: ask it,
+numbered, with a recommended answer, and wait.
 
 ## Writing
 
@@ -61,20 +60,23 @@ listed.
 The loop, the tiers, the session's steps, the dispatch list, the
 reviewer rules, and the record template are in `review-loop.md`, read
 before this section. The reviewer is `questlog:review-plan` and the
-record is `plan-review.md`. For a quest, the reviewer reads the design's
-Implementation plan beside the plan.
+record is `plan-review.md`. For a quest, the reviewer reads the
+design's Implementation plan beside the plan. Review plan is an agent
+gate: the session answers each Clarification from the design, the
+code, or a fact-finder and records the answer.
 
-Findings at this stage. Blocking: a step whose commit leaves the tree
-failing, or a step that contradicts the design or the code. Clarification:
-a step an implementer would have to ask about before acting.
+Rubric for plan.
 
-Checklist for plan:
-
-- Every step names its files and its test.
-- The order leaves the tree passing at each commit.
-- Every risk has a response.
-- The steps cover every line of the quest's Done when.
-- For a quest, the commits match the design's Implementation plan, or the
-  difference is named.
-- Every function, file, test, and command the plan names exists or is
-  named as new.
+1. Blocking. Each step's commit leaves the tree passing. Fail: a step
+   that removes a function before the step that removes its callers.
+2. Blocking. No step contradicts the design or the code. Fail: a step
+   edits a function the code does not have and no step adds.
+3. Blocking. The steps cover every line of the quest's Done when. Fail:
+   Done when names a document update no step touches.
+4. Clarification. Every step names its files and the test that proves
+   it. Fail: "update the skill" with no file and no test.
+5. Clarification. Every risk under What could go wrong has a response.
+   Fail: a risk with no check and no fallback.
+6. Clarification. For a quest, the commits match the design's
+   Implementation plan or the difference is named. Fail: four commits
+   where the design listed two, unexplained.

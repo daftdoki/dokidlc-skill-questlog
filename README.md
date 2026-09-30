@@ -11,7 +11,7 @@ draft goal -> review goal -> research -> review research -> design -> review des
   -> plan -> review plan -> implement -> review implementation -> evaluate goal -> completed
 ```
 
-With the plugin enabled, the agent does four things on its own: tells you what is open at the start of every session, reads a quest before working on it, writes the stage documents, and moves a quest into review when it wants your eyes. Before you see a document it has already run a fresh-context reviewer over it and fixed what that found. It will not open, start, park, move on from review, skip, or abandon anything by itself. Those happen only when you ask, and Claude Code prompts you to approve the exact command each time.
+With the plugin enabled, the agent tells you what is open at the start of every session, reads a quest before working on it, writes the stage documents, and runs the states between your gates on its own. You decide at three gates: the goal, the design, and the result. Before you see a document it has already run a fresh-context reviewer over it and fixed what that found. It will not open, start, park, accept, skip, or abandon anything by itself. Those happen only when you ask, and Claude Code prompts you to approve the exact command each time.
 
 ## Why questlog
 
@@ -65,7 +65,7 @@ Talk to the agent. Every command prints one line saying where the quest is and w
 - "Start the mDNS quest." `quest 2609051012-k3 start`. The quest is at draft goal.
 - "Draft the goal." The agent interviews you, writes `goal.md`, runs `quest 2609051012-k3 next`, runs the review loop, and asks: move on to researching?
 - "Change the second story." The agent revises, runs the loop again, and asks again, as many times as it takes.
-- "Move on." The agent shows and runs `quest 2609051012-k3 next`. From evaluate goal, that completes the quest.
+- "Move on." The agent shows and runs `quest 2609051012-k3 accept`, then runs research, its review, and design on its own and stops at review design. After you accept the design it runs plan, its review, implement, and its review, and stops at evaluate goal. From there, accept completes the quest. It pauses in between only for a Blocking finding it could not fix, a deviation that touches Done when, a question only you can answer, or an irreversible action outside the repository.
 - "Skip research on this one." `quest 2609051012-k3 skip`; review research goes with it.
 - "Park the mDNS quest." `quest 2609051012-k3 defer`. The log shows `backlog, resume at review plan`, and `start` picks it up there.
 - "Abandon it, we're going with the bridge's own discovery." `quest 2609051012-k3 abandon "reason"`.
@@ -82,19 +82,20 @@ quest init                                  set up a repository
 quest 2609051012-k3                         show one quest; a unique id prefix works
 quest 2609051012-k3 start                   leave the backlog; a deferred quest resumes where it was
 quest 2609051012-k3 defer                   back to the backlog; the state is kept
-quest 2609051012-k3 next [--confirmed]      the current state is done; enter the next one
+quest 2609051012-k3 next [--confirmed]      the current state is done; enter the next one; refuses at a gate
+quest 2609051012-k3 accept                  your word at review goal, review design, and evaluate goal
 quest 2609051012-k3 skip                    skip the current state
 quest 2609051012-k3 abandon "reason"        terminal; files stay, the entry leaves the log
 ```
 
-The agent runs `log`, `history`, `doctor`, `ID`, and `ID next` out of a working state on its own. The rest are yours, and every `next` prompts you.
+The agent runs `log`, `history`, `doctor`, `ID`, and `ID next` on its own. The rest are yours, and each one prompts you.
 
 ## Caveats
 
 - A hook denies hand edits to the quest log and to `quest.md` frontmatter, so the verbs are the only way state changes. Edit the body of a `quest.md` freely; the frontmatter is refused. [docs/on-disk.md](docs/on-disk.md) has the full trigger table.
 - The guard is for habit, not for an adversary. A command that reaches the tracker without naming it, through an encoded payload or a script on stdin, gets through. `quest doctor` is the check behind it.
 - Without `uv` on PATH, guarded actions are refused rather than allowed, and everything else proceeds.
-- A review loop can stop at a cap without converging, three full passes or three diff passes in a row with findings open. The findings come to you; nothing blocks.
+- A document review is one pass and at most one diff pass; a code review runs until it converges or three passes are spent. Findings still open come to you; nothing blocks.
 - The plugin installs once per machine. `.claude/settings.json` can enable it for every clone but cannot install it.
 
 ## Other docs

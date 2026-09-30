@@ -17,10 +17,10 @@ during implementation.
 
 ## Before you write
 
-Draft the Goal from the quest and the research, and put it to the creator
-with one question: does this capture it? Collect the stories from the
-creator in the same message: the outcomes each person wants, in their
-words. Write none they did not give.
+Design runs after research, without the creator, and ends at a creator
+gate. Draft the Goal from the quest and the research, and take the
+stories from the goal's Answers, in the creator's words. Write none
+they did not give.
 
 Explore the code the design touches: the modules, functions, data
 structures, and tests it builds on or changes, and the patterns earlier
@@ -28,19 +28,14 @@ work set. Search memory for `decision` pages before you recommend
 anything; a past decision stands until the creator reverses it.
 
 Then settle every decision that shapes the design. Map them as a tree:
-each decision branches into the decisions that hang off it. The frontier
-is every decision whose prerequisites are settled, so it can be asked now
-without guessing an answer not yet heard. Ask the whole frontier in one
-round, wait, and repeat. A round is one message that asks every question
-you can ask now. Number the questions and give each a recommended answer,
-so the creator can reply "1 yes, 2 your call, 3 no". A fact that lives in
-the code, the docs, or memory goes to `questlog:fact-finder`, and the
-round does not wait for it. Ask only what would change the design:
-research decisions to confirm or reverse, constraints to follow,
-behaviours out of scope, how the work should be broken into commits.
-
-The interview is complete when the frontier is empty. Write the design
-after that, and after the creator says the understanding is shared.
+each decision branches into the decisions that hang off it. Settle each
+from the goal's Answers, the research's Recommendation, the code, and
+`decision` memory pages; a fact goes to `questlog:fact-finder`. Record
+each as a Decision with its reason. A decision that none of those
+settle and only the creator can pauses the run: ask the whole frontier
+of such decisions in one numbered round with a recommended answer each,
+and wait. Write the design when every decision is settled; the creator
+reads it at review design.
 
 ## Writing
 
@@ -72,23 +67,27 @@ reviewer rules, and the record template are in `review-loop.md`, read
 before this section. The reviewer is `questlog:review-design` and the
 record is `design-review.md`. The reviewer reads the source for every
 code claim: the files the design names first, then the imports they
-lead to.
+lead to. Review design is a creator gate: open Clarifications go to the
+creator as numbered questions beside the accept question.
 
-Findings at this stage. Blocking: a described behaviour, function, or
-commit order that fails against the code, or a decision that departs
-from the research with no reason. Clarification: an edge case, an
-ambiguous requirement, or a manual step an implementer would have to
-ask about.
+Rubric for design.
 
-Checklist for design:
-
-- Every section is present, in order.
-- Every file path, function, class, count, and described behaviour holds
-  against the code.
-- Decisions follow the research recommendation, or the departure is
-  explained.
-- Decisions, Design, and Test changes agree with each other.
-- The Implementation plan's commits each leave the tree passing.
-- Nothing an implementer would have to ask: no missing edge case, no
-  ambiguous requirement, no manual step that should be a script.
-- Stories are the creator's, and none was invented.
+1. Blocking. Every file path, function, class, count, and described
+   behaviour holds against the code. Fail: a predicate described as
+   reading a key the code does not write.
+2. Blocking. Each decision follows the research recommendation or names
+   why it departs. Fail: a decision that reverses the recommendation
+   with no reason.
+3. Blocking. Each commit in the Implementation plan leaves the tree
+   passing. Fail: commit 2 changes a signature whose callers commit 3
+   updates.
+4. Clarification. Decisions, Design, and Test changes agree with each
+   other. Fail: decision 4 names two flags and the Design section shows
+   one.
+5. Clarification. Nothing an implementer would have to ask: no missing
+   edge case, no ambiguous requirement, no manual step that should be a
+   script. Fail: "migrate the settings" with no command.
+6. Clarification. Every story is the creator's. Fail: a story the
+   interview never recorded.
+7. Clarification. Every section is present, in order. Fail: Out of
+   scope missing.

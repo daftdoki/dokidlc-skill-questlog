@@ -23,13 +23,12 @@ Read the research and design of related quests first, so this document
 builds on them instead of repeating them. Search memory for each design
 question as you form it.
 
-Then ask the creator, in one round, about the assumptions that would
-change every downstream option if guessed wrong. A round is one message
-that asks every question you can ask now and then waits. Number the
-questions and give each a recommended answer. A fact that lives in the
-code, the docs, or memory goes to `questlog:fact-finder`, and the round
-does not wait for it. The round is complete when no decision that would
-change every downstream option is left assumed.
+Research runs after the creator accepted the goal, without the creator.
+Take the assumptions that would change every downstream option from
+the goal's Answers; a fact that lives in the code, the docs, or memory
+goes to `questlog:fact-finder`. Only a question the goal does not
+answer and only the creator can pauses the run: ask it, numbered, with
+a recommended answer, and wait.
 
 Catalog what already exists that the change must fit with: the features,
 data structures, and conventions it will touch. Every approach you write
@@ -84,28 +83,29 @@ design space, not a line count.
 
 The loop, the tiers, the session's steps, the dispatch list, the
 reviewer rules, and the record template are in `review-loop.md`, read
-before this section. The reviewer is `questlog:review-research` and the
-record is `research-review.md`.
+before this section. The reviewer is `questlog:review-research` and
+the record is `research-review.md`. Review research is an agent gate:
+the session answers each Clarification from the goal, the code, or a
+fact-finder and records the answer. Options the document did not
+consider and a smaller deliverable that covers most of the need are not
+rows; the session asks the creator about them at the design gate.
 
-Findings at this stage. Blocking: a Recommendation that contradicts a
-section above it, or a count the code gives differently on which an
-option's viability rests. Clarification: a design question raised and
-then dropped.
+Rubric for research.
 
-Checklist for research:
-
-- Every option is distinct, and every one opens with a viability line
-  from the three values.
-- Every matrix marks one recommended column.
-- The Recommendation is one design, not a list of option codes, and it
-  agrees with the sections above it.
-- Every approach says how it fits with the cataloged capabilities.
-- Load-bearing counts, paths, and behaviours hold against the code.
-- Options the document did not consider are named, from other domains
-  where they exist. Checked at pass 1 of the record and at a full pass
-  after a creator revision that touches an Approaches section.
-- Simpler options are named: a smaller deliverable that covers most of
-  the need, or two proposals that solve one problem. Checked at the
-  same passes as the item above.
-- Design questions are settled or explicitly deferred; none is raised
-  and dropped.
+1. Blocking. The Recommendation is one design and agrees with the
+   sections above it. Fail: the Recommendation takes option B where the
+   matrix stars A.
+2. Blocking. A count, path, or behaviour an option's viability rests on
+   holds against the code. Fail: "58 call sites" where `grep -c` gives
+   45.
+3. Clarification. Every option is distinct and opens with a viability
+   line from the three values. Fail: two options that differ only in a
+   flag's name.
+4. Clarification. Every approach says how it fits each cataloged
+   capability, or says why it sidesteps one. Fail: an option that
+   ignores the existing guard hook.
+5. Clarification. Every design question is settled in an Approaches
+   section or listed under Decisions for design. Fail: a question in
+   Design questions with neither.
+6. Clarification. The Comparison matrix marks one recommended column.
+   Fail: two starred columns, or none.
