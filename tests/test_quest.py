@@ -1281,7 +1281,7 @@ def test_last_pass_counts_tiers_and_markers(tmp_path):
 def test_last_pass_reads_an_old_record(tmp_path):
     (tmp_path / "plan-review.md").write_text("# Review record: plan\n\n## Pass 1, 2026-09-05\n\nReviewer: questlog:review-plan\nDocument: plan.md at ccccccc\n\nBlocking\n- (none)\nClarification\n- a: b. Fixed: c.\nPolish\n- fixed on sight\nVerdict: another pass\n")
     assert quest.last_pass(tmp_path, "plan-review.md") == {"scope": "", "verdict": "another pass",
-        "Blocking": (0, 0), "Clarification": (1, 0), "Fact": (0, 0), "Polish": (1, 0)}
+        "Blocking": (0, 0, 0), "Clarification": (1, 0, 0), "Fact": (0, 0, 0), "Polish": (1, 0, 0)}
     assert quest.last_pass(tmp_path, "goal-review.md") is None
     (tmp_path / "goal-review.md").write_text("# Review record: goal\n")
     assert quest.last_pass(tmp_path, "goal-review.md") is None
@@ -1291,7 +1291,7 @@ def test_last_pass_line_prints_only_when_not_converged(tmp_path):
     review = quest.BY_NAME["review plan"]
     assert quest.last_pass_line(tmp_path, review) is None                                    # no record
     (tmp_path / "plan-review.md").write_text(RECORD)
-    assert quest.last_pass_line(tmp_path, review) == "last pass: 1 blocking (fixed), 2 clarification (1 of 2 fixed), 0 fact"
+    assert quest.last_pass_line(tmp_path, review) == "last pass: 1 blocking (fixed), 2 clarification (1 of 2 fixed) (1 for the creator), 0 fact"
     assert quest.last_pass_line(tmp_path, quest.BY_NAME["plan"]) is None                    # a working state has no record
     (tmp_path / "plan-review.md").write_text(RECORD.replace("Verdict: another pass\n", "Verdict: converged\n"))
     assert quest.last_pass_line(tmp_path, review) is None                                    # a converged diff pass owes nothing
@@ -1307,11 +1307,11 @@ def test_show_and_start_print_last_pass(tmp_path, monkeypatch, capsys):
     quest.main([qid])
     out = capsys.readouterr().out
     assert out.splitlines()[0] == f"{qid} is at review plan. Run the review-plan loop into plan-review.md, then run: quest {qid} next"
-    assert out.splitlines()[1] == "last pass: 1 blocking (fixed), 2 clarification (1 of 2 fixed), 0 fact"
+    assert out.splitlines()[1] == "last pass: 1 blocking (fixed), 2 clarification (1 of 2 fixed) (1 for the creator), 0 fact"
     quest.main([qid, "defer"]); capsys.readouterr()
     quest.main([qid, "start"])
     out = capsys.readouterr().out
-    assert out.splitlines()[1] == "last pass: 1 blocking (fixed), 2 clarification (1 of 2 fixed), 0 fact"
+    assert out.splitlines()[1] == "last pass: 1 blocking (fixed), 2 clarification (1 of 2 fixed) (1 for the creator), 0 fact"
 
 
 def test_next_accepts_a_converged_diff_pass(tmp_path, monkeypatch, capsys):

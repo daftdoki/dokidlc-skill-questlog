@@ -1002,8 +1002,8 @@ def last_pass(d: Path, record: str) -> dict | None:
         bullets = [b for b in re.split(r"^- ", m.group(1), flags=re.M) if b.strip()] if m else []
         if bullets and bullets[0].strip("() .").lower().startswith("none"):
             bullets = []
-        out[tier] = (len(bullets), sum(1 for b in bullets if b.rstrip().endswith(("Fixed.", "Answered."))),
-                     sum(1 for b in bullets if b.rstrip().endswith("Open.")))
+        out[tier] = (len(bullets), sum(1 for b in bullets if re.search(r"(Fixed\.|Answered[.:])", b)),
+                     sum(1 for b in bullets if re.search(r"\bOpen[.:]", b)))
     return out
 
 
