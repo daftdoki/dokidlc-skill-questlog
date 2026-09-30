@@ -59,31 +59,32 @@ class State:
     doing: str            # gerund phrase, "reviewing the plan"; fills {next} in the previous state's say
     say: str              # printed after "ID is at NAME. "; {id} and {next} are filled
     nudge: bool = False   # print the memory write prompt on entry
+    creator: bool = False # a creator gate: only `accept`, on the creator's word, leaves it; `next` refuses
 
 
 STATES = (
     State("draft goal", "goal.md", False, None, None, "goal.md", "drafting the goal",
           "Write goal.md, then run: quest {id} next"),
     State("review goal", None, True, "review-goal", "goal-review.md", "goal.md", "reviewing the goal",
-          "Run the review-goal loop into goal-review.md, then ask the creator: move on to {next}?"),
+          "Run the review-goal loop into goal-review.md, then ask the creator: move on to {next}? On their word, run: quest {id} accept", creator=True),
     State("research", "research.md", True, None, None, "research.md", "researching",
           "Write research.md, then run: quest {id} next"),
     State("review research", None, True, "review-research", "research-review.md", "research.md", "reviewing the research",
-          "Run the review-research loop into research-review.md, then ask: move on to {next}?", nudge=True),
+          "Run the review-research loop into research-review.md, then run: quest {id} next", nudge=True),
     State("design", "design.md", True, None, None, "design.md", "designing",
           "Write design.md, then run: quest {id} next"),
     State("review design", None, True, "review-design", "design-review.md", "design.md", "reviewing the design",
-          "Run the review-design loop into design-review.md, then ask: move on to {next}?", nudge=True),
+          "Run the review-design loop into design-review.md, then ask the creator: move on to {next}? On their word, run: quest {id} accept", nudge=True, creator=True),
     State("plan", "plan.md", False, None, None, "plan.md", "planning",
           "Write plan.md, then run: quest {id} next"),
     State("review plan", None, True, "review-plan", "plan-review.md", "plan.md", "reviewing the plan",
-          "Run the review-plan loop into plan-review.md, then ask: move on to {next}?", nudge=True),
+          "Run the review-plan loop into plan-review.md, then run: quest {id} next", nudge=True),
     State("implement", None, False, None, None, "implement.md", "implementing",
           "Build in the order plan.md lists, then run: quest {id} next"),
     State("review implementation", None, True, "review-implement", "implement-review.md", "implement.md", "reviewing the implementation",
-          "Run the review-implement loop into implement-review.md, then ask: move on to {next}?"),
+          "Run the review-implement loop into implement-review.md, then run: quest {id} next"),
     State("evaluate goal", None, False, "review-result", "result-review.md", "review.md", "evaluating the goal",
-          "Run the review-result loop into result-review.md, then ask: is the goal met?"),
+          "Run the review-result loop into result-review.md, then ask the creator: is the goal met? On their word, run: quest {id} accept", creator=True),
 )
 BY_NAME = {s.name: s for s in STATES}
 CHORE_SKIPS = ("research", "review research", "design", "review design")
@@ -92,8 +93,8 @@ REVIEW_OF = {"research": "review research", "design": "review design"}   # skipp
 # one permission rule per creator verb; Claude Code prompts on a match in every mode, a `*` stands for any text in its place,
 # and the rule does not look inside quoted text. `abandon` ends in `*` because its reason follows the verb; `next` has a second rule for its flag.
 ASK_RULES = ("Bash(quest init *)", "Bash(quest new *)",
-             *(f"Bash(quest * {v})" for v in ("start", "defer", "next", "skip")),
-             "Bash(quest * next --confirmed)", "Bash(quest * abandon *)")
+             *(f"Bash(quest * {v})" for v in ("start", "defer", "skip", "accept")),
+             "Bash(quest * abandon *)")
 SETTINGS = ".claude/settings.json"
 LOCAL_SETTINGS = ".claude/settings.local.json"
 WRITING_PLUGIN = "writing-for-agents@dokidlc"       # every stage file is read by an agent, so the session writes it under this skill
@@ -103,7 +104,7 @@ CLAUDE_MD_MARK = "<!-- questlog -->"
 CLAUDE_MD_PARAGRAPH = f"""
 ## Quests {CLAUDE_MD_MARK}
 
-Work is tracked as quests and chores under `docs/quests/`. Run `quest log` to see what is open and `quest ID` to read one. The `quest` skill has the states and the verbs. You draft; the creator decides. Run a creator verb only when the creator asks, and show the command first.
+Work is tracked as quests and chores under `docs/quests/`. Run `quest log` to see what is open and `quest ID` to read one. The `quest` skill has the states and the verbs. You draft and run the states; the creator decides at three gates, the goal, the design, and the result. Run a creator verb only when the creator asks, and show the command first.
 """
 
 USAGE = """Usage:
@@ -116,13 +117,14 @@ USAGE = """Usage:
   quest ID [show]                show a quest: its page, files, state, and guidance (id prefix ok)
   quest ID start                 leave the backlog; a deferred quest resumes where it was
   quest ID defer                 back to the backlog; the state is kept
-  quest ID next [--confirmed]    the current state is done; enter the next one
+  quest ID next [--confirmed]    the current state is done; enter the next one; refuses at a creator gate
+  quest ID accept                the creator's word at review goal, review design, and evaluate goal
   quest ID skip                  skip the current state; research and design take their review with them
   quest ID abandon "reason"      terminal; files stay, the entry leaves the log
 
 States, in order: {states}
 An entry sits under docs/quests/active/, backlog/, completed/, or abandoned/; the verbs move it.
-init, new, start, defer, next, skip, and abandon prompt the creator.
+init, new, start, defer, skip, accept, and abandon prompt the creator; next is the agent's.
 """.format(states=", ".join(s.name for s in STATES))
 
 
@@ -643,7 +645,7 @@ def write_ask_rules(path: Path, data: dict) -> list[str]:
 
 
 def write_missing_ask_rules(root: Path) -> None:
-    """The doctor's repair. Adding a prompt cannot loosen anything, so no creator verb is needed."""
+    """The doctor's repair. Dropping a stale rule removes a prompt, so the skill has the agent ask the creator before --fix."""
     write_ask_rules(*settings_gate(root))
 
 
@@ -961,6 +963,7 @@ def print_guidance(fm: dict, root: Path, d: Path) -> None:
         return
     print(f"guidance: {REFERENCES / s.reference}")
     print(f"document: {d / document_for(s)}")
+    print(f"gate: {'creator' if s.creator else 'agent'}")
     if s.reviewer:
         print(f"reviewer: questlog:{s.reviewer}")
         print(f"record: {s.record}")
@@ -1003,23 +1006,21 @@ def last_pass(d: Path, record: str) -> dict | None:
 
 
 def last_pass_line(d: Path, s: State) -> str | None:
-    """`last pass: 1 blocking (fixed), 0 clarification, 2 fact (fixed)` when the state has a record whose last pass is not a converged
-    full pass; else None, including at a working state, where s.record is None."""
+    """`last pass: 1 blocking (fixed), 0 clarification, 2 fact (fixed)` when the state has a record whose last pass did not converge;
+    else None, including at a working state, where s.record is None."""
     if not s.record:
         return None
     p = last_pass(d, s.record)
     if p is None:
         return None
-    diff = p["scope"].startswith("diff")
-    if p["verdict"].lower().startswith("converged") and not diff:
+    if p["verdict"].lower().startswith("converged"):
         return None
     parts = []
     for tier in TIERS[:3]:
         n, fixed = p[tier]
         suffix = " (fixed)" if n and fixed == n else f" ({fixed} of {n} fixed)" if fixed else ""
         parts.append(f"{n} {tier.lower()}{suffix}")
-    line = "last pass: " + ", ".join(parts)
-    return line + "; a diff pass, so a full pass is owed" if diff and p["verdict"].lower().startswith("converged") else line
+    return "last pass: " + ", ".join(parts)
 
 
 def update_quest(d: Path, changes: dict) -> dict:
@@ -1095,17 +1096,32 @@ def cmd_next(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     if rest not in ([], ["--confirmed"]):
         die(f"next takes --confirmed or nothing: {' '.join(rest)}", 2)
     s = require_at_state(fm)
+    if s.creator:
+        die(f"{fm['id']} is at {s.name}, a creator gate; on the creator's word run: quest {fm['id']} accept")
     if s.file and not (d / s.file).is_file():
         die(f"{d.name}/{s.file} does not exist yet")
     if s.reviewer and not rest:
         verdict = last_verdict(d, s.record)
         line = last_pass_line(d, s)
-        p = last_pass(d, s.record)
         detail = f"{line}\n" if line else ""
-        if verdict and p and p["scope"].startswith("diff") and verdict.lower().startswith("converged"):
-            die(f"last verdict: {verdict}, on a diff pass; a full pass is owed\n{detail}confirm with the creator, then run: quest {fm['id']} next --confirmed")
         if verdict and not verdict.lower().startswith("converged"):
-            die(f"last verdict: {verdict}\n{detail}confirm with the creator, then run: quest {fm['id']} next --confirmed")
+            die(f"last verdict: {verdict}\n{detail}the loop stopped short; put the open findings to the creator, then run: quest {fm['id']} next --confirmed")
+    enter_next(root, d, fm, s)
+
+
+def cmd_accept(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
+    """The creator's word at a creator gate. The verdict is printed and not enforced: the creator decides."""
+    no_args(rest, "accept")
+    s = require_at_state(fm)
+    if not s.creator:
+        die(f"{fm['id']} is at {s.name}, the agent's gate; run: quest {fm['id']} next")
+    line = last_pass_line(d, s)
+    if line:
+        print(line)
+    enter_next(root, d, fm, s)
+
+
+def enter_next(root: Path, d: Path, fm: dict, s: State) -> None:
     nxt = successor(fm, s.name)
     # the page is written first and the directory follows it: an interruption between the two leaves a page whose
     # state names one bucket while it sits in another, which the doctor's placement row names and --fix moves
@@ -1197,7 +1213,7 @@ def cmd_history(rest: list[str]) -> None:
 
 
 GLOBAL = {"new": cmd_new, "log": cmd_log, "history": cmd_history, "doctor": cmd_doctor, "init": cmd_init}
-VERBS = {"show": cmd_show, "start": cmd_start, "defer": cmd_defer, "next": cmd_next, "skip": cmd_skip, "abandon": cmd_abandon}
+VERBS = {"show": cmd_show, "start": cmd_start, "defer": cmd_defer, "next": cmd_next, "accept": cmd_accept, "skip": cmd_skip, "abandon": cmd_abandon}
 
 
 def main(argv: list[str] | None = None) -> None:

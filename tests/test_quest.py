@@ -194,6 +194,13 @@ def _fm(d):
     return quest.parse_page((d / "quest.md").read_text())[0]
 
 
+def _go(d, qid, n=1):
+    """Leave the current state n times with the verb its gate takes: accept at a creator gate, next elsewhere."""
+    for _ in range(n):
+        s = quest.state_of(_fm(d))
+        quest.main([qid, "accept" if s and s.creator else "next"])
+
+
 @pytest.fixture(autouse=True)
 def writing_plugin_present(tmp_path_factory, monkeypatch):
     """Every test sees the writing plugin installed and enabled at user scope, so the doctor row and the skill line hold on a host with no plugins, CI included."""
@@ -226,12 +233,14 @@ def test_full_quest_lifecycle(tmp_path, monkeypatch):
     files = {"research": "research.md", "design": "design.md", "plan": "plan.md"}
     (d / "goal.md").write_text("# Goal\n")
     for expected in NAMES[1:]:
-        quest.main([qid, "next"])
+        _go(d, qid)
         fm = _fm(d)
         assert fm["state"] == expected and fm["history"][-1]["state"] == expected
         if expected in files:
             (d / files[expected]).write_text(f"# {expected}\n")
-    quest.main([qid, "next"])
+    with pytest.raises(SystemExit):          # evaluate goal is a creator gate
+        quest.main([qid, "next"])
+    quest.main([qid, "accept"])
     d = _at(qdir, qid)
     fm = _fm(d)
     assert d.parent == qdir / "completed"
@@ -252,19 +261,22 @@ def test_chore_lifecycle_and_log_stage(tmp_path, monkeypatch):
     d = _at(qdir, qid)
     assert "| chore | draft goal | Fix |" in (qdir / "README.md").read_text()
     (d / "goal.md").write_text("# Goal\n")
-    quest.main([qid, "next"]); quest.main([qid, "next"])
+    quest.main([qid, "next"])
+    with pytest.raises(SystemExit) as e:                          # review goal is a creator gate
+        quest.main([qid, "next"])
+    assert e.value.code == 1
+    quest.main([qid, "accept"])
     assert _fm(d)["state"] == "plan"                              # research and design passed over
     assert "| chore | plan | Fix |" in (qdir / "README.md").read_text()
     (d / "plan.md").write_text("# Plan\n")
-    for _ in range(5):
-        quest.main([qid, "next"])
+    _go(d, qid, 5)
     assert _fm(_at(qdir, qid))["state"] == "completed"
 
 
 def test_skip_research_skips_its_review(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _fresh(tmp_path, monkeypatch)
     quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n")
-    quest.main([qid, "next"]); quest.main([qid, "next"]); capsys.readouterr()
+    quest.main([qid, "next"]); quest.main([qid, "accept"]); capsys.readouterr()
     assert _fm(d)["state"] == "research"
     quest.main([qid, "skip"])
     fm = _fm(d)
@@ -296,7 +308,7 @@ def test_skip_refuses_unskippable(tmp_path, monkeypatch, capsys):
         assert f"{state} cannot be skipped" in capsys.readouterr().err
         if file:
             (d / file).write_text("x\n")
-        quest.main([qid, "next"])
+        _go(d, qid)
     assert _fm(_at(qdir, qid))["state"] == "completed"
 
 
@@ -309,14 +321,14 @@ def test_next_refuses_missing_file(tmp_path, monkeypatch, capsys):
             quest.main([qid, "next"])
         assert f"{file} does not exist yet" in capsys.readouterr().err
         (d / file).write_text("x\n")
-        quest.main([qid, "next"]); quest.main([qid, "next"])
+        quest.main([qid, "next"]); _go(d, qid)
     assert _fm(d)["state"] == "implement"
     quest.main([qid, "next"])                                     # implement has no file check
 
 
 def test_next_refuses_unconverged_verdict_until_confirmed(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
-    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
+    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "accept"])
     (d / "plan.md").write_text("# Plan\n"); quest.main([qid, "next"]); capsys.readouterr()
     assert _fm(d)["state"] == "review plan"
     quest.main([qid, "next"])                                     # no record yet: nothing to confirm
@@ -331,8 +343,9 @@ def test_next_refuses_unconverged_verdict_until_confirmed(tmp_path, monkeypatch,
     assert _fm(d)["state"] == "review implementation"
     quest.main([qid, "next", "--confirmed"])
     assert _fm(d)["state"] == "evaluate goal"
-    (d / "result-review.md").write_text("Verdict: another pass\n\nVerdict: converged\n")
-    quest.main([qid, "next"])                                     # the last verdict converged
+    (d / "result-review.md").write_text("# Review record: result\n\n## Pass 1\n\nVerdict: another pass\n"); capsys.readouterr()
+    quest.main([qid, "accept"])                                   # the creator's word is not gated on the verdict
+    assert "last pass:" in capsys.readouterr().out
     assert _fm(_at(qdir, qid))["state"] == "completed"
     with pytest.raises(SystemExit) as e:
         quest.main([qid, "next", "--force"])
@@ -341,7 +354,7 @@ def test_next_refuses_unconverged_verdict_until_confirmed(tmp_path, monkeypatch,
 
 def test_next_writes_the_page_before_it_moves(tmp_path, monkeypatch):
     qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
-    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
+    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "accept"])
     (d / "plan.md").write_text("# Plan\n")
     for _ in range(4):
         quest.main([qid, "next"])
@@ -355,7 +368,7 @@ def test_next_writes_the_page_before_it_moves(tmp_path, monkeypatch):
         events.append("move")
         return real_move(*a, **k)
     monkeypatch.setattr(quest, "update_quest", writing); monkeypatch.setattr(quest, "move_entry", moving)
-    quest.main([qid, "next"])
+    quest.main([qid, "accept"])
     assert events == ["write", "move"]                           # the page is the truth and the directory follows it
     assert not d.exists()
     d = _at(qdir, qid)
@@ -391,7 +404,7 @@ def test_start_twice_fails(tmp_path, monkeypatch):
 
 def test_defer_returns_to_backlog_and_start_resumes(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _fresh(tmp_path, monkeypatch, "Park", chore=True)
-    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
+    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "accept"])
     (d / "plan.md").write_text("# Plan\n"); quest.main([qid, "next"])
     assert _fm(d)["state"] == "review plan"
     capsys.readouterr()
@@ -423,21 +436,21 @@ def test_say_lines():
     assert quest.say({**fm, "state": "abandoned"}) == "2609040000-aa is abandoned."
     expected = {
         "draft goal": "Write goal.md, then run: quest 2609040000-aa next",
-        "review goal": "Run the review-goal loop into goal-review.md, then ask the creator: move on to researching?",
+        "review goal": "Run the review-goal loop into goal-review.md, then ask the creator: move on to researching? On their word, run: quest 2609040000-aa accept",
         "research": "Write research.md, then run: quest 2609040000-aa next",
-        "review research": "Run the review-research loop into research-review.md, then ask: move on to designing?",
+        "review research": "Run the review-research loop into research-review.md, then run: quest 2609040000-aa next",
         "design": "Write design.md, then run: quest 2609040000-aa next",
-        "review design": "Run the review-design loop into design-review.md, then ask: move on to planning?",
+        "review design": "Run the review-design loop into design-review.md, then ask the creator: move on to planning? On their word, run: quest 2609040000-aa accept",
         "plan": "Write plan.md, then run: quest 2609040000-aa next",
-        "review plan": "Run the review-plan loop into plan-review.md, then ask: move on to implementing?",
+        "review plan": "Run the review-plan loop into plan-review.md, then run: quest 2609040000-aa next",
         "implement": "Build in the order plan.md lists, then run: quest 2609040000-aa next",
-        "review implementation": "Run the review-implement loop into implement-review.md, then ask: move on to evaluating the goal?",
-        "evaluate goal": "Run the review-result loop into result-review.md, then ask: is the goal met?",
+        "review implementation": "Run the review-implement loop into implement-review.md, then run: quest 2609040000-aa next",
+        "evaluate goal": "Run the review-result loop into result-review.md, then ask the creator: is the goal met? On their word, run: quest 2609040000-aa accept",
     }
     for name, tail in expected.items():
         assert quest.say({**fm, "state": name}) == f"2609040000-aa is at {name}. {tail}", name
     chore = {**fm, "kind": "chore", "state": "review goal", "history": fm["history"] + [quest.entry(STAMP, n, skipped=True, note="chore") for n in quest.CHORE_SKIPS]}
-    assert quest.say(chore).endswith("move on to planning?")
+    assert "move on to planning? On their word" in quest.say(chore)
 
 
 def test_unknown_command_and_verb_exit_2(tmp_path, monkeypatch, capsys):
@@ -485,16 +498,16 @@ def test_init_writes_ask_rules_and_keeps_other_keys(tmp_path, monkeypatch, capsy
     quest.main(["init"])
     data = json.loads(settings.read_text())
     assert data["enabledPlugins"] == {"questlog@dokidlc": True} and data["permissions"]["allow"] == ["Bash(git status)"]
-    assert data["permissions"]["ask"] == list(quest.ASK_RULES) and len(quest.ASK_RULES) == 8
-    assert "8 ask rules in .claude/settings.json" in capsys.readouterr().out
+    assert data["permissions"]["ask"] == list(quest.ASK_RULES) and len(quest.ASK_RULES) == 7
+    assert "7 ask rules in .claude/settings.json" in capsys.readouterr().out
     before = settings.read_bytes()
     quest.main(["init"])
     assert settings.read_bytes() == before and "already initialized; nothing changed" in capsys.readouterr().out
-    # one new rule already there. init adds seven and keeps it in place; an old-shape rule is stale and goes.
-    settings.write_text('{"permissions": {"ask": ["Bash(quest * next)", "Bash(quest next *)"]}}')
+    # one new rule already there. init adds six and keeps it in place; an old-shape rule and the old next rule are stale and go.
+    settings.write_text('{"permissions": {"ask": ["Bash(quest * start)", "Bash(quest next *)", "Bash(quest * next)"]}}')
     quest.main(["init"])
-    assert json.loads(settings.read_text())["permissions"]["ask"] == ["Bash(quest * next)"] + [r for r in quest.ASK_RULES if r != "Bash(quest * next)"]
-    assert "7 ask rules" in capsys.readouterr().out
+    assert json.loads(settings.read_text())["permissions"]["ask"] == ["Bash(quest * start)"] + [r for r in quest.ASK_RULES if r != "Bash(quest * start)"]
+    assert "6 ask rules" in capsys.readouterr().out
     # an unparsable file stops init before it touches anything
     fresh = tmp_path / "fresh"; (fresh / ".claude").mkdir(parents=True)
     (fresh / ".claude" / "settings.json").write_text("{")
@@ -590,7 +603,7 @@ def test_memory_hits_fail_open_and_parse(monkeypatch):
 
 def test_next_prints_memory_nudge_after_a_document_state(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
-    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
+    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "accept"])
     (d / "plan.md").write_text("# Plan\n"); capsys.readouterr()
     monkeypatch.setattr(quest.shutil, "which", lambda name: "/x/memory")
     monkeypatch.setattr(quest, "memory_hits", lambda q: [])
@@ -697,19 +710,19 @@ def test_history_empty_and_log_unchanged(tmp_path, capsys, monkeypatch):
 def test_next_line_passes_over_skipped_research():
     fm = {"id": "2609040000-aa", "state": "review goal", "history": [quest.entry(STAMP, "research", skipped=True), quest.entry(STAMP, "review research", skipped=True)]}
     assert quest.successor(fm, "review goal") == "design"
-    assert quest.say(fm).endswith("move on to designing?")
+    assert "move on to designing? On their word" in quest.say(fm)
 
 
 def test_next_prints_state_line(tmp_path, capsys, monkeypatch):
     qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
     quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); capsys.readouterr()
     quest.main([qid, "next"])
-    assert f"{qid} is at review goal. Run the review-goal loop into goal-review.md, then ask the creator: move on to planning?" in capsys.readouterr().out
-    quest.main([qid, "next"]); (d / "plan.md").write_text("# Plan\n"); quest.main([qid, "next"]); capsys.readouterr()
+    assert f"{qid} is at review goal. Run the review-goal loop into goal-review.md, then ask the creator: move on to planning? On their word, run: quest {qid} accept" in capsys.readouterr().out
+    quest.main([qid, "accept"]); (d / "plan.md").write_text("# Plan\n"); quest.main([qid, "next"]); capsys.readouterr()
     quest.main([qid, "next"])
     assert "is at implement. Build in the order plan.md lists" in capsys.readouterr().out
     quest.main([qid, "next"]); quest.main([qid, "next"]); capsys.readouterr()
-    quest.main([qid, "next"])
+    quest.main([qid, "accept"])
     assert f"{qid} is completed." in capsys.readouterr().out
 
 
@@ -754,15 +767,14 @@ def test_doctor_reports_missing_ask_rules(tmp_path, monkeypatch, capsys):
     assert e.value.code == 0 and "ok   settings.json asks for every creator verb" in capsys.readouterr().out
     settings = tmp_path / ".claude" / "settings.json"
     data = json.loads(settings.read_text())
-    data["permissions"]["ask"].remove("Bash(quest * next)")
+    data["permissions"]["ask"].remove("Bash(quest * accept)")
     settings.write_text(json.dumps(data))
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor"])
-    assert e.value.code == 1 and "FAIL settings.json asks for every creator verb; missing: Bash(quest * next)  (quest doctor --fix)" in capsys.readouterr().out
-    # --fix writes the rules, an agent verb: a project initialized by an older plugin gets its prompts back without a creator verb
+    assert e.value.code == 1 and "FAIL settings.json asks for every creator verb; missing: Bash(quest * accept)  (quest doctor --fix)" in capsys.readouterr().out
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor", "--fix"])
-    assert e.value.code == 0 and "Bash(quest * next)" in settings.read_text()
+    assert e.value.code == 0 and "Bash(quest * accept)" in settings.read_text()
     assert f"<!-- questlog format {quest.FORMAT}" in (tmp_path / "docs/quests/README.md").read_text()
 
 
@@ -855,7 +867,7 @@ def test_doctor_fix_runs_every_repair_and_leaves_a_foreign_or_newer_log_alone(tm
     out = capsys.readouterr().out
     assert e.value.code == 1 and "FAIL docs/quests/README.md is not a quest log, or cannot be read  (fix it by hand)" in out
     assert (qdir / "README.md").read_text() == "hello\n" and (d / "quest.md").read_text() == page
-    assert "Bash(quest * next)" in (tmp_path / ".claude" / "settings.json").read_text()
+    assert "Bash(quest * accept)" in (tmp_path / ".claude" / "settings.json").read_text()
     # a newer plugin's log: never downgraded
     (qdir / "README.md").write_text("# Quest log\n\n<!-- questlog format 9, written by questlog new on 2026-09-04 -->\n")
     with pytest.raises(SystemExit) as e:
@@ -1019,12 +1031,11 @@ def test_verbs_move_the_directory(tmp_path, monkeypatch, capsys):
     assert _at(qdir, qid).parent == qdir / "backlog" and not (qdir / "active" / d.name).exists()
     quest.main([qid, "start"]); d = _at(qdir, qid)
     assert d.parent == qdir / "active"
-    (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
+    (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "accept"])
     (d / "plan.md").write_text("# Plan\n")
-    for _ in range(4):
-        quest.main([qid, "next"])
+    _go(d, qid, 4)
     assert _at(qdir, qid) == d                                   # a state change inside active/ moves nothing
-    quest.main([qid, "next"])
+    quest.main([qid, "accept"])
     assert not d.exists() and _at(qdir, qid).parent == qdir / "completed"
     assert f"| [{qid}]" not in (qdir / "README.md").read_text()
     # a finished entry cannot be abandoned, so a second chore carries that leg
@@ -1203,7 +1214,7 @@ def test_stale_ask_rules_are_dropped(tmp_path, monkeypatch, capsys):
     data = json.loads(settings.read_text())
     assert data["permissions"]["allow"] == ["Bash(git status)"]
     assert data["permissions"]["ask"] == ["Bash(other *)", "Bash(quest new *)"] + [r for r in quest.ASK_RULES if r != "Bash(quest new *)"]
-    assert len(quest.ASK_RULES) == 8 and "Bash(quest * next --confirmed)" in quest.ASK_RULES and "Bash(quest * abandon *)" in quest.ASK_RULES
+    assert len(quest.ASK_RULES) == 7 and "Bash(quest * accept)" in quest.ASK_RULES and "Bash(quest * abandon *)" in quest.ASK_RULES and not any("next" in r for r in quest.ASK_RULES)
     # doctor reports a stale rule that appears later, and --fix drops it
     data["permissions"]["ask"].append("Bash(quest skip *)")
     settings.write_text(json.dumps(data))
@@ -1277,19 +1288,19 @@ def test_last_pass_line_prints_only_when_not_converged(tmp_path):
     assert quest.last_pass_line(tmp_path, review) == "last pass: 1 blocking (fixed), 2 clarification (1 of 2 fixed), 0 fact"
     assert quest.last_pass_line(tmp_path, quest.BY_NAME["plan"]) is None                    # a working state has no record
     (tmp_path / "plan-review.md").write_text(RECORD.replace("Verdict: another pass\n", "Verdict: converged\n"))
-    assert quest.last_pass_line(tmp_path, review) == "last pass: 1 blocking (fixed), 2 clarification (1 of 2 fixed), 0 fact; a diff pass, so a full pass is owed"
+    assert quest.last_pass_line(tmp_path, review) is None                                    # a converged diff pass owes nothing
     (tmp_path / "plan-review.md").write_text(RECORD.replace("Verdict: another pass\n", "Verdict: converged\n").replace("Scope: diff from aaaaaaa", "Scope: full"))
     assert quest.last_pass_line(tmp_path, review) is None                                    # a converged full pass
 
 
 def test_show_and_start_print_last_pass(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
-    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
+    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "accept"])
     (d / "plan.md").write_text("# Plan\n"); quest.main([qid, "next"])
     (d / "plan-review.md").write_text(RECORD); capsys.readouterr()
     quest.main([qid])
     out = capsys.readouterr().out
-    assert out.splitlines()[0] == f"{qid} is at review plan. Run the review-plan loop into plan-review.md, then ask: move on to implementing?"
+    assert out.splitlines()[0] == f"{qid} is at review plan. Run the review-plan loop into plan-review.md, then run: quest {qid} next"
     assert out.splitlines()[1] == "last pass: 1 blocking (fixed), 2 clarification (1 of 2 fixed), 0 fact"
     quest.main([qid, "defer"]); capsys.readouterr()
     quest.main([qid, "start"])
@@ -1297,24 +1308,20 @@ def test_show_and_start_print_last_pass(tmp_path, monkeypatch, capsys):
     assert out.splitlines()[1] == "last pass: 1 blocking (fixed), 2 clarification (1 of 2 fixed), 0 fact"
 
 
-def test_next_refuses_a_converged_diff_pass(tmp_path, monkeypatch, capsys):
+def test_next_accepts_a_converged_diff_pass(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
-    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
+    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "accept"])
     (d / "plan.md").write_text("# Plan\n"); quest.main([qid, "next"])
     (d / "plan-review.md").write_text(RECORD.replace("Verdict: another pass\n", "Verdict: converged\n")); capsys.readouterr()
-    with pytest.raises(SystemExit) as e:
-        quest.main([qid, "next"])
-    err = capsys.readouterr().err
-    assert e.value.code == 1 and "last verdict: converged, on a diff pass; a full pass is owed" in err and "last pass: 1 blocking (fixed)" in err
-    assert _fm(d)["state"] == "review plan"
-    quest.main([qid, "next", "--confirmed"])
+    quest.main([qid, "next"])                                     # a converged diff pass owes nothing
     assert _fm(_at(qdir, qid))["state"] == "implement"
 
 
 def test_next_refusal_without_a_pass_heading_prints_no_last_pass(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
-    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"])
-    (d / "goal-review.md").write_text("Verdict: another pass\n"); capsys.readouterr()
+    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "accept"])
+    (d / "plan.md").write_text("# Plan\n"); quest.main([qid, "next"])
+    (d / "plan-review.md").write_text("Verdict: another pass\n"); capsys.readouterr()
     with pytest.raises(SystemExit):
         quest.main([qid, "next"])
     err = capsys.readouterr().err
@@ -1343,7 +1350,7 @@ def test_guidance_names_the_document(tmp_path, monkeypatch, capsys):
     quest.main([qid, "defer"]); d = _at(qdir, qid); capsys.readouterr()
     quest.main([qid]); assert f"document: {d / 'goal.md'}" in capsys.readouterr().out                        # deferred: the resume state's file
     quest.main([qid, "start"]); d = _at(qdir, qid); assert f"document: {d / 'goal.md'}" in capsys.readouterr().out
-    quest.main([qid, "next"]); (d / "plan.md").write_text("# Plan\n"); quest.main([qid, "next"]); capsys.readouterr()
+    quest.main([qid, "accept"]); (d / "plan.md").write_text("# Plan\n"); quest.main([qid, "next"]); capsys.readouterr()
     quest.main([qid]); assert f"document: {d / 'plan.md'}" in capsys.readouterr().out                        # review plan
     quest.main([qid, "next"]); assert f"document: {d / 'plan.md'}" in capsys.readouterr().out               # implement
     quest.main([qid, "next"]); assert f"document: {d / 'plan.md'}" in capsys.readouterr().out               # review implementation
@@ -1385,3 +1392,24 @@ def test_doctor_reports_the_writing_skill(tmp_path, monkeypatch, capsys, writing
     with pytest.raises(SystemExit):
         quest.main(["doctor", "--brief"])
     assert capsys.readouterr().out.startswith("questlog: writing-for-agents is installed and enabled (claude plugin install")
+
+
+def test_accept_and_next_each_refuse_the_other_gate(tmp_path, monkeypatch, capsys):
+    """`accept` leaves a creator gate and nothing else; `next` leaves an agent gate and nothing else; `gate:` names which."""
+    qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
+    quest.main([qid, "start"]); d = _at(qdir, qid); capsys.readouterr()
+    with pytest.raises(SystemExit) as e:                          # draft goal is the agent's
+        quest.main([qid, "accept"])
+    assert e.value.code == 1 and f"draft goal, the agent's gate; run: quest {qid} next" in capsys.readouterr().err
+    (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"])
+    assert "gate: creator" in capsys.readouterr().out
+    with pytest.raises(SystemExit) as e:                          # review goal is the creator's
+        quest.main([qid, "next"])
+    assert e.value.code == 1 and f"review goal, a creator gate; on the creator's word run: quest {qid} accept" in capsys.readouterr().err
+    assert _fm(d)["state"] == "review goal"
+    quest.main([qid, "accept"])
+    assert "gate: agent" in capsys.readouterr().out and _fm(d)["state"] == "plan"
+    assert [s.name for s in quest.STATES if s.creator] == ["review goal", "review design", "evaluate goal"]
+    with pytest.raises(SystemExit) as e:
+        quest.main([qid, "accept", "now"])
+    assert e.value.code == 2
