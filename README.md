@@ -11,7 +11,7 @@ draft goal -> review goal -> research -> review research -> design -> review des
   -> plan -> review plan -> implement -> review implementation -> evaluate goal -> completed
 ```
 
-With the plugin enabled, the agent tells you what is open at the start of every session, reads a quest before working on it, writes the stage documents, and runs the states between your gates on its own. You decide at three gates: the goal, the design, and the result. Before you see a document it has already run a fresh-context reviewer over it and fixed what that found. It will not open, start, park, accept, skip, or abandon anything by itself. Those happen only when you ask, and Claude Code prompts you to approve the exact command each time.
+With the plugin enabled, the agent tells you what is open at the start of every session, reads a quest before working on it, writes the stage documents, and runs the states between your gates on its own. You decide at three gates: the goal, the design, and the result. Before you see a document it has already run a fresh-context reviewer over it and fixed what that found. It will not open, start, park, accept, skip, or abandon anything by itself. Those happen only when you ask, and the agent shows you the command before it runs it.
 
 ## Why questlog
 
@@ -38,7 +38,7 @@ claude plugin install questlog@dokidlc
 claude plugin install writing-for-agents@dokidlc
 ```
 
-Then start a session in a repository and say "set up quests." The agent runs `quest init`, which creates `docs/quests/`, the quest log, a short paragraph in `CLAUDE.md`, and one `ask` rule per creator verb in `.claude/settings.json`. Approve that first run when Claude Code asks; from then on the rules prompt for every creator verb. Commit the result.
+Then start a session in a repository and say "set up quests." The agent runs `quest init`, which creates `docs/quests/`, the quest log, and a short paragraph in `CLAUDE.md`. Commit the result.
 
 To have a repository declare the plugin for everyone who clones it, add to `.claude/settings.json`:
 
@@ -77,7 +77,7 @@ quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]   open a quest or c
 quest log                                   what is open, newest first
 quest history [--all] [--limit N]           what is completed, newest first, ten by default
 quest doctor [--fix] [--brief]              check the tracker; --fix migrates and repairs
-quest init                                  set up a repository
+quest init                                  set up a repository; drops quest ask rules an older plugin wrote
 
 quest 2609051012-k3                         show one quest; a unique id prefix works
 quest 2609051012-k3 start                   leave the backlog; a deferred quest resumes where it was
@@ -88,7 +88,7 @@ quest 2609051012-k3 skip                    skip the current state
 quest 2609051012-k3 abandon "reason"        terminal; files stay, the entry leaves the log
 ```
 
-The agent runs `log`, `history`, `doctor`, `ID`, and `ID next` on its own. The rest are yours, and each one prompts you.
+The agent runs `log`, `history`, `doctor`, `ID`, and `ID next` on its own. The rest are yours: the agent runs one only when you say so, after showing you the command.
 
 ## Caveats
 

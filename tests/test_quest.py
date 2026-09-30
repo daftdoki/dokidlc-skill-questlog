@@ -490,24 +490,23 @@ def test_init_is_idempotent_and_appends_paragraph(tmp_path, monkeypatch, capsys)
     assert "nothing changed" in capsys.readouterr().out
 
 
-def test_init_writes_ask_rules_and_keeps_other_keys(tmp_path, monkeypatch, capsys):
+def test_init_leaves_settings_alone_and_drops_stale_quest_rules(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     settings = tmp_path / ".claude" / "settings.json"
     settings.parent.mkdir()
     settings.write_text('{"enabledPlugins": {"questlog@dokidlc": true}, "permissions": {"allow": ["Bash(git status)"]}}')
-    quest.main(["init"])
-    data = json.loads(settings.read_text())
-    assert data["enabledPlugins"] == {"questlog@dokidlc": True} and data["permissions"]["allow"] == ["Bash(git status)"]
-    assert data["permissions"]["ask"] == list(quest.ASK_RULES) and len(quest.ASK_RULES) == 7
-    assert "7 ask rules in .claude/settings.json" in capsys.readouterr().out
     before = settings.read_bytes()
     quest.main(["init"])
-    assert settings.read_bytes() == before and "already initialized; nothing changed" in capsys.readouterr().out
-    # one new rule already there. init adds six and keeps it in place; an old-shape rule and the old next rule are stale and go.
-    settings.write_text('{"permissions": {"ask": ["Bash(quest * start)", "Bash(quest next *)", "Bash(quest * next)"]}}')
+    assert settings.read_bytes() == before and quest.ASK_RULES == ()
+    assert "ask rule" not in capsys.readouterr().out
     quest.main(["init"])
-    assert json.loads(settings.read_text())["permissions"]["ask"] == ["Bash(quest * start)"] + [r for r in quest.ASK_RULES if r != "Bash(quest * start)"]
-    assert "6 ask rules" in capsys.readouterr().out
+    assert settings.read_bytes() == before and "already initialized; nothing changed" in capsys.readouterr().out
+    # rules an older plugin wrote are stale; init drops them and keeps every other rule and key
+    settings.write_text('{"permissions": {"ask": ["Bash(quest * start)", "Bash(quest next *)", "Bash(other *)"], "allow": ["Bash(git status)"]}}')
+    quest.main(["init"])
+    data = json.loads(settings.read_text())
+    assert data["permissions"] == {"ask": ["Bash(other *)"], "allow": ["Bash(git status)"]}
+    assert "2 stale ask rules dropped from .claude/settings.json" in capsys.readouterr().out
     # an unparsable file stops init before it touches anything
     fresh = tmp_path / "fresh"; (fresh / ".claude").mkdir(parents=True)
     (fresh / ".claude" / "settings.json").write_text("{")
@@ -516,11 +515,11 @@ def test_init_writes_ask_rules_and_keeps_other_keys(tmp_path, monkeypatch, capsy
         quest.main(["init"])
     assert e.value.code == 2 and ".claude/settings.json" in capsys.readouterr().err
     assert (fresh / ".claude" / "settings.json").read_text() == "{" and not (fresh / "docs").exists()
-    # no settings file at all. init creates one with just the rules.
+    # no settings file at all: init creates none
     bare = tmp_path / "bare"; bare.mkdir()
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(bare))
     quest.main(["init"])
-    assert json.loads((bare / ".claude" / "settings.json").read_text()) == {"permissions": {"ask": list(quest.ASK_RULES)}}
+    assert not (bare / ".claude" / "settings.json").exists() and (bare / "docs" / "quests" / "README.md").is_file()
 
 
 def test_format_newer_refuses(tmp_path, monkeypatch, capsys):
@@ -759,22 +758,20 @@ def test_doctor_compares_the_marked_paragraph_with_the_template(tmp_path, monkey
     assert quest.marked_section("no mark here\n") is None
 
 
-def test_doctor_reports_missing_ask_rules(tmp_path, monkeypatch, capsys):
+def test_doctor_reports_stale_ask_rules(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     quest.main(["init"]); _git_commit_all(tmp_path); capsys.readouterr()
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor"])
-    assert e.value.code == 0 and "ok   settings.json asks for every creator verb" in capsys.readouterr().out
+    assert e.value.code == 0 and "ok   settings.json carries no quest ask rules" in capsys.readouterr().out
     settings = tmp_path / ".claude" / "settings.json"
-    data = json.loads(settings.read_text())
-    data["permissions"]["ask"].remove("Bash(quest * accept)")
-    settings.write_text(json.dumps(data))
+    settings.write_text(json.dumps({"permissions": {"ask": ["Bash(quest * accept)", "Bash(other *)"]}}))
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor"])
-    assert e.value.code == 1 and "FAIL settings.json asks for every creator verb; missing: Bash(quest * accept)  (quest doctor --fix)" in capsys.readouterr().out
+    assert e.value.code == 1 and "FAIL settings.json carries no quest ask rules; stale: Bash(quest * accept)  (quest doctor --fix)" in capsys.readouterr().out
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor", "--fix"])
-    assert e.value.code == 0 and "Bash(quest * accept)" in settings.read_text()
+    assert e.value.code == 0 and json.loads(settings.read_text())["permissions"]["ask"] == ["Bash(other *)"]
     assert f"<!-- questlog format {quest.FORMAT}" in (tmp_path / "docs/quests/README.md").read_text()
 
 
@@ -827,13 +824,13 @@ def test_symlinked_settings_is_a_row_with_no_repair(tmp_path, monkeypatch, capsy
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     quest.main(["init"]); _git_commit_all(tmp_path); capsys.readouterr()
     settings = tmp_path / ".claude" / "settings.json"
-    real = tmp_path / "real.json"; real.write_text('{"permissions": {"ask": []}}')
+    real = tmp_path / "real.json"; real.write_text('{"permissions": {"ask": ["Bash(quest * next)"]}}')
     settings.unlink(); settings.symlink_to(real)
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor", "--fix"])
     out = capsys.readouterr().out
     assert e.value.code == 1 and "; the file is a symlink  (fix them by hand)" in out
-    assert real.read_text() == '{"permissions": {"ask": []}}'
+    assert real.read_text() == '{"permissions": {"ask": ["Bash(quest * next)"]}}'
 
 
 def test_unreadable_files_are_rows_not_tracebacks(tmp_path, monkeypatch, capsys):
@@ -867,7 +864,8 @@ def test_doctor_fix_runs_every_repair_and_leaves_a_foreign_or_newer_log_alone(tm
     out = capsys.readouterr().out
     assert e.value.code == 1 and "FAIL docs/quests/README.md is not a quest log, or cannot be read  (fix it by hand)" in out
     assert (qdir / "README.md").read_text() == "hello\n" and (d / "quest.md").read_text() == page
-    assert "Bash(quest * accept)" in (tmp_path / ".claude" / "settings.json").read_text()
+    settings = tmp_path / ".claude" / "settings.json"
+    assert not settings.exists() or "Bash(quest" not in settings.read_text()
     # a newer plugin's log: never downgraded
     (qdir / "README.md").write_text("# Quest log\n\n<!-- questlog format 9, written by questlog new on 2026-09-04 -->\n")
     with pytest.raises(SystemExit) as e:
@@ -941,10 +939,11 @@ def test_init_accepts_claude_md_linked_inside_the_repo(tmp_path, monkeypatch):
 def test_init_keeps_settings_indent_and_final_newline(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     settings = tmp_path / ".claude" / "settings.json"; settings.parent.mkdir()
-    settings.write_text('{\n    "enabledPlugins": {\n        "x@y": true\n    }\n}')
+    settings.write_text('{\n    "enabledPlugins": {\n        "x@y": true\n    },\n    "permissions": {\n        "ask": [\n            "Bash(quest * next)"\n        ]\n    }\n}')
     quest.main(["init"])
     text = settings.read_text()
     assert text.startswith('{\n    "enabledPlugins": {\n        "x@y": true\n    },\n    "permissions"') and not text.endswith("\n")
+    assert json.loads(text)["permissions"] == {"ask": []}
 
 
 def test_init_keeps_non_ascii_settings(tmp_path, monkeypatch):
@@ -1212,15 +1211,13 @@ def test_stale_ask_rules_are_dropped(tmp_path, monkeypatch, capsys):
     settings.write_text('{"permissions": {"allow": ["Bash(git status)"], "ask": ["Bash(quest next *)", "Bash(quest start *)", "Bash(other *)", "Bash(quest new *)"]}}')
     quest.main(["init"]); _git_commit_all(tmp_path); capsys.readouterr()
     data = json.loads(settings.read_text())
-    assert data["permissions"]["allow"] == ["Bash(git status)"]
-    assert data["permissions"]["ask"] == ["Bash(other *)", "Bash(quest new *)"] + [r for r in quest.ASK_RULES if r != "Bash(quest new *)"]
-    assert len(quest.ASK_RULES) == 7 and "Bash(quest * accept)" in quest.ASK_RULES and "Bash(quest * abandon *)" in quest.ASK_RULES and not any("next" in r for r in quest.ASK_RULES)
-    # doctor reports a stale rule that appears later, and --fix drops it
+    assert data["permissions"] == {"allow": ["Bash(git status)"], "ask": ["Bash(other *)"]}
+    # a quest rule that appears later is stale too, and --fix drops it
     data["permissions"]["ask"].append("Bash(quest skip *)")
     settings.write_text(json.dumps(data))
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor"])
-    assert e.value.code == 1 and "FAIL settings.json asks for every creator verb; stale: Bash(quest skip *)  (quest doctor --fix)" in capsys.readouterr().out
+    assert e.value.code == 1 and "FAIL settings.json carries no quest ask rules; stale: Bash(quest skip *)  (quest doctor --fix)" in capsys.readouterr().out
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor", "--fix"])
     assert e.value.code == 0 and "Bash(quest skip *)" not in settings.read_text()

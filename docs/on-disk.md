@@ -85,23 +85,23 @@ project runs; `quest history` reads them from the directories on demand.
 **What is guarded.** The log and every `quest.md` frontmatter block are
 written only by the verbs, so the log always matches the directories and
 a time is never typed by hand. A `PreToolUse` hook on the Edit, Write,
-and Bash tools enforces the first three rows; the `ask` rules in
-`.claude/settings.json` give the fourth:
+and Bash tools enforces the first three rows. No permission rule guards
+a quest verb; the creator verbs are the skill's rule, and the agent runs
+one only on your word:
 
 | Trigger | Result |
 |---|---|
 | Edit or Write to `docs/quests/README.md` | denied |
 | Edit or Write that touches a `quest.md` frontmatter block | denied; the body below it is fine |
 | Bash that redirects into `docs/quests`, or runs `sed -i`, `tee`, `cp`, `mv`, `dd`, or an inline script (`python3 -c`, `sh -c`) that names a file there | denied; the redirect's target is what counts, so `2>/dev/null` beside a tracker path passes |
-| Bash that runs `quest init`, `quest new`, or `quest ID start`, `defer`, `accept`, `skip`, or `abandon` | you are asked to approve, by the `ask` rules `quest init` writes to `.claude/settings.json`; a `*` in a rule stands for the id, and the rules match the command, so a commit message or heredoc that names a verb does not prompt. `quest ID next` is the agent's and does not prompt; it refuses at the three creator gates |
+| Bash that runs a quest verb | allowed; `quest ID next` refuses at the three creator gates, and the creator verbs are run only when you ask |
 | Anything else, including the agent writing a stage file | allowed |
 
 A `SessionStart` hook runs `quest doctor --brief`, one line telling the
 agent how many entries are open, that the tracker needs migrating, or
 that the log was written by a newer plugin. A project initialized by an
-older plugin gets the current rules from `quest doctor --fix`; the
-agent asks you first when a stale rule would be dropped, since that
-removes a prompt. If `uv`
+older plugin still carries `ask` rules for the verbs; `quest doctor`
+reports them as stale and `quest doctor --fix` drops them. If `uv`
 is missing, guarded actions are refused rather than allowed, and
 everything else proceeds.
 

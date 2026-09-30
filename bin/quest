@@ -90,11 +90,9 @@ BY_NAME = {s.name: s for s in STATES}
 CHORE_SKIPS = ("research", "review research", "design", "review design")
 REVIEW_OF = {"research": "review research", "design": "review design"}   # skipping the key skips the value too
 
-# one permission rule per creator verb; Claude Code prompts on a match in every mode, a `*` stands for any text in its place,
-# and the rule does not look inside quoted text. `abandon` ends in `*` because its reason follows the verb; `next` has a second rule for its flag.
-ASK_RULES = ("Bash(quest init *)", "Bash(quest new *)",
-             *(f"Bash(quest * {v})" for v in ("start", "defer", "skip", "accept")),
-             "Bash(quest * abandon *)")
+# No permission rule guards a quest verb since 2026-09-30: the creator verbs are the skill's rule, run on the creator's word.
+# Every `Bash(quest ` rule an older plugin wrote into a project's settings is stale, and `doctor --fix` drops it.
+ASK_RULES: tuple[str, ...] = ()
 SETTINGS = ".claude/settings.json"
 LOCAL_SETTINGS = ".claude/settings.local.json"
 WRITING_PLUGIN = "writing-for-agents@dokidlc"       # every stage file is read by an agent, so the session writes it under this skill
@@ -112,7 +110,7 @@ USAGE = """Usage:
   quest log                      what is open, one line each
   quest history [--all] [--limit N]   completed work, newest first; --all adds abandoned
   quest doctor [--fix] [--brief]  check the tracker; --fix migrates and repairs
-  quest init                     create docs/quests, the CLAUDE.md paragraph, and the ask rules
+  quest init                     create docs/quests and the CLAUDE.md paragraph; drop stale quest ask rules
 
   quest ID [show]                show a quest: its page, files, state, and guidance (id prefix ok)
   quest ID start                 leave the backlog; a deferred quest resumes where it was
@@ -124,7 +122,7 @@ USAGE = """Usage:
 
 States, in order: {states}
 An entry sits under docs/quests/active/, backlog/, completed/, or abandoned/; the verbs move it.
-init, new, start, defer, skip, accept, and abandon prompt the creator; next is the agent's.
+init, new, start, defer, skip, accept, and abandon are run on the creator's word; next is the agent's.
 """.format(states=", ".join(s.name for s in STATES))
 
 
@@ -603,13 +601,13 @@ def load_settings(root: Path) -> tuple[dict, str | None]:
 
 
 def missing_ask_rules(data: dict) -> list[str]:
-    """The rules in ASK_RULES absent from the settings' permissions.ask."""
+    """The rules in ASK_RULES absent from the settings' permissions.ask; empty while ASK_RULES is."""
     present = data.get("permissions", {}).get("ask", [])
     return [r for r in ASK_RULES if r not in present]
 
 
 def stale_ask_rules(data: dict) -> list[str]:
-    """Rules for the quest command that an earlier plugin wrote and this one does not: any `Bash(quest ` rule not in ASK_RULES."""
+    """Rules for the quest command that an earlier plugin wrote: any `Bash(quest ` rule not in ASK_RULES."""
     present = data.get("permissions", {}).get("ask", [])
     return [r for r in present if isinstance(r, str) and r.startswith("Bash(quest ") and r not in ASK_RULES]
 
@@ -625,11 +623,11 @@ def settings_gate(root: Path) -> tuple[Path, dict]:
     return path, data
 
 
-def write_ask_rules(path: Path, data: dict) -> list[str]:
-    """Add the missing ask rules and drop the stale ones in the loaded settings, keeping every other key. Returns what was added."""
+def write_ask_rules(path: Path, data: dict) -> tuple[list[str], list[str]]:
+    """Add the missing ask rules and drop the stale ones in the loaded settings, keeping every other key. Returns (added, dropped)."""
     missing, stale = missing_ask_rules(data), stale_ask_rules(data)
     if not missing and not stale:
-        return []
+        return [], []
     ask = data.setdefault("permissions", {}).setdefault("ask", [])
     ask[:] = [r for r in ask if r not in stale] + missing
     # keep the file's indent and its final newline, so the diff the creator commits is the rules and little else
@@ -641,11 +639,11 @@ def write_ask_rules(path: Path, data: dict) -> list[str]:
         path.write_text(json.dumps(data, indent=indent, ensure_ascii=False) + ("\n" if old.endswith("\n") else ""), encoding="utf-8")
     except OSError as e:
         die(f"{SETTINGS} cannot be written: {e.strerror}")
-    return missing
+    return missing, stale
 
 
-def write_missing_ask_rules(root: Path) -> None:
-    """The doctor's repair. Dropping a stale rule removes a prompt, so the skill has the agent ask the creator before --fix."""
+def repair_ask_rules(root: Path) -> None:
+    """The doctor's repair: drop the quest rules an older plugin wrote. Removing a prompt the skill no longer relies on loosens nothing."""
     write_ask_rules(*settings_gate(root))
 
 
@@ -673,9 +671,11 @@ def cmd_init(rest: list[str]) -> None:
     settings = settings_gate(root)
     check_format(root)
     made = []
-    added = write_ask_rules(*settings)
+    added, dropped = write_ask_rules(*settings)
     if added:
         made.append(f"{plural(len(added), 'ask rule')} in {SETTINGS}")
+    if dropped:
+        made.append(f"{plural(len(dropped), 'stale ask rule')} dropped from {SETTINGS}")
     if not qdir.is_dir():
         qdir.mkdir(parents=True)
         made.append(str(qdir.relative_to(root)) + "/")
@@ -853,9 +853,9 @@ def doctor_checks(root: Path) -> list[Row]:
         missing, stale = missing_ask_rules(data), stale_ask_rules(data)
         wrong = missing or stale
         linked = (root / SETTINGS).is_symlink() or (root / ".claude").is_symlink()   # read through a link is fine; the write refuses it
-        label = ("settings.json asks for every creator verb" + (f"; missing: {', '.join(missing)}" if missing else "")
+        label = ("settings.json carries no quest ask rules" + (f"; missing: {', '.join(missing)}" if missing else "")
                  + (f"; stale: {', '.join(stale)}" if stale else "") + ("; the file is a symlink" if wrong and linked else ""))
-        rows.append(row(not wrong, label, "fix them by hand" if linked else "quest doctor --fix", None if linked else write_missing_ask_rules))
+        rows.append(row(not wrong, label, "fix them by hand" if linked else "quest doctor --fix", None if linked else repair_ask_rules))
     rows.extend(git_checks(root))
     problem = writing_skill_problem(root)
     rows.append(row(problem is None, "writing-for-agents is installed and enabled", problem[1].removeprefix("run: ") if problem else ""))

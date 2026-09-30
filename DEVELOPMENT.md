@@ -55,8 +55,8 @@ CI runs both on ubuntu and macos.
 The guard reads PreToolUse JSON on stdin. It prints a `permissionDecision`
 of `deny` for edits to `docs/quests/README.md` or any `quest.md` frontmatter
 and for Bash that writes into the tracker by redirect or in-place tools.
-Anything else prints nothing; creator verbs prompt through the `ask` rules
-`quest init` writes to the project settings, not through the hook. A hook that cannot
+Anything else prints nothing; no rule or hook guards a quest verb, and
+`quest doctor --fix` drops the `ask` rules older plugins wrote. A hook that cannot
 run exits 2 only when the action touched the tracker; Claude Code treats
 other non-zero exits as allow, which is why the shim is POSIX sh.
 

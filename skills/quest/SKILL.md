@@ -34,10 +34,10 @@ leaves every state but the three gates. It refuses at a gate.
 The creator's, run only when the creator asked for it in this
 conversation and after you have shown the exact command: `quest new`,
 `quest ID start`, `quest ID defer`, `quest ID accept`, `quest ID skip`,
-`quest ID abandon`, `quest init`. The `ask` rules in the project's
-settings prompt the creator on every one of these; no permission mode
-approves one on its own. `quest ID next --confirmed`, which leaves an
-agent gate whose loop stopped short, is run on the creator's word too.
+`quest ID abandon`, `quest init`. No permission rule prompts on them;
+this rule is what keeps them the creator's. `quest ID next
+--confirmed`, which leaves an agent gate whose loop stopped short, is
+run on the creator's word too.
 
 ## States
 
@@ -159,9 +159,9 @@ refuses an empty one.
   plan.
 - Picking an abandoned idea up again is a new quest with a new id.
 - If `quest` refuses with "newer questlog", tell the creator to update
-  the plugin. If `quest doctor` reports stale ask rules, show the rules
-  it will drop and ask the creator before `quest doctor --fix`; dropping
-  a rule removes a prompt. If it refuses with "format 6", run `quest
+  the plugin. If `quest doctor` reports stale ask rules, an older
+  plugin wrote them; `quest doctor --fix` drops them. If it refuses
+  with "format 6", run `quest
   doctor` to see the moves it proposes, and ask the creator before
   `quest doctor --fix`. If it refuses with "format-6 first", the tracker
   predates format 6: the creator runs that tagged version's `quest
