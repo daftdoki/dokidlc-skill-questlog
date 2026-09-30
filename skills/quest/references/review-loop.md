@@ -73,7 +73,7 @@ The first pass is full. After a pass with a Blocking finding, or a
 Clarification the session could not answer, the next pass is a diff
 pass. A converged pass, full or diff, ends the loop. The run stops, and
 the open findings go to the creator, after three passes without
-convergence. Steps 1 to 5 are the short loop's; Clarifications are
+convergence; run `quest ID next --confirmed` only on their word. Steps 1 to 5 are the short loop's; Clarifications are
 answered by the session and marked `Answered.`; each diff pass is
 dispatched with `diff from HASH1, commits B..C` as the diff pass below
 describes.

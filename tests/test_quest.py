@@ -1266,10 +1266,16 @@ Verdict: another pass
 """
 
 
+def test_last_pass_line_names_answered_and_open_clarifications(tmp_path):
+    review = quest.BY_NAME["review goal"]
+    (tmp_path / "goal-review.md").write_text(RECORD.replace("- step 4: which? Open.", "- row 3, step 4: which? Open.").replace("- step 5: how? Fixed.", "- row 4, step 5: how? Answered: Background, 2026-09-29."))
+    assert quest.last_pass_line(tmp_path, review) == "last pass: 1 blocking (fixed), 2 clarification (1 of 2 fixed) (1 for the creator), 0 fact"
+
+
 def test_last_pass_counts_tiers_and_markers(tmp_path):
     (tmp_path / "plan-review.md").write_text(RECORD)
     assert quest.last_pass(tmp_path, "plan-review.md") == {"scope": "diff from aaaaaaa", "verdict": "another pass",
-        "Blocking": (1, 1), "Clarification": (2, 1), "Fact": (0, 0), "Polish": (1, 1)}
+        "Blocking": (1, 1, 0), "Clarification": (2, 1, 1), "Fact": (0, 0, 0), "Polish": (1, 1, 0)}
 
 
 def test_last_pass_reads_an_old_record(tmp_path):

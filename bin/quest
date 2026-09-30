@@ -984,8 +984,9 @@ def last_verdict(d: Path, record: str) -> str | None:
 
 
 def last_pass(d: Path, record: str) -> dict | None:
-    """The record's last pass: its scope, its verdict, and per tier (bullets, bullets marked `Fixed.`); None without a record or a pass.
-    A tier whose first bullet starts with "none" is empty; a tier the pass lacks counts zero, so an old record reads."""
+    """The record's last pass: its scope, its verdict, and per tier (bullets, bullets marked `Fixed.` or `Answered.`, bullets marked
+    `Open.`, held for the creator); None without a record or a pass. A tier whose first bullet starts with "none" is empty; a tier
+    the pass lacks counts zero, so an old record reads."""
     path = d / record
     if not path.is_file():
         return None
@@ -1001,7 +1002,8 @@ def last_pass(d: Path, record: str) -> dict | None:
         bullets = [b for b in re.split(r"^- ", m.group(1), flags=re.M) if b.strip()] if m else []
         if bullets and bullets[0].strip("() .").lower().startswith("none"):
             bullets = []
-        out[tier] = (len(bullets), sum(1 for b in bullets if b.rstrip().endswith("Fixed.")))
+        out[tier] = (len(bullets), sum(1 for b in bullets if b.rstrip().endswith(("Fixed.", "Answered."))),
+                     sum(1 for b in bullets if b.rstrip().endswith("Open.")))
     return out
 
 
@@ -1017,8 +1019,10 @@ def last_pass_line(d: Path, s: State) -> str | None:
         return None
     parts = []
     for tier in TIERS[:3]:
-        n, fixed = p[tier]
+        n, fixed, held = p[tier]
         suffix = " (fixed)" if n and fixed == n else f" ({fixed} of {n} fixed)" if fixed else ""
+        if held:
+            suffix += f" ({held} for the creator)"
         parts.append(f"{n} {tier.lower()}{suffix}")
     return "last pass: " + ", ".join(parts)
 
@@ -1131,7 +1135,7 @@ def enter_next(root: Path, d: Path, fm: dict, s: State) -> None:
     print(say(fm))
     print_guidance(fm, root, d)
     if nxt in BY_NAME and BY_NAME[nxt].nudge and shutil.which("memory"):
-        print(f"memory: what did you learn while {s.doing} on your own? One page per finding, `--ref {d.relative_to(root)}/{s.file}`, before the creator moves on.")
+        print(f"memory: what did you learn while {s.doing} on your own? One page per finding, `--ref {d.relative_to(root)}/{s.file}`, before you run the next state.")
 
 
 def cmd_skip(root: Path, d: Path, fm: dict, rest: list[str]) -> None:

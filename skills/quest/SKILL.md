@@ -45,8 +45,9 @@ One machine, in order: draft goal, review goal, research, review
 research, design, review design, plan, review plan, implement, review
 implementation, evaluate goal, then completed. Backlog sits before it
 and abandoned beside it. Research and design can be skipped, and each
-takes its review with it; every review state can be skipped; draft
-goal, plan, implement, and evaluate goal cannot. A chore is a quest
+takes its review with it; every review state can be skipped, and
+skipping a creator gate is the creator accepting without a review;
+draft goal, plan, implement, and evaluate goal cannot. A chore is a quest
 opened with research and design already marked skipped, so it runs draft
 goal, review goal, plan, review plan, implement, review implementation,
 evaluate goal.
@@ -78,8 +79,9 @@ The creator accepts the goal, and you run: research, its review,
 design, and you stop at review design. The creator accepts the design,
 and you run: plan, its review, implement, its review, and you stop at
 evaluate goal. For a chore, accepting the goal runs plan through review
-implementation. Between gates you do not ask the creator whether to
-move on; the state line says `next` and you run it.
+implementation. A quest with research or design skipped runs the
+states that remain. Between gates you do not ask the creator whether
+to move on; the state line says `next` and you run it.
 
 The run pauses for four things and nothing else, and each is put to the
 creator with its evidence:

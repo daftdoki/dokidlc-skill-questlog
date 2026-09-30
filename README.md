@@ -56,7 +56,7 @@ Settings enable the plugin; each machine still runs the `claude plugin install` 
 Talk to the agent. Every command prints one line saying where the quest is and what happens next:
 
 ```
-2609051012-k3 is at review plan. Run the review-plan loop into plan-review.md, then ask: move on to implementing?
+2609051012-k3 is at review goal. Run the review-goal loop into goal-review.md, then ask the creator: move on to researching? On their word, run: quest 2609051012-k3 accept
 ```
 
 - "What's open?" The agent runs `quest log` and reads you the list.
