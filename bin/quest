@@ -14,6 +14,7 @@ state changes. The quest log, docs/quests/README.md, is generated.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -35,7 +36,7 @@ PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz"
 ID_RE = re.compile(r"^\d{10}-[" + ALPHABET + "]{2}$")
 SHAPE = re.compile(r"^\d{1,10}(-\S*)?$")   # an id prefix, or a directory-name prefix, which resolve accepts too
-KINDS = ("quest", "chore")
+KINDS = ("quest", "chore", "task", "idea")    # an idea is captured and unshaped; `start` gives it one of the other three
 BACKLOG, COMPLETED, ABANDONED = "backlog", "completed", "abandoned"
 FINISHED = (COMPLETED, ABANDONED)
 ACTIVE = "active"                           # the directory for every machine state
@@ -87,7 +88,17 @@ STATES = (
           "Run the review-result loop into result-review.md, then ask the creator: is the goal met? On their word, run: quest {id} accept", creator=True),
 )
 BY_NAME = {s.name: s for s in STATES}
-CHORE_SKIPS = ("research", "review research", "design", "review design")
+# What each kind passes over, written into the history as skipped entries when the entry is shaped. The history is the record:
+# a chore opened before the brief carries only the research and design skips, so it still writes goal.md and plan.md.
+KIND_SKIPS = {
+    "quest": (),
+    "chore": ("research", "review research", "design", "review design", "plan", "review plan"),
+    "task": ("draft goal", "review goal", "research", "review research", "design", "review design", "plan", "review plan", "review implementation"),
+}
+SHAPES = tuple(KIND_SKIPS)
+BRIEF, BRIEF_RECORD = "brief.md", "brief-review.md"       # a chore's one document, in place of goal.md and plan.md
+TASK_SAY = {"implement": "Write the failing test, fix it, run the project's checks, and commit, then run: quest {id} next",
+            "evaluate goal": "Show the creator the commits and ask: is it done? On their word, run: quest {id} accept"}
 REVIEW_OF = {"research": "review research", "design": "review design"}   # skipping the key skips the value too
 
 # No permission rule guards a quest verb since 2026-09-30: the creator verbs are the skill's rule, run on the creator's word.
@@ -106,14 +117,14 @@ Work is tracked as quests and chores under `docs/quests/`. Run `quest log` to se
 """
 
 USAGE = """Usage:
-  quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]   open a quest or chore in the backlog
+  quest new "Title" [--task|--chore|--quest] [--goal TEXT] [--done-when TEXT]   capture an idea in the backlog, or open a shaped entry
   quest log                      what is open, one line each
   quest history [--all] [--limit N]   completed work, newest first; --all adds abandoned
   quest doctor [--fix] [--brief]  check the tracker; --fix migrates and repairs
   quest init                     create docs/quests and the CLAUDE.md paragraph; drop stale quest ask rules
 
   quest ID [show]                show a quest: its page, files, state, and guidance (id prefix ok)
-  quest ID start                 leave the backlog; a deferred quest resumes where it was
+  quest ID start [--task|--chore|--quest]   leave the backlog; an idea needs its shape; a deferred entry resumes where it was
   quest ID defer                 back to the backlog; the state is kept
   quest ID next [--confirmed]    the current state is done; enter the next one; refuses at a creator gate
   quest ID accept                the creator's word at review goal, review design, and evaluate goal
@@ -374,6 +385,42 @@ def successor(fm: dict, name: str) -> str:
     return COMPLETED
 
 
+def first_state(fm: dict) -> str:
+    """The state `start` enters: the first the entry does not skip."""
+    skip = skipped(fm)
+    return next(s.name for s in STATES if s.name not in skip)
+
+
+def is_brief(fm: dict) -> bool:
+    """A chore shaped with the brief: it drafts a goal and skips plan, so one document holds the goal and the steps."""
+    skip = skipped(fm)
+    return "plan" in skip and "draft goal" not in skip
+
+
+def file_for(s: State, fm: dict) -> str | None:
+    return BRIEF if s.name == "draft goal" and is_brief(fm) else s.file
+
+
+def record_for(s: State, fm: dict) -> str | None:
+    return BRIEF_RECORD if s.name == "review goal" and is_brief(fm) else s.record
+
+
+def reference_for(s: State, fm: dict) -> str:
+    return BRIEF if s.name in ("draft goal", "review goal") and is_brief(fm) else s.reference
+
+
+def reviewer_for(s: State, fm: dict) -> str | None:
+    """A task has no reviewer subagent at any state: its tests are the review and the creator reads the commits."""
+    return None if fm.get("kind") == "task" else s.reviewer
+
+
+def shaped(fm: dict, kind: str, at: str | None = None) -> dict:
+    """The kind and the history of an entry given a shape: its skips replaced by the kind's."""
+    at = at or now_iso()
+    kept = [e for e in fm.get("history") or [] if not (isinstance(e, dict) and e.get("skipped"))]
+    return {"kind": kind, "history": kept + [entry(at, n, skipped=True, note=kind) for n in KIND_SKIPS[kind]]}
+
+
 def last_entry(fm: dict) -> dict:
     h = fm.get("history") or []
     return h[-1] if h and isinstance(h[-1], dict) else {}
@@ -419,9 +466,14 @@ def say(fm: dict) -> str:
     if s:
         nxt = successor(fm, s.name)
         doing = BY_NAME[nxt].doing if nxt in BY_NAME else "completion"
-        return f"{qid} is at {s.name}. " + s.say.format(id=qid, next=doing)
+        text = TASK_SAY.get(s.name, s.say) if fm.get("kind") == "task" else s.say
+        if is_brief(fm):
+            text = text.replace("goal.md", BRIEF).replace("goal-review.md", BRIEF_RECORD).replace("plan.md", BRIEF)
+        return f"{qid} is at {s.name}. " + text.format(id=qid, next=doing)
     if fm.get("state") == BACKLOG and fm.get("resume"):
         return f"{qid} is in the backlog, to resume at {fm['resume']}. Start it with: quest {qid} start"
+    if fm.get("state") == BACKLOG and fm.get("kind") == "idea":
+        return f"{qid} is in the backlog as an idea. Shape and start it with: quest {qid} start --task, --chore, or --quest"
     if fm.get("state") == BACKLOG:
         return f"{qid} is in the backlog as a {fm.get('kind', 'quest')}. Start it with: quest {qid} start"
     return f"{qid} is {fm.get('state')}."
@@ -805,7 +857,7 @@ def doctor_checks(root: Path) -> list[Row]:
         rows.append(row(not out_of_place, "every entry sits under the directory named for its state" + (f"; misplaced: {detail}" if detail else ""), "quest doctor --fix", place_entries))
     overlay_dir = qdir / GUIDANCE_DIR
     if overlay_dir.is_dir():
-        references = {s.reference for s in STATES}
+        references = {s.reference for s in STATES} | {BRIEF}
         stray = sorted(p.name for p in overlay_dir.iterdir() if p.name not in references)
         rows.append(row(not stray, f"{GUIDANCE_DIR}/ holds only STAGE.md files" + (f"; stray: {', '.join(stray)}" if stray else ""), "name overlays after a stage, or remove them"))
     bad = 0
@@ -946,28 +998,80 @@ def writing_skill_problem(root: Path) -> tuple[str, str] | None:
 REFERENCES = PLUGIN_ROOT / "skills" / "quest" / "references"
 
 
-def document_for(s: State) -> str:
-    """The file under review at a state: its own, or the nearest earlier state's. plan.md from implement on."""
+def document_for(s: State, fm: dict) -> str | None:
+    """The file under review at a state: its own, or the nearest earlier unskipped state's. plan.md from implement on, brief.md for a
+    chore with a brief, None for a task, which has no document."""
+    skip = skipped(fm)
     for candidate in reversed(STATES[:STATES.index(s) + 1]):
-        if candidate.file:
-            return candidate.file
-    return STATES[0].file or ""
+        if candidate.name not in skip and file_for(candidate, fm):
+            return file_for(candidate, fm)
+    return None
+
+
+STEPS_HEADING = "## Steps"
+ITEM_RE = re.compile(r"^- \[([ xX])\] ")
+
+
+def checklist(text: str) -> list[tuple[bool, str]]:
+    """The items under `## Steps`: (ticked, hash). An item is its `- [ ]` line and the indented or blank lines under it; the hash is of
+    its words, so a rewrap or a tick leaves it and a changed word moves it."""
+    lines = text.splitlines()
+    try:
+        start = next(i for i, l in enumerate(lines) if l.strip() == STEPS_HEADING) + 1
+    except StopIteration:
+        return []
+    end = next((i for i in range(start, len(lines)) if lines[i].startswith("## ")), len(lines))
+    items, block, ticked = [], None, False
+    def close():
+        if block is not None:
+            items.append((ticked, hashlib.sha1(" ".join(" ".join(block).split()).encode()).hexdigest()[:10]))
+    for line in lines[start:end]:
+        m = ITEM_RE.match(line)
+        if m:
+            close()
+            block, ticked = [line[m.end():]], m.group(1) != " "
+        elif block is not None and (not line.strip() or line[0] in " \t"):
+            block.append(line)
+        else:
+            close()
+            block = None
+    close()
+    return items
+
+
+def checklist_state(d: Path, fm: dict) -> tuple[int, int, int] | None:
+    """(ticked, items, changed since recorded) for an entry whose checklist was recorded on entering implement; None otherwise.
+    Changed counts the recorded hashes the document no longer holds and the new ones it gained."""
+    recorded = fm.get("checklist")
+    doc = document_for(BY_NAME["implement"], fm)
+    if not recorded or not doc or not (d / doc).is_file():
+        return None
+    items = checklist((d / doc).read_text())
+    now = [h for _, h in items]
+    return sum(1 for done, _ in items if done), len(items), len(set(recorded) ^ set(now))
 
 
 def print_guidance(fm: dict, root: Path, d: Path) -> None:
     """The guidance lines for the current state; for a backlog entry, the state `start` would enter; nothing for a finished entry."""
     s = state_of(fm)
     if s is None and fm.get("state") == BACKLOG:
-        s = BY_NAME.get(str(fm.get("resume"))) or STATES[0]
+        if fm.get("kind") == "idea":
+            return                                  # no shape yet, so no state to guide
+        s = BY_NAME.get(str(fm.get("resume"))) or BY_NAME[first_state(fm)]
     if s is None:
         return
-    print(f"guidance: {REFERENCES / s.reference}")
-    print(f"document: {d / document_for(s)}")
+    print(f"guidance: {REFERENCES / reference_for(s, fm)}")
+    doc = document_for(s, fm)
+    if doc:
+        print(f"document: {d / doc}")
     print(f"gate: {'creator' if s.creator else 'agent'}")
-    if s.reviewer:
+    if reviewer_for(s, fm):
         print(f"reviewer: questlog:{s.reviewer}")
-        print(f"record: {s.record}")
-    overlay = quests_dir(root) / GUIDANCE_DIR / s.reference
+        print(f"record: {record_for(s, fm)}")
+    steps = checklist_state(d, fm)
+    if steps:
+        print(f"checklist: {steps[0]} of {steps[1]} ticked" + (f", {steps[2]} changed since accepted" if steps[2] else ""))
+    overlay = quests_dir(root) / GUIDANCE_DIR / reference_for(s, fm)
     if overlay.is_file():
         print(f"overlay: {overlay}")
     problem = writing_skill_problem(root)
@@ -1007,12 +1111,13 @@ def last_pass(d: Path, record: str) -> dict | None:
     return out
 
 
-def last_pass_line(d: Path, s: State) -> str | None:
+def last_pass_line(d: Path, s: State, fm: dict | None = None) -> str | None:
     """`last pass: 1 blocking (fixed), 0 clarification, 2 fact (fixed)` when the state has a record whose last pass did not converge;
     else None, including at a working state, where s.record is None."""
-    if not s.record:
+    record = record_for(s, fm) if fm else s.record
+    if not record or (fm and not reviewer_for(s, fm)):
         return None
-    p = last_pass(d, s.record)
+    p = last_pass(d, record)
     if p is None:
         return None
     if p["verdict"].lower().startswith("converged"):
@@ -1057,7 +1162,7 @@ def cmd_show(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     no_args(rest, "show")
     print(say(fm))
     s = state_of(fm)
-    line = last_pass_line(d, s) if s else None
+    line = last_pass_line(d, s, fm) if s else None
     if line:
         print(line)
     print()
@@ -1069,17 +1174,27 @@ def cmd_show(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
 
 
 def cmd_start(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
-    no_args(rest, "start")
+    flags = {f"--{k}": k for k in SHAPES}
+    if len(rest) > 1 or (rest and rest[0] not in flags):
+        die(f"start takes one of {', '.join(flags)} or nothing: {' '.join(rest)}", 2)
     if fm.get("state") != BACKLOG:
         die(f"{fm['id']} is {fm.get('state')}; only a backlog entry starts")
-    target = str(fm.get("resume") or STATES[0].name)
+    shape = {}
+    if rest:
+        if fm.get("resume") or current(fm.get("history") or []) != BACKLOG or any(not e.get("skipped") and e.get("state") != BACKLOG for e in fm.get("history") or []):
+            die(f"{fm['id']} has already started as a {fm.get('kind')}; start it without a shape")
+        shape = shaped(fm, flags[rest[0]])
+        fm = {**fm, **shape}
+    elif fm.get("kind") == "idea":
+        die(f"{fm['id']} is an idea; give it a shape: quest {fm['id']} start --task, --chore, or --quest")
+    target = str(fm.get("resume") or first_state(fm))
     if target not in BY_NAME:
         die(f"{fm['id']} resumes at {target!r}, which is not a state; fix the frontmatter")
-    fm = update_quest(d, {"state": target, "resume": None, "history": append_history(fm, target)})
+    fm = update_quest(d, {**shape, "state": target, "resume": None, "history": append_history(fm, target)})
     d = move_entry(quests_dir(root), d, fm)
     write_log(root)
     print(say(fm))
-    line = last_pass_line(d, BY_NAME[target])
+    line = last_pass_line(d, BY_NAME[target], fm)
     if line:
         print(line)
     print_guidance(fm, root, d)
@@ -1102,11 +1217,18 @@ def cmd_next(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     s = require_at_state(fm)
     if s.creator:
         die(f"{fm['id']} is at {s.name}, a creator gate; on the creator's word run: quest {fm['id']} accept")
-    if s.file and not (d / s.file).is_file():
-        die(f"{d.name}/{s.file} does not exist yet")
-    if s.reviewer and not rest:
-        verdict = last_verdict(d, s.record)
-        line = last_pass_line(d, s)
+    file = file_for(s, fm)
+    if file and not (d / file).is_file():
+        die(f"{d.name}/{file} does not exist yet")
+    steps = checklist_state(d, fm) if s.name == "implement" and not rest else None
+    if steps and (steps[0] < steps[1] or steps[2]):
+        ticked, n, changed = steps
+        what = "; ".join(x for x in (f"{n - ticked} of {n} steps unticked" if ticked < n else "", f"{changed} changed since accepted" if changed else "") if x)
+        die(f"checklist: {what}\ntick each step as its commit lands, and write a step that changed under Deviations with the original restored; "
+            f"a step that cannot be done goes to the creator, then run: quest {fm['id']} next --confirmed")
+    if reviewer_for(s, fm) and not rest:
+        verdict = last_verdict(d, record_for(s, fm))
+        line = last_pass_line(d, s, fm)
         detail = f"{line}\n" if line else ""
         if verdict and not verdict.lower().startswith("converged"):
             die(f"last verdict: {verdict}\n{detail}the loop stopped short; put the open findings to the creator, then run: quest {fm['id']} next --confirmed")
@@ -1119,7 +1241,7 @@ def cmd_accept(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     s = require_at_state(fm)
     if not s.creator:
         die(f"{fm['id']} is at {s.name}, the agent's gate; run: quest {fm['id']} next")
-    line = last_pass_line(d, s)
+    line = last_pass_line(d, s, fm)
     if line:
         print(line)
     enter_next(root, d, fm, s)
@@ -1129,13 +1251,19 @@ def enter_next(root: Path, d: Path, fm: dict, s: State) -> None:
     nxt = successor(fm, s.name)
     # the page is written first and the directory follows it: an interruption between the two leaves a page whose
     # state names one bucket while it sits in another, which the doctor's placement row names and --fix moves
-    fm = update_quest(d, {"state": nxt, "history": append_history(fm, nxt)})
+    changes = {"state": nxt, "history": append_history(fm, nxt)}
+    if nxt == "implement":
+        # the steps as accepted: from here the implementer ticks them, and a changed step is a Deviation
+        doc = document_for(BY_NAME[nxt], fm)
+        if doc and (d / doc).is_file():
+            changes["checklist"] = [h for _, h in checklist((d / doc).read_text())] or None
+    fm = update_quest(d, changes)
     d = move_entry(quests_dir(root), d, fm)
     write_log(root)
     print(say(fm))
     print_guidance(fm, root, d)
-    if nxt in BY_NAME and BY_NAME[nxt].nudge and shutil.which("memory"):
-        print(f"memory: what did you learn while {s.doing} on your own? One page per finding, `--ref {d.relative_to(root)}/{s.file}`, before you run the next state.")
+    if nxt in BY_NAME and BY_NAME[nxt].nudge and file_for(s, fm) and shutil.which("memory"):
+        print(f"memory: what did you learn while {s.doing} on your own? One page per finding, `--ref {d.relative_to(root)}/{file_for(s, fm)}`, before you run the next state.")
 
 
 def cmd_skip(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
@@ -1173,7 +1301,10 @@ def cmd_abandon(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
 def cmd_new(rest: list[str]) -> None:
     p = argparse.ArgumentParser(prog="quest new")
     p.add_argument("title")
-    p.add_argument("--chore", action="store_true", help="a small piece of work; research and design are skipped")
+    shape = p.add_mutually_exclusive_group()
+    shape.add_argument("--task", action="store_true", help="a fix the tests review: no document, no reviewer")
+    shape.add_argument("--chore", action="store_true", help="a small piece of work with one document, the brief")
+    shape.add_argument("--quest", action="store_true", help="the full machine")
     p.add_argument("--goal", help="what the creator wants to accomplish")
     p.add_argument("--done-when", help="how we will know it is done")
     args = p.parse_args(rest)
@@ -1181,14 +1312,15 @@ def cmd_new(rest: list[str]) -> None:
     check_format(root)
     qdir = quests_dir(root)
     qdir.mkdir(parents=True, exist_ok=True)
-    kind = "chore" if args.chore else "quest"
+    kind = next((k for k in SHAPES if getattr(args, k)), "idea")
     safe_write_path(qdir, qdir / "README.md")      # refuse before creating anything if the log cannot be written
     qid = new_id(existing_ids(qdir))
     d = safe_write_path(qdir, qdir / BACKLOG / f"{qid}-{slugify(args.title)}")
     d.mkdir(parents=True)
     at = now_iso()
-    history = [entry(at, BACKLOG)] + ([entry(at, n, skipped=True, note="chore") for n in CHORE_SKIPS] if kind == "chore" else [])
-    fm = {"id": qid, "title": args.title, "kind": kind, "state": BACKLOG, "history": history}
+    fm = {"id": qid, "title": args.title, "kind": kind, "state": BACKLOG, "history": [entry(at, BACKLOG)]}
+    if kind != "idea":
+        fm.update(shaped(fm, kind, at))
     body = quest_body(args.goal or "(what the creator wants to accomplish)", args.done_when or "(how we will know)")
     (d / "quest.md").write_text(render_page(fm, body))
     write_log(root)

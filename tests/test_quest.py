@@ -19,6 +19,7 @@ _loader.exec_module(quest)
 NOW = datetime(2026, 9, 4, 14, 32, tzinfo=UTC)
 STAMP = "2026-09-04T00:00:00Z"
 NAMES = [s.name for s in quest.STATES]
+OLD_CHORE_SKIPS = ("research", "review research", "design", "review design")   # a chore opened before the brief: it still plans
 
 
 def test_alphabet_excludes_lookalikes():
@@ -69,7 +70,7 @@ def test_successor_skips_marked_states():
     quest_fm = {"history": [{"state": "backlog", "at": STAMP}]}
     assert quest.successor(quest_fm, "review goal") == "research"
     assert quest.successor(quest_fm, "evaluate goal") == "completed"
-    chore_fm = {"history": [{"state": "backlog", "at": STAMP}] + [{"state": n, "at": STAMP, "skipped": True} for n in quest.CHORE_SKIPS]}
+    chore_fm = {"history": [{"state": "backlog", "at": STAMP}] + [{"state": n, "at": STAMP, "skipped": True} for n in OLD_CHORE_SKIPS]}
     assert quest.successor(chore_fm, "review goal") == "plan"
     assert quest.successor(chore_fm, "draft goal") == "review goal"
     assert quest.current(chore_fm["history"]) == "backlog"
@@ -147,7 +148,7 @@ def test_project_root_fails_outside_git(tmp_path, monkeypatch):
 
 def test_new_log_show_end_to_end(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    quest.main(["new", "Build the thing", "--goal", "a working thing", "--done-when", "it runs"])
+    quest.main(["new", "Build the thing", "--quest", "--goal", "a working thing", "--done-when", "it runs"])
     quest.main(["new", "Fix a typo", "--chore"])
     qdir = tmp_path / "docs" / "quests"
     dirs = [d for d in (qdir / "backlog").iterdir() if d.is_dir()]
@@ -184,9 +185,15 @@ def test_new_log_show_end_to_end(tmp_path, monkeypatch, capsys):
 
 def _fresh(tmp_path, monkeypatch, title="Build", chore=False):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    quest.main(["new", title] + (["--chore"] if chore else []))
+    """A quest, or with chore=True a chore opened before the brief, which skips research and design and still writes goal.md and plan.md."""
+    quest.main(["new", title, "--chore" if chore else "--quest"])
     qdir = tmp_path / "docs" / "quests"
     d, fm = quest.load_quests(qdir)[0]
+    if chore:
+        page = d / "quest.md"
+        fm, body = quest.parse_page(page.read_text())
+        fm["history"] = [e for e in fm["history"] if e["state"] not in ("plan", "review plan")]
+        page.write_text(quest.render_page(fm, body))
     return qdir, d, fm["id"]
 
 
@@ -255,7 +262,7 @@ def test_full_quest_lifecycle(tmp_path, monkeypatch):
 def test_chore_lifecycle_and_log_stage(tmp_path, monkeypatch):
     qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
     fm = _fm(d)
-    assert [e["state"] for e in fm["history"] if e.get("skipped")] == list(quest.CHORE_SKIPS)
+    assert [e["state"] for e in fm["history"] if e.get("skipped")] == list(OLD_CHORE_SKIPS)
     assert all(e["note"] == "chore" for e in fm["history"] if e.get("skipped"))
     quest.main([qid, "start"])
     d = _at(qdir, qid)
@@ -449,7 +456,7 @@ def test_say_lines():
     }
     for name, tail in expected.items():
         assert quest.say({**fm, "state": name}) == f"2609040000-aa is at {name}. {tail}", name
-    chore = {**fm, "kind": "chore", "state": "review goal", "history": fm["history"] + [quest.entry(STAMP, n, skipped=True, note="chore") for n in quest.CHORE_SKIPS]}
+    chore = {**fm, "kind": "chore", "state": "review goal", "history": fm["history"] + [quest.entry(STAMP, n, skipped=True, note="chore") for n in OLD_CHORE_SKIPS]}
     assert "move on to planning? On their word" in quest.say(chore)
 
 
@@ -567,7 +574,7 @@ def test_doctor_reports_and_fixes(tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor"])
     assert e.value.code == 1 and "state plan disagrees with its history (backlog)" in capsys.readouterr().out
-    (d / "quest.md").write_text(good.replace("kind: quest", "kind: epic"))
+    (d / "quest.md").write_text(good.replace("kind: idea", "kind: epic"))
     with pytest.raises(SystemExit) as e:
         quest.main(["doctor"])
     assert e.value.code == 1 and "frontmatter invalid" in capsys.readouterr().out
@@ -1416,3 +1423,152 @@ def test_accept_and_next_each_refuse_the_other_gate(tmp_path, monkeypatch, capsy
     with pytest.raises(SystemExit) as e:
         quest.main([qid, "accept", "now"])
     assert e.value.code == 2
+
+
+BRIEF_TEXT = """# Brief: fix
+
+## Goal
+
+One thing.
+
+## Steps
+
+- [ ] 1. Add the flag.
+  Test: test_flag, in tests/test_x.py.
+
+- [ ] 2. Document it
+  in the README.
+
+## Out of scope
+
+- [ ] not a step
+"""
+
+
+def test_capture_is_an_idea_and_start_needs_a_shape(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    quest.main(["new", "Look at the cache"])
+    qdir = tmp_path / "docs" / "quests"
+    d, fm = quest.load_quests(qdir)[0]; qid = fm["id"]
+    assert fm["kind"] == "idea" and [e["state"] for e in fm["history"]] == ["backlog"]
+    assert "| idea | backlog | Look at the cache |" in (qdir / "README.md").read_text()
+    out = capsys.readouterr().out
+    assert f"{qid} is in the backlog as an idea. Shape and start it with: quest {qid} start --task, --chore, or --quest" in out
+    quest.main([qid]); assert "guidance:" not in capsys.readouterr().out          # no shape, so no state to guide
+    with pytest.raises(SystemExit) as e:
+        quest.main([qid, "start"])
+    assert e.value.code == 1 and "is an idea; give it a shape" in capsys.readouterr().err
+    with pytest.raises(SystemExit) as e:
+        quest.main([qid, "start", "--epic"])
+    assert e.value.code == 2
+    quest.main([qid, "start", "--chore"]); d = _at(qdir, qid); fm = _fm(d)
+    assert fm["kind"] == "chore" and fm["state"] == "draft goal"
+    assert [e["state"] for e in fm["history"] if e.get("skipped")] == list(quest.KIND_SKIPS["chore"]) and all(e["note"] == "chore" for e in fm["history"] if e.get("skipped"))
+    with pytest.raises(SystemExit):                                               # a shape is given once
+        quest.main(["new", "Both", "--task", "--chore"])
+
+
+def test_start_reshapes_an_entry_that_never_started_and_no_other(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)               # the pre-brief shape
+    quest.main([qid, "start", "--chore"]); d = _at(qdir, qid); fm = _fm(d)
+    assert [e["state"] for e in fm["history"] if e.get("skipped")] == list(quest.KIND_SKIPS["chore"]) and quest.is_brief(fm)
+    quest.main([qid, "defer"]); capsys.readouterr()
+    with pytest.raises(SystemExit) as e:
+        quest.main([qid, "start", "--quest"])
+    assert e.value.code == 1 and "has already started as a chore; start it without a shape" in capsys.readouterr().err
+    quest.main([qid, "start"])
+    assert _fm(_at(qdir, qid))["state"] == "draft goal"
+
+
+def test_task_runs_implement_then_evaluate_with_no_document_and_no_reviewer(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    quest.main(["new", "Fix the typo", "--task"])
+    qdir = tmp_path / "docs" / "quests"
+    qid = quest.load_quests(qdir)[0][1]["id"]; capsys.readouterr()
+    quest.main([qid, "start"]); d = _at(qdir, qid)
+    out = capsys.readouterr().out
+    assert f"{qid} is at implement. Write the failing test, fix it, run the project's checks, and commit, then run: quest {qid} next" in out
+    assert "document:" not in out and "reviewer:" not in out and "gate: agent" in out and f"guidance: {REFERENCES / 'implement.md'}" in out
+    quest.main([qid, "next"])
+    out = capsys.readouterr().out
+    assert f"{qid} is at evaluate goal. Show the creator the commits and ask: is it done? On their word, run: quest {qid} accept" in out
+    assert "reviewer:" not in out and "record:" not in out and "gate: creator" in out
+    (d / "result-review.md").write_text("# Review record: result\n\n## Pass 1\n\nVerdict: another pass\n")
+    quest.main([qid]); assert "last pass:" not in capsys.readouterr().out          # a task reads no record
+    quest.main([qid, "accept"])
+    fm = _fm(_at(qdir, qid))
+    assert fm["state"] == "completed" and [e["state"] for e in fm["history"] if not e.get("skipped")] == ["backlog", "implement", "evaluate goal", "completed"]
+    assert sorted(p.name for p in _at(qdir, qid).iterdir()) == ["quest.md", "result-review.md"]
+
+
+def test_checklist_reads_the_steps_section_only():
+    items = quest.checklist(BRIEF_TEXT)
+    assert [done for done, _ in items] == [False, False] and len({h for _, h in items}) == 2
+    ticked = quest.checklist(BRIEF_TEXT.replace("- [ ] 1.", "- [x] 1."))
+    assert [done for done, _ in ticked] == [True, False] and [h for _, h in ticked] == [h for _, h in items]      # a tick moves no hash
+    rewrapped = quest.checklist(BRIEF_TEXT.replace("Document it\n  in the README.", "Document it in\n  the README."))
+    assert [h for _, h in rewrapped] == [h for _, h in items]                                                       # nor does a rewrap
+    changed = quest.checklist(BRIEF_TEXT.replace("Add the flag", "Add two flags"))
+    assert changed[0][1] != items[0][1] and changed[1][1] == items[1][1]
+    assert quest.checklist("# Plan\n\n1. a step\n") == []
+
+
+def test_chore_writes_one_brief_and_ticks_its_checklist(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    quest.main(["new", "Fix", "--chore"])
+    qdir = tmp_path / "docs" / "quests"
+    qid = quest.load_quests(qdir)[0][1]["id"]; capsys.readouterr()
+    quest.main([qid, "start"]); d = _at(qdir, qid)
+    out = capsys.readouterr().out
+    assert f"{qid} is at draft goal. Write brief.md, then run: quest {qid} next" in out
+    assert f"guidance: {REFERENCES / 'brief.md'}" in out and f"document: {d / 'brief.md'}" in out
+    (d / "goal.md").write_text("# Goal\n")
+    with pytest.raises(SystemExit):                                               # the brief is the file, not goal.md
+        quest.main([qid, "next"])
+    assert "brief.md does not exist yet" in capsys.readouterr().err
+    (d / "brief.md").write_text(BRIEF_TEXT); quest.main([qid, "next"])
+    out = capsys.readouterr().out
+    assert "Run the review-goal loop into brief-review.md" in out and "record: brief-review.md" in out and "reviewer: questlog:review-goal" in out
+    assert f"guidance: {REFERENCES / 'brief.md'}" in out and "move on to implementing?" in out
+    quest.main([qid, "accept"])
+    out = capsys.readouterr().out; fm = _fm(d)
+    assert fm["state"] == "implement" and len(fm["checklist"]) == 2
+    assert f"{qid} is at implement. Build in the order brief.md lists" in out and f"document: {d / 'brief.md'}" in out and "checklist: 0 of 2 ticked" in out
+    with pytest.raises(SystemExit) as e:                                          # nothing ticked
+        quest.main([qid, "next"])
+    err = capsys.readouterr().err
+    assert e.value.code == 1 and "checklist: 2 of 2 steps unticked" in err and f"quest {qid} next --confirmed" in err
+    (d / "brief.md").write_text(BRIEF_TEXT.replace("- [ ] 1.", "- [x] 1.").replace("- [ ] 2. Document it", "- [x] 2. Document all of it"))
+    with pytest.raises(SystemExit):                                               # ticked, and one step reworded: 1 lost, 1 gained
+        quest.main([qid, "next"])
+    assert "checklist: 2 changed since accepted" in capsys.readouterr().err
+    quest.main([qid]); assert "checklist: 2 of 2 ticked, 2 changed since accepted" in capsys.readouterr().out
+    (d / "brief.md").write_text(BRIEF_TEXT.replace("- [ ] 1.", "- [x] 1.").replace("- [ ] 2.", "- [X] 2."))
+    quest.main([qid, "next"])
+    out = capsys.readouterr().out
+    assert _fm(d)["state"] == "review implementation" and "checklist: 2 of 2 ticked" in out and "changed" not in out
+    quest.main([qid, "next"]); quest.main([qid, "accept"])
+    fm = _fm(_at(qdir, qid))
+    assert fm["state"] == "completed" and [e["state"] for e in fm["history"] if not e.get("skipped")] == ["backlog", "draft goal", "review goal", "implement", "review implementation", "evaluate goal", "completed"]
+
+
+def test_checklist_is_recorded_from_the_plan_and_confirmed_passes_an_unticked_step(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch)
+    quest.main([qid, "start"]); d = _at(qdir, qid)
+    for name in ("goal.md", "research.md", "design.md"):
+        (d / name).write_text("x\n"); quest.main([qid, "next"]); _go(d, qid)
+    assert _fm(d)["state"] == "plan"
+    (d / "plan.md").write_text(BRIEF_TEXT); quest.main([qid, "next"]); quest.main([qid, "next"])
+    fm = _fm(d)
+    assert fm["state"] == "implement" and len(fm["checklist"]) == 2
+    with pytest.raises(SystemExit):
+        quest.main([qid, "next"])
+    quest.main([qid, "next", "--confirmed"])                                      # the creator's word on a step that cannot be done
+    assert _fm(d)["state"] == "review implementation"
+    # a plan with no checklist records none, and next asks for no ticks
+    qdir2, d2, qid2 = _fresh(tmp_path / "second", monkeypatch, "Old", chore=True)
+    quest.main([qid2, "start"]); d2 = _at(qdir2, qid2); (d2 / "goal.md").write_text("x\n"); quest.main([qid2, "next"]); quest.main([qid2, "accept"])
+    (d2 / "plan.md").write_text("# Plan\n\n## Steps\n\n1. a step\n"); quest.main([qid2, "next"]); quest.main([qid2, "next"])
+    assert _fm(d2)["state"] == "implement" and "checklist" not in _fm(d2)
+    quest.main([qid2, "next"])
+    assert _fm(d2)["state"] == "review implementation"
