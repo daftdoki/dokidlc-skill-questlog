@@ -82,7 +82,8 @@ file either way.
 `quest ID` and `quest ID start` print `guidance:` with the reference to
 read first, `document:` with the absolute path of the file under
 review, `gate:` with who leaves the state, `reviewer:` and `record:` in
-a review state, and `overlay:` when the project has
+a review state, `interview:` and `coverage:` at the goal states,
+`checklist:` from implement on, and `overlay:` when the project has
 `docs/quests/guidance/STAGE.md`, which is read second and wins where
 they differ.
 
@@ -96,8 +97,10 @@ review. A task runs implement and stops at evaluate goal. A quest with research 
 states that remain. Between gates you do not ask the creator whether
 to move on; the state line says `next` and you run it.
 
-The run pauses for four things and nothing else, and each is put to the
-creator with its evidence:
+The run pauses for four things and nothing else. When it pauses, and
+when it reaches a gate, run `quest ID notify`, which prints the state
+line and sends one desktop notification where the platform has one.
+Each pause is put to the creator with its evidence:
 
 - A Blocking finding still open after the loop's last pass: the
   `last pass:` line.
@@ -141,11 +144,26 @@ When the creator asks to open work and knows its shape, gather the
 title, the Goal, and the Done when, then show and run `quest new "Title"
 --task`, `--chore`, or `--quest`, with `--goal "..." --done-when "..."`.
 
-When the creator says to start an idea, recommend a shape from the table
-above and the code, in one sentence, and wait for their word. Then show
-and run `quest ID start --task`, `--chore`, or `--quest`. An entry that
-never started can be reshaped the same way; one that started resumes
-with plain `quest ID start`.
+When the creator says to start an idea, shape it in one message of at
+most three questions, each with a recommended answer drawn from the
+captured description and the code, so the common reply is "yes" three
+times:
+
+1. Can the change be said in one sentence, touching about three files?
+   Yes is a task, and the run begins at implement. Add: is it a
+   throwaway to learn from? Yes is `--prototype`.
+2. Do you know what you want, or do you want to explore what is
+   possible? That is `--define` or `--explore`, for a quest.
+3. Will the work need decisions between alternatives, or is it clear how
+   to build once the goal is written? Alternatives is a quest, clear is
+   a chore.
+
+Then show and run `quest ID start` with the flags the answers give. An
+entry that never started can be reshaped the same way; one that started
+resumes with plain `quest ID start`. Work that outgrows its shape, or a
+prototype that taught what the real work is, gets a new entry: `quest
+new "Title" --chore --from ID` or `--quest --from ID`, which cites the
+earlier entry and copies its `## Learned` paragraph.
 
 When the creator says to move on at a gate, name the state and
 summarize in one line what they are accepting, then show and run

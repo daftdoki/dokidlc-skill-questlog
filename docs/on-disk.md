@@ -51,6 +51,9 @@ the loop up from the last pass.
 id: 2609051012-k3
 title: Discover the bridge over mDNS
 kind: quest                # or chore, task, idea
+interview: define          # a quest's goal interview depth, or explore; set at start
+prototype: true            # a task started with --prototype; evaluate goal needs a ## Learned paragraph below
+from: 2609042210-7q        # the entry this one cites, written by new --from
 checklist:                 # the plan's or brief's steps as accepted, recorded on entering implement
 - 3f2a9c81d0
 state: review plan         # a state name, or backlog, completed, abandoned
@@ -85,6 +88,10 @@ goal and has no document. A chore skips research, design, and plan and
 writes `brief.md`. The implementer ticks the `- [ ]` items under `##
 Steps` in `plan.md` or `brief.md`; `quest ID next` out of implement
 compares them with `checklist` and refuses an unticked or reworded step.
+`quest ID next` out of draft goal refuses while a row of the `## Coverage`
+table in `goal.md` or `brief.md` is Missing. The body of `quest.md` may
+carry `## Learned`, the paragraph a prototype writes before it is
+accepted and `new --from` copies into the next entry.
 
 Every state the quest entered or skipped is one history entry with its
 time; an abandoned entry carries the reason as its note. The quest log is

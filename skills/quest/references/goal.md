@@ -10,37 +10,66 @@ next` has entered review goal.
 ## What the stage produces
 
 `goal.md` records what the creator wants and how the finished work will be
-judged. It has four parts, in this order: Background, Open questions,
-Answers, and Success looks like. The quest's `quest.md` already holds a
+judged. It has these parts, in this order: Background, Coverage,
+Questions and answers, Success looks like, and after an explore
+interview Options seen. The quest's `quest.md` already holds a
 Goal and a Done when in the creator's first words; `goal.md` is where
 those become precise.
 
 ## Interview
 
-The goal stage is an interview about outcomes. A round is one message that
-asks every question you can ask now and then waits. Number the questions.
-Give each a recommended answer, so the creator can reply "1 yes, 2 your
-call, 3 no". A question whose answer depends on another question in the
-same round belongs to the next round.
+`quest ID start` recorded the depth, and `quest ID` prints it as
+`interview: define` or `interview: explore`. Both end with the coverage
+table filled; they differ in how they get there.
 
-Ask about what would change the shape of the work: what success means and
-how it is measured, what is out of scope, which decisions are already
-made, and what constraint the creator holds that the repository does not
-show. A fact that lives in the code, the docs, or memory goes to
-`questlog:fact-finder`, and the round does not wait for it; only the
-questions downstream of that fact wait.
+The coverage table has fixed rows: outcome, success measure, out of
+scope, decisions already made, constraints the repository does not
+show. Each row is Clear, Partial, or Missing. A Partial row carries the
+assumption you made and the recommended answer, so the creator sees it
+at the gate. `quest ID next` refuses while a row is Missing.
 
-The interview is complete when no decisive assumption is left: no decision
-that would change every downstream option is left unasked.
+```
+## Coverage
+
+| Row | Status | Note |
+|---|---|---|
+| outcome | Clear | |
+| out of scope | Partial | assumed: eviction stays out |
+```
+
+Define is for a creator who knows what they want. A round is one
+message of at most five questions, ordered by how much the answer
+changes the work, each numbered with a recommended answer. The round
+opens with the convention: a bare "yes" takes the recommendation, and a
+yes-or-no question is worded so that "yes" is it. A question whose
+answer depends on another in the same round belongs to the next round.
+A fact that lives in the code, the docs, or memory goes to
+`questlog:fact-finder`, and the round does not wait for it. The
+interview ends when every row is Clear, or after two rounds with the
+open rows written as Partial.
+
+Explore is for a creator who has an outcome in mind and wants to find
+what they do not know. You teach before you ask. Each message carries
+one thing the creator may not know, an option, a prior-art example, a
+constraint the code holds, an idea from another domain, and then at
+most three questions about it. Dispatch fact-finders for prior art and
+code facts while the conversation runs, so it does not wait on them.
+There is no question cap and no coverage exit: explore ends when the
+creator says they have what they need, and only then does the coverage
+table fill and the goal get written. Explore is breadth about the
+outcome, in conversation; research is depth on the surviving questions,
+in a document, without the creator. A comparison matrix in an explore
+conversation has crossed that line.
 
 ## Writing
 
-Record each answer as it arrives, under Answers, numbered to match its
-question, in the creator's words where they gave them. When an answer
-arrives later, add it with its date.
+Record each answer as it arrives under `## Questions and answers`, as
+`Q: ... A: ...`, dated by round, in the creator's words where they gave
+them, and edit the section the answer changes in the same turn.
 
 Background says what exists today and why the work is wanted, with the
-files or sources that show it.
+files or sources that show it. A hypothesis the goal turns on has its
+test and result here.
 
 Success looks like is a list. Each item can be judged true or false
 against the finished work by someone who did not do it. A number, a file
@@ -49,6 +78,12 @@ creator will watch for.
 
 User stories belong here when they fit, in the creator's words. Write
 none the creator did not give.
+
+After explore, `## Options seen` lists one line per option the
+conversation raised, with why it stayed or fell. The design reviewer
+and a later session read it, and research deepens the survivors instead
+of reopening the space. Each piece of prior art found gets a memory page
+cited to its source.
 
 ## Review
 
@@ -62,14 +97,15 @@ accept question.
 Rubric for goal. Each row is graded pass or fail; a failure is a
 finding at the row's tier, and the fail beside each row is an example.
 
-1. Blocking. Every Answer matches the creator's words. Fail: an answer
-   recorded as "yes" where the creator wrote "your call".
+1. Blocking. Every answer under Questions and answers matches the
+   creator's words. Fail: an answer recorded as "yes" where the creator
+   wrote "your call".
 2. Blocking. Every item under Success looks like can be judged true or
    false against the finished work by someone who did not do it. Fail:
    "the viewer offer works well".
-3. Clarification. No decision that would change every downstream option
-   is assumed. Fail: the goal picks one of two skills without a question
-   recording the choice.
+3. Clarification. The coverage table is present, and every row is Clear
+   or Partial with its assumption written. Fail: a row Missing, or
+   Partial with an empty note.
 4. Clarification. Background names what exists and cites where a reader
    sees it. Fail: "the hook prompts on prose" with no transcript, file,
    or command named.

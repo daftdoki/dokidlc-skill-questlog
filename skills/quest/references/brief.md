@@ -12,9 +12,9 @@ ID next` has entered review goal.
 `brief.md` is a chore's one document: what the creator wants, how the
 result will be judged, and the steps that build it. The creator reads it
 once, at review goal, and the implementer ticks its Steps. It has these
-parts, in this order: Goal, Background, Questions and answers, Success
-looks like, Steps, Out of scope, and Deviations, kept empty here and
-filled during implementation.
+parts, in this order: Goal, Background, Coverage, Questions and answers,
+Success looks like, Steps, Out of scope, and Deviations, kept empty here
+and filled during implementation.
 
 ## Before you write
 
@@ -26,10 +26,14 @@ A chore that turns on an untested hypothesis runs the test now, and its
 result goes into Background. A chore that needs a decision between
 alternatives is a quest: tell the creator before you write.
 
-Ask the creator one round: only what the creator alone knows, numbered,
-each with a recommended answer. A fact that lives in the code, the docs,
-or memory goes to `questlog:fact-finder`, and the round does not wait
-for it.
+Ask the creator one round of at most five questions: only what the
+creator alone knows, numbered, each with a recommended answer, opening
+with the convention that a bare "yes" takes the recommendation. A fact
+that lives in the code, the docs, or memory goes to
+`questlog:fact-finder`, and the round does not wait for it. The brief's
+coverage table has the goal's rows plus one, steps; `quest ID next`
+refuses while a row is Missing, and a Partial row carries its
+assumption.
 
 ## Writing
 
@@ -37,6 +41,9 @@ Goal is two sentences, in the creator's words where they gave them.
 
 Background says what exists today, in a few lines, with the files that
 show it and the result of any test you ran.
+
+Coverage is the table `references/goal.md` shows, with a sixth row,
+steps: Clear when every step names its files and its test.
 
 Questions and answers records each as `Q: ... A: ...`, the answer in the
 creator's words.

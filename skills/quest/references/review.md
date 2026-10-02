@@ -23,7 +23,9 @@ Beside it, the `checklist:` line `quest ID` prints: every step ticked,
 none changed.
 
 For a task there is no loop and no record: show the commits, the test
-that failed first and passes now, and ask whether it is done.
+that failed first and passes now, and ask whether it is done. For a
+prototype, write the `## Learned` paragraph into `quest.md` first and
+show it beside the commits; `accept` refuses without it.
 
 Answer each question with the evidence, and where a question finds a
 gap, fix it, commit, and show the fix.

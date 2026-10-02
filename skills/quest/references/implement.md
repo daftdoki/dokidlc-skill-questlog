@@ -73,7 +73,16 @@ Write the failing test and run it alone, so it fails for the right
 reason; write the least code that passes it; run the project's checks
 and its code review skill when it has one; commit. Then run `quest ID
 next`, show the creator the commits, and ask whether it is done. If the
-work grows past one sentence of diff, tell the creator: it is a chore.
+work grows past one sentence of diff, tell the creator: it is a chore,
+opened with `quest new "Title" --chore --from ID` so the new entry
+cites this one.
+
+A prototype is a task started with `--prototype`: a throwaway built to
+learn. Build it on a branch named after the id and leave it unmerged.
+At evaluate goal, write what was learned under `## Learned` in
+`quest.md`, one paragraph; `accept` refuses without it. The longer
+piece of work that follows is opened with `--from ID`, and its goal's
+Background opens with that paragraph and the branch.
 
 ## Review
 

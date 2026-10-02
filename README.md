@@ -63,7 +63,8 @@ Talk to the agent. Every command prints one line saying where the quest is and w
 - "What have we completed?" `quest history`, the last ten newest first. `--all` adds abandoned ones. Completed work stays out of the log and out of the session until you ask.
 - "Note this down: discover the bridge over mDNS." `quest new "Discover the bridge over mDNS"`. An idea is in the backlog, and nothing else is asked.
 - "Open a quest for discovering the bridge over mDNS." The agent asks for the goal and how you'll know it is done, shows you `quest new "Discover the bridge over mDNS" --quest --goal "..." --done-when "..."`, and runs it. Say "chore" or "task" for the smaller sizes.
-- "Start the bridge idea." The agent recommends a size in a sentence, and on your word runs `quest 2609051012-k3 start --chore`.
+- "Start the bridge idea." The agent asks at most three questions with a recommended answer each, and on your word runs `quest 2609051012-k3 start --chore`, or `--quest --explore` when you want to find what you do not know, or `--task --prototype` for a throwaway to learn from.
+- "What did we learn from the prototype?" Its `quest.md` holds a `## Learned` paragraph, and `quest new "Title" --quest --from 2609051012-k3` opens the real work with that paragraph copied in.
 - "Start the mDNS quest." `quest 2609051012-k3 start`. The quest is at draft goal.
 - "Draft the goal." The agent interviews you, writes `goal.md`, runs `quest 2609051012-k3 next`, runs the review loop, and asks: move on to researching?
 - "Change the second story." The agent revises, runs the loop again, and asks again, as many times as it takes.
@@ -75,14 +76,16 @@ Talk to the agent. Every command prints one line saying where the quest is and w
 The commands behind those sentences:
 
 ```
-quest new "Title" [--task|--chore|--quest] [--goal TEXT] [--done-when TEXT]   capture an idea, or open a shaped entry
+quest new "Title" [--task|--chore|--quest] [--goal TEXT] [--done-when TEXT] [--from ID]   capture an idea, or open a shaped entry
 quest log                                   what is open, newest first
 quest history [--all] [--limit N]           what is completed, newest first, ten by default
 quest doctor [--fix] [--brief]              check the tracker; --fix migrates and repairs
 quest init                                  set up a repository; drops quest ask rules an older plugin wrote
 
 quest 2609051012-k3                         show one quest; a unique id prefix works
-quest 2609051012-k3 start [--task|--chore|--quest]   leave the backlog; an idea needs its shape; a deferred entry resumes
+quest 2609051012-k3 start [--task [--prototype] | --chore | --quest [--define|--explore]]
+                                            leave the backlog; an idea needs its shape; a deferred entry resumes
+quest 2609051012-k3 notify [TEXT]           the state line, and a desktop notification where the platform has one
 quest 2609051012-k3 defer                   back to the backlog; the state is kept
 quest 2609051012-k3 next [--confirmed]      the current state is done; enter the next one; refuses at a gate
 quest 2609051012-k3 accept                  your word at review goal, review design, and evaluate goal
@@ -90,7 +93,7 @@ quest 2609051012-k3 skip                    skip the current state
 quest 2609051012-k3 abandon "reason"        terminal; files stay, the entry leaves the log
 ```
 
-The agent runs `log`, `history`, `doctor`, `ID`, and `ID next` on its own. The rest are yours: the agent runs one only when you say so, after showing you the command.
+The agent runs `log`, `history`, `doctor`, `ID`, `ID next`, and `ID notify` on its own. The rest are yours: the agent runs one only when you say so, after showing you the command.
 
 ## Caveats
 
