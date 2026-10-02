@@ -99,6 +99,11 @@ SHAPES = tuple(KIND_SKIPS)
 BRIEF, BRIEF_RECORD = "brief.md", "brief-review.md"       # a chore's one document, in place of goal.md and plan.md
 TASK_SAY = {"implement": "Write the failing test, fix it, run the project's checks, and commit, then run: quest {id} next",
             "evaluate goal": "Show the creator the commits and ask: is it done? On their word, run: quest {id} accept"}
+PROTOTYPE_SAY = {"implement": "Build the throwaway on a branch named after the id, commit, then run: quest {id} next",
+                 "evaluate goal": "Write what was learned under ## Learned in quest.md, show the creator the commits, and ask: is it done? On their word, run: quest {id} accept"}
+EXPLORE_SAY = "Explore with the creator as references/goal.md says, write goal.md, then run: quest {id} next"
+INTERVIEWS = ("define", "explore")               # how deep the goal interview goes for a quest; recorded as `interview:` at start
+LEARNED = "## Learned"                           # the paragraph a prototype's evaluate goal needs in quest.md
 REVIEW_OF = {"research": "review research", "design": "review design"}   # skipping the key skips the value too
 
 # No permission rule guards a quest verb since 2026-09-30: the creator verbs are the skill's rule, run on the creator's word.
@@ -117,14 +122,15 @@ Work is tracked as quests and chores under `docs/quests/`. Run `quest log` to se
 """
 
 USAGE = """Usage:
-  quest new "Title" [--task|--chore|--quest] [--goal TEXT] [--done-when TEXT]   capture an idea in the backlog, or open a shaped entry
+  quest new "Title" [--task|--chore|--quest] [--goal TEXT] [--done-when TEXT] [--from ID]   capture an idea, or open a shaped entry; --from cites an earlier entry
   quest log                      what is open, one line each
   quest history [--all] [--limit N]   completed work, newest first; --all adds abandoned
   quest doctor [--fix] [--brief]  check the tracker; --fix migrates and repairs
   quest init                     create docs/quests and the CLAUDE.md paragraph; drop stale quest ask rules
 
   quest ID [show]                show a quest: its page, files, state, and guidance (id prefix ok)
-  quest ID start [--task|--chore|--quest]   leave the backlog; an idea needs its shape; a deferred entry resumes where it was
+  quest ID start [--task [--prototype] | --chore | --quest [--define|--explore]]   leave the backlog; an idea needs its shape; a deferred entry resumes
+  quest ID notify [TEXT]         the state line, and a desktop notification where the platform has one
   quest ID defer                 back to the backlog; the state is kept
   quest ID next [--confirmed]    the current state is done; enter the next one; refuses at a creator gate
   quest ID accept                the creator's word at review goal, review design, and evaluate goal
@@ -467,6 +473,10 @@ def say(fm: dict) -> str:
         nxt = successor(fm, s.name)
         doing = BY_NAME[nxt].doing if nxt in BY_NAME else "completion"
         text = TASK_SAY.get(s.name, s.say) if fm.get("kind") == "task" else s.say
+        if fm.get("prototype"):
+            text = PROTOTYPE_SAY.get(s.name, text)
+        if s.name == "draft goal" and fm.get("interview") == "explore":
+            text = EXPLORE_SAY
         if is_brief(fm):
             text = text.replace("goal.md", BRIEF).replace("goal-review.md", BRIEF_RECORD).replace("plan.md", BRIEF)
         return f"{qid} is at {s.name}. " + text.format(id=qid, next=doing)
@@ -1042,6 +1052,43 @@ def checklist(text: str) -> list[tuple[bool, str]]:
     return items
 
 
+COVERAGE_HEADING = "## Coverage"
+COVERAGE_WORDS = ("clear", "partial", "missing")
+
+
+def coverage(text: str) -> tuple[int, int, int] | None:
+    """(clear, partial, missing) from the table under `## Coverage`: the second cell of each row names the status. None without the table."""
+    lines = text.splitlines()
+    try:
+        start = next(i for i, l in enumerate(lines) if l.strip() == COVERAGE_HEADING) + 1
+    except StopIteration:
+        return None
+    counts = {w: 0 for w in COVERAGE_WORDS}
+    seen = False
+    for line in lines[start:]:
+        if line.startswith("## "):
+            break
+        if not line.lstrip().startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 2 or set(cells[1]) <= set("-: "):
+            continue
+        seen = True
+        word = cells[1].lower()
+        if word in counts:
+            counts[word] += 1
+    return tuple(counts[w] for w in COVERAGE_WORDS) if seen else None
+
+
+def coverage_state(d: Path, fm: dict) -> tuple[int, int, int] | None:
+    """The goal's or brief's coverage at draft goal and review goal; None elsewhere or without the table."""
+    s = state_of(fm)
+    if not s or s.name not in ("draft goal", "review goal"):
+        return None
+    doc = file_for(BY_NAME["draft goal"], fm)
+    return coverage((d / doc).read_text()) if doc and (d / doc).is_file() else None
+
+
 def checklist_state(d: Path, fm: dict) -> tuple[int, int, int] | None:
     """(ticked, items, changed since recorded) for an entry whose checklist was recorded on entering implement; None otherwise.
     Changed counts the recorded hashes the document no longer holds and the new ones it gained."""
@@ -1074,6 +1121,11 @@ def print_guidance(fm: dict, root: Path, d: Path) -> None:
     steps = checklist_state(d, fm)
     if steps:
         print(f"checklist: {steps[0]} of {steps[1]} ticked" + (f", {steps[2]} changed since accepted" if steps[2] else ""))
+    if s.name in ("draft goal", "review goal") and fm.get("interview"):
+        print(f"interview: {fm['interview']}")
+    rows = coverage_state(d, fm)
+    if rows:
+        print(f"coverage: {rows[0]} clear, {rows[1]} partial, {rows[2]} missing")
     overlay = quests_dir(root) / GUIDANCE_DIR / reference_for(s, fm)
     if overlay.is_file():
         print(f"overlay: {overlay}")
@@ -1178,15 +1230,25 @@ def cmd_show(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
 
 def cmd_start(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     flags = {f"--{k}": k for k in SHAPES}
-    if len(rest) > 1 or (rest and rest[0] not in flags):
-        die(f"start takes one of {', '.join(flags)} or nothing: {' '.join(rest)}", 2)
+    extras = {"--define": ("quest", "interview", "define"), "--explore": ("quest", "interview", "explore"), "--prototype": ("task", "prototype", True)}
+    usage = "start takes one of --task [--prototype], --chore, --quest [--define|--explore], or nothing"
+    if any(a not in flags and a not in extras for a in rest) or sum(a in flags for a in rest) > 1 or sum(a in extras for a in rest) > 1:
+        die(f"{usage}: {' '.join(rest)}", 2)
     if fm.get("state") != BACKLOG:
         die(f"{fm['id']} is {fm.get('state')}; only a backlog entry starts")
     shape = {}
+    kind_flag = next((a for a in rest if a in flags), None)
+    extra = next((a for a in rest if a in extras), None)
+    if extra and (not kind_flag or flags[kind_flag] != extras[extra][0]):
+        die(f"{extra} goes with --{extras[extra][0]}: {usage}", 2)
     if rest:
         if fm.get("resume") or current(fm.get("history") or []) != BACKLOG or any(not e.get("skipped") and e.get("state") != BACKLOG for e in fm.get("history") or []):
             die(f"{fm['id']} has already started as a {fm.get('kind')}; start it without a shape")
-        shape = shaped(fm, flags[rest[0]])
+        shape = shaped(fm, flags[kind_flag])
+        if extra:
+            shape[extras[extra][1]] = extras[extra][2]
+        elif flags[kind_flag] == "quest":
+            shape["interview"] = "define"
         fm = {**fm, **shape}
     elif fm.get("kind") == "idea":
         die(f"{fm['id']} is an idea; give it a shape: quest {fm['id']} start --task, --chore, or --quest")
@@ -1223,6 +1285,10 @@ def cmd_next(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     file = file_for(s, fm)
     if file and not (d / file).is_file():
         die(f"{d.name}/{file} does not exist yet")
+    rows = coverage_state(d, fm) if s.name == "draft goal" and not rest else None
+    if rows and rows[2]:
+        die(f"coverage: {rows[2]} {'row is' if rows[2] == 1 else 'rows are'} Missing\nask the creator or write the assumption and mark the row Partial, then run next; "
+            f"on the creator's word to go without: quest {fm['id']} next --confirmed")
     steps = checklist_state(d, fm) if s.name == "implement" and not rest else None
     if steps and (steps[0] < steps[1] or steps[2]):
         ticked, n, changed = steps
@@ -1238,12 +1304,44 @@ def cmd_next(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     enter_next(root, d, fm, s)
 
 
+def learned(d: Path) -> str | None:
+    """The text under `## Learned` in quest.md, or None when the section is absent or empty."""
+    _, body = parse_page((d / "quest.md").read_text())
+    lines = body.splitlines()
+    start = next((i for i, l in enumerate(lines) if l.strip() == LEARNED), None)
+    if start is None:
+        return None
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+    text = "\n".join(lines[start + 1:end]).strip()
+    return text or None
+
+
+def cmd_notify(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
+    """The state line, and the same text as a desktop notification: osascript on macOS, notify-send on Linux, the bell otherwise."""
+    text = " ".join(rest).strip() or say(fm)
+    print(text)
+    title = f"quest {fm['id']}"
+    if sys.platform == "darwin" and shutil.which("osascript"):
+        cmd = ["osascript", "-e", f'display notification "{text.replace(chr(34), chr(39))}" with title "{title}"']
+    elif shutil.which("notify-send"):
+        cmd = ["notify-send", title, text]
+    else:
+        sys.stdout.write("\a"); sys.stdout.flush()
+        return
+    try:
+        subprocess.run(cmd, capture_output=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        sys.stdout.write("\a"); sys.stdout.flush()
+
+
 def cmd_accept(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     """The creator's word at a creator gate. The verdict is printed and not enforced: the creator decides."""
     no_args(rest, "accept")
     s = require_at_state(fm)
     if not s.creator:
         die(f"{fm['id']} is at {s.name}, the agent's gate; run: quest {fm['id']} next")
+    if s.name == "evaluate goal" and fm.get("prototype") and not learned(d):
+        die(f"{fm['id']} is a prototype; write what was learned under {LEARNED} in quest.md before the creator accepts")
     line = last_pass_line(d, s, fm)
     if line:
         print(line)
@@ -1313,6 +1411,7 @@ def cmd_new(rest: list[str]) -> None:
     shape.add_argument("--task", action="store_true", help="a fix the tests review: no document, no reviewer")
     shape.add_argument("--chore", action="store_true", help="a small piece of work with one document, the brief")
     shape.add_argument("--quest", action="store_true", help="the full machine")
+    p.add_argument("--from", dest="source", metavar="ID", help="an earlier entry this builds on; its Learned paragraph is copied in")
     p.add_argument("--goal", help="what the creator wants to accomplish")
     p.add_argument("--done-when", help="how we will know it is done")
     args = p.parse_args(rest)
@@ -1321,6 +1420,7 @@ def cmd_new(rest: list[str]) -> None:
     qdir = quests_dir(root)
     qdir.mkdir(parents=True, exist_ok=True)
     kind = next((k for k in SHAPES if getattr(args, k)), "idea")
+    source = resolve(qdir, args.source) if args.source else None
     safe_write_path(qdir, qdir / "README.md")      # refuse before creating anything if the log cannot be written
     qid = new_id(existing_ids(qdir))
     d = safe_write_path(qdir, qdir / BACKLOG / f"{qid}-{slugify(args.title)}")
@@ -1330,6 +1430,11 @@ def cmd_new(rest: list[str]) -> None:
     if kind != "idea":
         fm.update(shaped(fm, kind, at))
     body = quest_body(args.goal or "(what the creator wants to accomplish)", args.done_when or "(how we will know)")
+    if source:
+        sd, sfm = source
+        fm["from"] = sfm["id"]
+        lesson = learned(sd)
+        body += f"\n## From\n\n{sfm['id']}, {sfm.get('title', '')}, {sfm.get('kind', '')} {sfm.get('state', '')}" + (f":\n\n{lesson}\n" if lesson else ".\n")
     (d / "quest.md").write_text(render_page(fm, body))
     write_log(root)
     print(say(fm))
@@ -1357,7 +1462,7 @@ def cmd_history(rest: list[str]) -> None:
 
 
 GLOBAL = {"new": cmd_new, "log": cmd_log, "history": cmd_history, "doctor": cmd_doctor, "init": cmd_init}
-VERBS = {"show": cmd_show, "start": cmd_start, "defer": cmd_defer, "next": cmd_next, "accept": cmd_accept, "skip": cmd_skip, "abandon": cmd_abandon}
+VERBS = {"show": cmd_show, "start": cmd_start, "defer": cmd_defer, "next": cmd_next, "accept": cmd_accept, "skip": cmd_skip, "abandon": cmd_abandon, "notify": cmd_notify}
 
 
 def main(argv: list[str] | None = None) -> None:

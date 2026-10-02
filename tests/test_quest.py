@@ -1625,3 +1625,106 @@ def test_format_7_reads_as_is_and_the_header_moves_to_8(tmp_path, monkeypatch, c
     qid = quest.load_quests(tmp_path / "docs/quests")[0][1]["id"]
     quest.main([qid, "start"])                                                # any write rewrites the header
     assert "format 8" in log.read_text()
+
+
+GOAL_WITH_COVERAGE = """# Goal
+
+## Coverage
+
+| Row | Status | Note |
+|---|---|---|
+| outcome | Clear | |
+| success measure | Clear | |
+| out of scope | Partial | assumed: eviction stays out |
+| decisions already made | Clear | |
+| constraints | {missing} | |
+
+## Success looks like
+
+- it runs
+"""
+
+
+def test_start_records_the_interview_depth_and_the_prototype(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    qdir = tmp_path / "docs" / "quests"
+    quest.main(["new", "A"]); quest.main(["new", "B"]); quest.main(["new", "C"])
+    ids = {fm["title"]: fm["id"] for _, fm in quest.load_quests(qdir)}
+    capsys.readouterr()
+    for argv in (["--explore"], ["--task", "--explore"], ["--quest", "--prototype"], ["--task", "--chore"], ["--define", "--explore", "--quest"]):
+        with pytest.raises(SystemExit) as e:
+            quest.main([ids["A"], "start", *argv])
+        assert e.value.code == 2, argv
+    quest.main([ids["A"], "start", "--quest"])
+    assert _fm(_at(qdir, ids["A"]))["interview"] == "define" and "interview: define" in capsys.readouterr().out
+    quest.main([ids["B"], "start", "--quest", "--explore"])
+    out = capsys.readouterr().out; fm = _fm(_at(qdir, ids["B"]))
+    assert fm["interview"] == "explore" and "interview: explore" in out
+    assert f"{ids['B']} is at draft goal. Explore with the creator as references/goal.md says, write goal.md, then run: quest {ids['B']} next" in out
+    quest.main([ids["C"], "start", "--task", "--prototype"])
+    out = capsys.readouterr().out; fm = _fm(_at(qdir, ids["C"]))
+    assert fm["prototype"] is True and "interview" not in fm
+    assert f"{ids['C']} is at implement. Build the throwaway on a branch named after the id, commit, then run: quest {ids['C']} next" in out
+
+
+def test_coverage_gates_next_out_of_draft_goal(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch)
+    quest.main([qid, "start"]); d = _at(qdir, qid)
+    (d / "goal.md").write_text(GOAL_WITH_COVERAGE.format(missing="Missing")); capsys.readouterr()
+    quest.main([qid]); assert "coverage: 3 clear, 1 partial, 1 missing" in capsys.readouterr().out
+    with pytest.raises(SystemExit) as e:
+        quest.main([qid, "next"])
+    err = capsys.readouterr().err
+    assert e.value.code == 1 and "coverage: 1 row is Missing" in err and f"quest {qid} next --confirmed" in err
+    (d / "goal.md").write_text(GOAL_WITH_COVERAGE.format(missing="Partial"))
+    quest.main([qid, "next"])
+    out = capsys.readouterr().out
+    assert _fm(d)["state"] == "review goal" and "coverage: 3 clear, 2 partial, 0 missing" in out
+    assert quest.coverage("# Goal\n\nno table\n") is None and quest.coverage("## Coverage\n\n| a | b |\n|---|---|\n") == (0, 0, 0)
+    # --confirmed passes a Missing row on the creator's word; a goal without the table is not gated by the script
+    qdir2, d2, qid2 = _fresh(tmp_path / "two", monkeypatch)
+    quest.main([qid2, "start"]); d2 = _at(qdir2, qid2)
+    (d2 / "goal.md").write_text(GOAL_WITH_COVERAGE.format(missing="Missing"))
+    quest.main([qid2, "next", "--confirmed"]); assert _fm(d2)["state"] == "review goal"
+    qdir3, d3, qid3 = _fresh(tmp_path / "three", monkeypatch)
+    quest.main([qid3, "start"]); d3 = _at(qdir3, qid3); (d3 / "goal.md").write_text("# Goal\n")
+    capsys.readouterr(); quest.main([qid3, "next"]); assert "coverage:" not in capsys.readouterr().out and _fm(d3)["state"] == "review goal"
+
+
+def test_prototype_needs_a_learned_paragraph_and_from_copies_it(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    qdir = tmp_path / "docs" / "quests"
+    quest.main(["new", "Try the cache", "--task"])
+    qid = quest.load_quests(qdir)[0][1]["id"]
+    quest.main([qid, "start", "--task", "--prototype"]); d = _at(qdir, qid); quest.main([qid, "next"]); capsys.readouterr()
+    assert "Write what was learned under ## Learned in quest.md" in quest.say(_fm(d))
+    with pytest.raises(SystemExit) as e:
+        quest.main([qid, "accept"])
+    assert e.value.code == 1 and "is a prototype; write what was learned under ## Learned" in capsys.readouterr().err
+    page = d / "quest.md"
+    page.write_text(page.read_text().rstrip("\n") + "\n\n## Learned\n\nThe lookup is cheap; the cache buys nothing.\n")
+    quest.main([qid, "accept"])
+    assert _fm(_at(qdir, qid))["state"] == "completed"
+    quest.main(["new", "Cache the lookup", "--chore", "--from", qid[:6]]); capsys.readouterr()
+    nd, nfm = next((dd, f) for dd, f in quest.load_quests(qdir) if f["title"] == "Cache the lookup")
+    body = (nd / "quest.md").read_text()
+    assert nfm["from"] == qid and f"## From\n\n{qid}, Try the cache, task completed:\n\nThe lookup is cheap; the cache buys nothing." in body
+    with pytest.raises(SystemExit):
+        quest.main(["new", "Nope", "--from", "9999999999"])
+
+
+def test_notify_prints_the_state_line_and_sends_once(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch)
+    quest.main([qid, "start"]); capsys.readouterr()
+    calls = []
+    monkeypatch.setattr(quest.sys, "platform", "darwin")
+    monkeypatch.setattr(quest.shutil, "which", lambda name: "/usr/bin/osascript" if name == "osascript" else None)
+    monkeypatch.setattr(quest.subprocess, "run", lambda cmd, **k: calls.append(cmd))
+    quest.main([qid, "notify"])
+    out = capsys.readouterr().out
+    assert out.startswith(f"{qid} is at draft goal.") and len(calls) == 1 and calls[0][0] == "osascript" and f'with title "quest {qid}"' in calls[0][2]
+    quest.main([qid, "notify", "stopped: 1 blocking open"])
+    assert capsys.readouterr().out == "stopped: 1 blocking open\n" and 'display notification "stopped: 1 blocking open"' in calls[1][2]
+    monkeypatch.setattr(quest.shutil, "which", lambda name: None)
+    quest.main([qid, "notify"])
+    assert capsys.readouterr().out.endswith("\a") and len(calls) == 2                 # no notifier: the bell
