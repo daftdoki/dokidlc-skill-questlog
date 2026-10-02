@@ -97,10 +97,11 @@ review. A task runs implement and stops at evaluate goal. A quest with research 
 states that remain. Between gates you do not ask the creator whether
 to move on; the state line says `next` and you run it.
 
-The run pauses for four things and nothing else. When it pauses, and
-when it reaches a gate, run `quest ID notify`, which prints the state
-line and sends one desktop notification where the platform has one.
-Each pause is put to the creator with its evidence:
+The run pauses for four things and nothing else. The script wakes the
+creator with a desktop notification when a verb refuses and when the
+run lands on a creator gate; for a pause only you see, a question or an
+irreversible action, run `quest ID notify "TEXT"`. Each pause is put to
+the creator with its evidence:
 
 - A Blocking finding still open after the loop's last pass: the
   `last pass:` line.
@@ -144,10 +145,12 @@ When the creator asks to open work and knows its shape, gather the
 title, the Goal, and the Done when, then show and run `quest new "Title"
 --task`, `--chore`, or `--quest`, with `--goal "..." --done-when "..."`.
 
-When the creator says to start an idea, shape it in one message of at
-most three questions, each with a recommended answer drawn from the
-captured description and the code, so the common reply is "yes" three
-times:
+When the creator says to start an idea whose description already names
+the change and fits one sentence, ask nothing: say the shape in one
+line and run `quest ID start --task` on their word. Otherwise shape it
+in one message of at most three questions, each with a recommended
+answer drawn from the description and the code, so the common reply is
+"yes"; the later questions apply only when the first answer is no:
 
 1. Can the change be said in one sentence, touching about three files?
    Yes is a task, and the run begins at implement. Add: is it a

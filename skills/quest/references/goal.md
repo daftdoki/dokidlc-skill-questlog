@@ -24,9 +24,13 @@ table filled; they differ in how they get there.
 
 The coverage table has fixed rows: outcome, success measure, out of
 scope, decisions already made, constraints the repository does not
-show. Each row is Clear, Partial, or Missing. A Partial row carries the
-assumption you made and the recommended answer, so the creator sees it
-at the gate. `quest ID next` refuses while a row is Missing.
+show, and three the unattended stages read in place of the rounds they
+once asked the creator: constraints research must respect, decisions
+made for design, how the build should be broken up. Each row is Clear,
+Partial, or Missing. A Partial row carries the assumption you made and
+the recommended answer, so the creator sees it at the gate. `quest ID
+next` refuses while a row is Missing; a goal written before the table
+existed has none, and the script lets it pass.
 
 ```
 ## Coverage

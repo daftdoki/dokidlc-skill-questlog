@@ -25,7 +25,8 @@ question as you form it.
 
 Research runs after the creator accepted the goal, without the creator.
 Take the assumptions that would change every downstream option from
-the goal's Answers; a fact that lives in the code, the docs, or memory
+the goal's Questions and answers and its coverage row "constraints
+research must respect"; a fact that lives in the code, the docs, or memory
 goes to `questlog:fact-finder`. Only a question the goal does not
 answer and only the creator can pauses the run: ask it, numbered, with
 a recommended answer, and wait.

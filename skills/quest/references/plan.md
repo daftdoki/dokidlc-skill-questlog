@@ -27,8 +27,9 @@ each step touches, so the plan names real functions and real files.
 Search memory for each tool the plan touches: the build, the test runner,
 the package manager, the deploy path.
 
-Plan runs without the creator. A fact that lives in the code, the docs,
-or memory goes to `questlog:fact-finder`. A question the design and the
+Plan runs without the creator; the goal's coverage row "how the build
+should be broken up" is its instruction. A fact that lives in the code,
+the docs, or memory goes to `questlog:fact-finder`. A question the design and the
 goal do not answer and only the creator can pauses the run: ask it,
 numbered, with a recommended answer, and wait.
 

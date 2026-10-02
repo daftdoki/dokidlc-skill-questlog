@@ -1287,20 +1287,20 @@ def cmd_next(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
         die(f"{d.name}/{file} does not exist yet")
     rows = coverage_state(d, fm) if s.name == "draft goal" and not rest else None
     if rows and rows[2]:
-        die(f"coverage: {rows[2]} {'row is' if rows[2] == 1 else 'rows are'} Missing\nask the creator or write the assumption and mark the row Partial, then run next; "
+        stop(fm, f"coverage: {rows[2]} {'row is' if rows[2] == 1 else 'rows are'} Missing\nask the creator or write the assumption and mark the row Partial, then run next; "
             f"on the creator's word to go without: quest {fm['id']} next --confirmed")
     steps = checklist_state(d, fm) if s.name == "implement" and not rest else None
     if steps and (steps[0] < steps[1] or steps[2]):
         ticked, n, changed = steps
         what = "; ".join(x for x in (f"{n - ticked} of {n} steps unticked" if ticked < n else "", f"{changed} changed since accepted" if changed else "") if x)
-        die(f"checklist: {what}\ntick each step as its commit lands, and write a step that changed under Deviations with the original restored; "
+        stop(fm, f"checklist: {what}\ntick each step as its commit lands, and write a step that changed under Deviations with the original restored; "
             f"a step that cannot be done goes to the creator, then run: quest {fm['id']} next --confirmed")
     if reviewer_for(s, fm) and not rest:
         verdict = last_verdict(d, record_for(s, fm))
         line = last_pass_line(d, s, fm)
         detail = f"{line}\n" if line else ""
         if verdict and not verdict.lower().startswith("converged"):
-            die(f"last verdict: {verdict}\n{detail}the loop stopped short; put the open findings to the creator, then run: quest {fm['id']} next --confirmed")
+            stop(fm, f"last verdict: {verdict}\n{detail}the loop stopped short; put the open findings to the creator, then run: quest {fm['id']} next --confirmed")
     enter_next(root, d, fm, s)
 
 
@@ -1316,11 +1316,8 @@ def learned(d: Path) -> str | None:
     return text or None
 
 
-def cmd_notify(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
-    """The state line, and the same text as a desktop notification: osascript on macOS, notify-send on Linux, the bell otherwise."""
-    text = " ".join(rest).strip() or say(fm)
-    print(text)
-    title = f"quest {fm['id']}"
+def notify_desktop(title: str, text: str) -> None:
+    """One desktop notification: osascript on macOS, notify-send on Linux, the terminal bell otherwise. Never fails the verb."""
     if sys.platform == "darwin" and shutil.which("osascript"):
         cmd = ["osascript", "-e", f'display notification "{text.replace(chr(34), chr(39))}" with title "{title}"']
     elif shutil.which("notify-send"):
@@ -1332,6 +1329,19 @@ def cmd_notify(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
         subprocess.run(cmd, capture_output=True, timeout=10)
     except (OSError, subprocess.SubprocessError):
         sys.stdout.write("\a"); sys.stdout.flush()
+
+
+def stop(fm: dict, msg: str) -> None:
+    """A refusal that pauses an unattended run: the creator is woken, then the verb dies with the reason."""
+    notify_desktop(f"quest {fm['id']}", msg.splitlines()[0])
+    die(msg)
+
+
+def cmd_notify(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
+    """The state line, or the text given, printed and sent as a desktop notification: for the pauses only the agent sees."""
+    text = " ".join(rest).strip() or say(fm)
+    print(text)
+    notify_desktop(f"quest {fm['id']}", text)
 
 
 def cmd_accept(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
@@ -1368,6 +1378,8 @@ def enter_next(root: Path, d: Path, fm: dict, s: State) -> None:
     write_log(root)
     print(say(fm))
     print_guidance(fm, root, d)
+    if nxt in BY_NAME and BY_NAME[nxt].creator and s.name != "draft goal":
+        notify_desktop(f"quest {fm['id']}", say(fm))     # a gate reached by the run; draft goal to review goal is the agent's own move
     if nxt in BY_NAME and BY_NAME[nxt].nudge and file_for(s, fm) and shutil.which("memory"):
         print(f"memory: what did you learn while {s.doing} on your own? One page per finding, `--ref {d.relative_to(root)}/{file_for(s, fm)}`, before you run the next state.")
 

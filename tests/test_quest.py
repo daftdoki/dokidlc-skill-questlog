@@ -19,6 +19,7 @@ _loader.exec_module(quest)
 NOW = datetime(2026, 9, 4, 14, 32, tzinfo=UTC)
 STAMP = "2026-09-04T00:00:00Z"
 NAMES = [s.name for s in quest.STATES]
+REAL_NOTIFY = quest.notify_desktop                                              # captured before the autouse fixture replaces it
 OLD_CHORE_SKIPS = ("research", "review research", "design", "review design")   # a chore opened before the brief: it still plans
 
 
@@ -206,6 +207,14 @@ def _go(d, qid, n=1):
     for _ in range(n):
         s = quest.state_of(_fm(d))
         quest.main([qid, "accept" if s and s.creator else "next"])
+
+
+@pytest.fixture(autouse=True)
+def desktop_notifications(monkeypatch):
+    """No test rings the creator's desktop; the notifier records its calls instead."""
+    sent = []
+    monkeypatch.setattr(quest, "notify_desktop", lambda title, text: sent.append((title, text)))
+    return sent
 
 
 @pytest.fixture(autouse=True)
@@ -1713,18 +1722,39 @@ def test_prototype_needs_a_learned_paragraph_and_from_copies_it(tmp_path, monkey
         quest.main(["new", "Nope", "--from", "9999999999"])
 
 
-def test_notify_prints_the_state_line_and_sends_once(tmp_path, monkeypatch, capsys):
+def test_notify_prints_the_state_line_and_sends_once(tmp_path, monkeypatch, capsys, desktop_notifications):
     qdir, d, qid = _fresh(tmp_path, monkeypatch)
-    quest.main([qid, "start"]); capsys.readouterr()
+    quest.main([qid, "start"]); capsys.readouterr(); desktop_notifications.clear()
+    quest.main([qid, "notify"])
+    out = capsys.readouterr().out
+    assert out.startswith(f"{qid} is at draft goal.") and desktop_notifications == [(f"quest {qid}", out.strip())]
+    quest.main([qid, "notify", "paused: 1 blocking open"])
+    assert capsys.readouterr().out == "paused: 1 blocking open\n" and desktop_notifications[-1] == (f"quest {qid}", "paused: 1 blocking open")
+
+
+def test_the_desktop_notifier_picks_a_backend(monkeypatch, capsys):
     calls = []
     monkeypatch.setattr(quest.sys, "platform", "darwin")
     monkeypatch.setattr(quest.shutil, "which", lambda name: "/usr/bin/osascript" if name == "osascript" else None)
     monkeypatch.setattr(quest.subprocess, "run", lambda cmd, **k: calls.append(cmd))
-    quest.main([qid, "notify"])
-    out = capsys.readouterr().out
-    assert out.startswith(f"{qid} is at draft goal.") and len(calls) == 1 and calls[0][0] == "osascript" and f'with title "quest {qid}"' in calls[0][2]
-    quest.main([qid, "notify", "stopped: 1 blocking open"])
-    assert capsys.readouterr().out == "stopped: 1 blocking open\n" and 'display notification "stopped: 1 blocking open"' in calls[1][2]
+    REAL_NOTIFY("quest x", 'say "hi"')
+    assert calls and calls[0][0] == "osascript" and "say 'hi'" in calls[0][2] and 'with title "quest x"' in calls[0][2]
     monkeypatch.setattr(quest.shutil, "which", lambda name: None)
-    quest.main([qid, "notify"])
-    assert capsys.readouterr().out.endswith("\a") and len(calls) == 2                 # no notifier: the bell
+    REAL_NOTIFY("quest x", "hi")
+    assert capsys.readouterr().out.endswith("\a") and len(calls) == 1
+
+
+def test_stops_and_gates_wake_the_creator(tmp_path, monkeypatch, capsys, desktop_notifications):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch)
+    quest.main([qid, "start"]); d = _at(qdir, qid)
+    (d / "goal.md").write_text(GOAL_WITH_COVERAGE.format(missing="Missing")); desktop_notifications.clear()
+    with pytest.raises(SystemExit):
+        quest.main([qid, "next"])                                              # a stop: one notification, the first line of the reason
+    assert desktop_notifications == [(f"quest {qid}", "coverage: 1 row is Missing")]
+    (d / "goal.md").write_text(GOAL_WITH_COVERAGE.format(missing="Clear")); desktop_notifications.clear()
+    quest.main([qid, "next"])                                                  # draft goal to review goal is the agent's own move
+    assert desktop_notifications == []
+    quest.main([qid, "accept"]); (d / "research.md").write_text("x\n"); quest.main([qid, "next"]); quest.main([qid, "next"])
+    (d / "design.md").write_text("x\n"); desktop_notifications.clear(); capsys.readouterr()
+    quest.main([qid, "next"])                                                  # the run lands on review design, a creator gate
+    assert len(desktop_notifications) == 1 and desktop_notifications[0][1].startswith(f"{qid} is at review design.")
