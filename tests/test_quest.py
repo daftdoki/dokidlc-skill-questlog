@@ -1579,3 +1579,28 @@ def test_checklist_is_recorded_from_the_plan_and_confirmed_passes_an_unticked_st
     assert _fm(d2)["state"] == "implement" and "checklist" not in _fm(d2)
     quest.main([qid2, "next"])
     assert _fm(d2)["state"] == "review implementation"
+
+
+def test_skip_into_implement_records_the_checklist(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _fresh(tmp_path, monkeypatch, "Old", chore=True)
+    quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("x\n"); quest.main([qid, "next"]); quest.main([qid, "accept"])
+    (d / "plan.md").write_text(BRIEF_TEXT); quest.main([qid, "next"]); quest.main([qid, "skip"])       # review plan skipped
+    fm = _fm(d)
+    assert fm["state"] == "implement" and len(fm["checklist"]) == 2
+    capsys.readouterr()
+    with pytest.raises(SystemExit):
+        quest.main([qid, "next"])
+    assert "checklist: 2 of 2 steps unticked" in capsys.readouterr().err
+
+
+def test_doctor_asks_for_no_settings_file(tmp_path, monkeypatch, capsys):
+    """init writes no settings, so the doctor's persistence rows name the tracker and CLAUDE.md only."""
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    quest.main(["init"])
+    assert "settings.json" not in capsys.readouterr().out and not (tmp_path / ".claude").exists()
+    subprocess.run(["git", "-C", str(tmp_path), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "x"], check=True)
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    out = capsys.readouterr().out
+    assert e.value.code == 0 and "settings.json is" not in out and "settings.json does" not in out and "ok   settings.json carries no quest ask rules" in out

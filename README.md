@@ -1,8 +1,8 @@
 # dokidlc-skill-questlog
 
-A Claude Code plugin that tracks your agent's work as quests and chores, with you deciding when each step is done.
+A Claude Code plugin that tracks your agent's work as ideas, tasks, chores, and quests, with you deciding at the goal, the design, and the result.
 
-A quest moves through one flat machine of states, from draft goal to evaluate goal. The agent writes each state's document and moves the quest into review; you read it, you iterate together, and the quest moves on when you say so. Each quest is a directory under `docs/quests/active/`, `backlog/`, `completed/`, or `abandoned/`, holding a `quest.md` and its stage files. The directory moves when the state changes, so a file listing shows what is active, and the quest log at `docs/quests/README.md` lists what is open, one line each.
+A quest moves through one flat machine of states, from draft goal to evaluate goal. The agent writes each state's document, reviews it, and runs the states between your three gates; at a gate you read, you iterate together, and the quest moves on when you say so. Each quest is a directory under `docs/quests/active/`, `backlog/`, `completed/`, or `abandoned/`, holding a `quest.md` and its stage files. The directory moves when the state changes, so a file listing shows what is active, and the quest log at `docs/quests/README.md` lists what is open, one line each.
 
 Work is captured first and shaped later. `quest new "Title"` records an idea in one line and asks nothing. When you start it you give it one of three sizes. A task is a change that fits one sentence: no document, no reviewer, the tests are the review. A chore is a bug fix, a small addition, a bit of upkeep: one document, the brief, which holds the goal and a checklist of steps. A quest is a feature, a redesign, an investigation: goal, research, design, and plan. All get an identifier, a directory, and a place in the log; they differ in which states they pass through. In a quest, research and design can be skipped, and each takes its review with it.
 
@@ -104,7 +104,7 @@ The agent runs `log`, `history`, `doctor`, `ID`, and `ID next` on its own. The r
 
 - [docs/on-disk.md](docs/on-disk.md) is the tracker layout, the `quest.md` format, the guard's trigger table, and the seven subagents the plugin ships.
 - [DEVELOPMENT.md](DEVELOPMENT.md) is for working on the plugin itself: the checkout, the tests, the hook contract, and the release steps.
-- The skill and its six per-state references are under `skills/quest/`; `quest ID` prints the path to the one a state needs.
+- The skill and its references, one per working state and one for a chore's brief, are under `skills/quest/`; `quest ID` prints the path to the one a state needs.
 
 Questions and bugs go to the [issue tracker](https://github.com/daftdoki/dokidlc-skill-questlog/issues).
 

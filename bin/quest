@@ -756,7 +756,7 @@ def marked_section(text: str) -> str | None:
 
 REQUIRED_KEYS = ("id", "title", "kind", "state", "history")
 VALID_STATES = (BACKLOG, *FINISHED, *BY_NAME)
-PERSISTED = (ROOT_NAME, SETTINGS, "CLAUDE.md")
+PERSISTED = (ROOT_NAME, "CLAUDE.md")          # what the tracker needs committed; the settings file is no longer questlog's
 
 
 def git_states(root: Path, paths: tuple[str, ...]) -> dict[str, str]:
@@ -795,7 +795,7 @@ def git_checks(root: Path) -> list[Row]:
     for path in PERSISTED:
         state = states[path]
         if state == "no-git":
-            return [row(False, "this directory is a git repository", f"git init, then commit {ROOT_NAME}/ and {SETTINGS}")]
+            return [row(False, "this directory is a git repository", f"git init, then commit {ROOT_NAME}/ and CLAUDE.md")]
         label = {"tracked": f"{path} is committed", "untracked": f"{path} is not committed", "ignored": f"{path} is ignored by git", "missing": f"{path} does not exist"}[state]
         fix = {"tracked": "", "untracked": f"git add {path} && git commit", "ignored": f"remove {path} from .gitignore, then git add it", "missing": "quest init"}[state]
         rows.append(row(state == "tracked", label, fix))
@@ -1247,17 +1247,22 @@ def cmd_accept(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     enter_next(root, d, fm, s)
 
 
+def accepted_steps(d: Path, fm: dict, nxt: str) -> dict:
+    """The frontmatter change that records the checklist when `nxt` is implement, by `next`, `accept`, or `skip`: the steps as accepted.
+    From here the implementer ticks them, and a changed step is a Deviation. `fm` carries the history the entry will have."""
+    if nxt != "implement":
+        return {}
+    doc = document_for(BY_NAME[nxt], fm)
+    if not doc or not (d / doc).is_file():
+        return {}
+    return {"checklist": [h for _, h in checklist((d / doc).read_text())] or None}
+
+
 def enter_next(root: Path, d: Path, fm: dict, s: State) -> None:
     nxt = successor(fm, s.name)
     # the page is written first and the directory follows it: an interruption between the two leaves a page whose
     # state names one bucket while it sits in another, which the doctor's placement row names and --fix moves
-    changes = {"state": nxt, "history": append_history(fm, nxt)}
-    if nxt == "implement":
-        # the steps as accepted: from here the implementer ticks them, and a changed step is a Deviation
-        doc = document_for(BY_NAME[nxt], fm)
-        if doc and (d / doc).is_file():
-            changes["checklist"] = [h for _, h in checklist((d / doc).read_text())] or None
-    fm = update_quest(d, changes)
+    fm = update_quest(d, {"state": nxt, "history": append_history(fm, nxt), **accepted_steps(d, fm, nxt)})
     d = move_entry(quests_dir(root), d, fm)
     write_log(root)
     print(say(fm))
@@ -1277,7 +1282,7 @@ def cmd_skip(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
         history = append_history({"history": history}, REVIEW_OF[s.name], skipped=True, at=at)
     nxt = successor({"history": history}, s.name)
     history = append_history({"history": history}, nxt, at=at)
-    fm = update_quest(d, {"state": nxt, "history": history})
+    fm = update_quest(d, {"state": nxt, "history": history, **accepted_steps(d, {**fm, "history": history}, nxt)})
     move_entry(quests_dir(root), d, fm)
     write_log(root)
     print(say(fm))

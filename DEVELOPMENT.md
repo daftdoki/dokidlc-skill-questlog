@@ -6,7 +6,7 @@
 .claude-plugin/plugin.json   manifest; no version field, the commit is the version
 bin/quest                    the command; Python under uv run --script
 skills/quest/SKILL.md        the agent's rules; short, and points at references/
-skills/quest/references/     one file per working state, plus review-loop.md: the loop every review state runs
+skills/quest/references/     one file per working state, brief.md for a chore, and review-loop.md: the loop every review state runs
 agents/                      six stage reviewers and the fact finder, one markdown file each
 hooks/hooks.json             PreToolUse guard and SessionStart doctor
 scripts/guard.sh             POSIX shim: exits 0 unless the tracker is touched, 2 if uv is missing
