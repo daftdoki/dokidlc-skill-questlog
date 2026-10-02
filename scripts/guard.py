@@ -208,7 +208,8 @@ def decide(event: dict) -> tuple[str, str] | None:
         if rel.lower() == "readme.md":
             return "deny", "docs/quests/README.md is the generated quest log. Run a quest verb; it regenerates."
         if rel.lower().endswith("/quest.md"):
-            existing = Path(cwd, ROOT_NAME, rel)
+            given = Path(str(inp.get("file_path", "")))
+            existing = given if given.is_absolute() else Path(cwd, given)     # the file named, in whichever repository it sits
             if not existing.is_file():
                 return "deny", "quest.md is created by `quest new`, not written by hand."
             try:

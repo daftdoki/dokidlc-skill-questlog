@@ -256,3 +256,14 @@ def test_commands_denied_on_2026_09_05_pass(repo):
         "repo=/Users/aaron/Code/agents/agent-builder\nhelper=$(herdr pane split --current --direction right --cwd \"$repo\" --focus | python3 -c 'import json,sys;print(json.load(sys.stdin)[\"result\"][\"pane\"][\"pane_id\"])')\n[ -n \"$helper\" ] || { echo \"split failed\"; exit 1; }\nherdr plugin pane open --plugin herdr-file-viewer --entrypoint file-viewer --placement split --direction right --focus --env \"HERDR_FILE_VIEWER_OPEN=docs/quests/2609050141-z9-questlog-per-stage-authoring-guidance/plan.md\"\nherdr pane close \"$helper\"",
     ):
         assert _bash(repo, cmd) is None, cmd[:80]
+
+
+def test_quest_body_edit_in_another_repository_is_checked_there(repo, tmp_path):
+    """A session in one repository editing a sibling's quest.md body: the guard reads the file it was given, not one under its own root."""
+    other = tmp_path / "other"
+    q = other / "docs" / "quests" / "active" / "2609041434-9n-else"
+    q.mkdir(parents=True)
+    (q / "quest.md").write_text("---\nid: 2609041434-9n\nstate: implement\n---\n## Goal\n\ng\n")
+    assert guard.decide(ev("Edit", repo, file_path=str(q / "quest.md"), old_string="## Goal\n\ng\n", new_string="## Goal\n\ng\n\n## Learned\n\nx\n")) is None
+    assert guard.decide(ev("Edit", repo, file_path=str(q / "quest.md"), old_string="state: implement", new_string="state: completed")) == ("deny", guard.FM_DENY)
+    assert guard.decide(ev("Edit", repo, file_path=str(other / "docs" / "quests" / "backlog" / "none" / "quest.md"), old_string="a", new_string="b"))[0] == "deny"
