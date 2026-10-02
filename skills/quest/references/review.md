@@ -19,6 +19,11 @@ Present the result as the Done when, line by line, each with its
 evidence: the file that exists, the command and its output, the test that
 passes, the number that was measured. A line that is not met says so and
 says why. A line met differently than planned points at the Deviations.
+Beside it, the `checklist:` line `quest ID` prints: every step ticked,
+none changed.
+
+For a task there is no loop and no record: show the commits, the test
+that failed first and passes now, and ask whether it is done.
 
 Answer each question with the evidence, and where a question finds a
 gap, fix it, commit, and show the fix.
@@ -33,8 +38,9 @@ creator gate: run the loop before you ask the creator whether the goal
 is met, and put open Clarifications beside that question. The creator's
 `quest ID accept` completes the quest.
 
-Dispatch adds: `plan.md` is the stage file, and the prompt names
-`quest.md` for the Done when, `goal.md` for Success looks like, the root
+Dispatch adds: the file `document:` names is the stage file, `plan.md`
+or a chore's `brief.md`, and the prompt names `quest.md` for the Done
+when, `goal.md` or the brief for Success looks like, the root
 of the code repository, and the commit range, from the earliest commit
 newer than the `implement` entry's time in the `history` list of
 `quest.md` to HEAD, found with `git log --since=TIME` on the working
@@ -45,8 +51,8 @@ Rubric for evaluate goal.
 
 1. Blocking. Every line of Done when is met, with evidence, or is marked
    not met with the reason. Fail: a line with no evidence and no mark.
-2. Blocking. Every item under Success looks like in `goal.md` is met or
-   marked. Fail: an item the presentation skips.
+2. Blocking. Every item under Success looks like, in `goal.md` or the
+   brief, is met or marked. Fail: an item the presentation skips.
 3. Clarification. No deviation hides an unmet line. Fail: a Deviation
    that narrows a Done when line without saying the line is not met.
 4. Clarification. The documentation the work changed reads as current

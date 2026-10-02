@@ -24,7 +24,8 @@ each fix until the loop converges. Nothing else dispatches you.
    the four tiers, the diff pass, and the rubric. Use Bash to read and
    to run; the session makes every edit.
 2. For `Scope: full`:
-   read `plan.md` with its Deviations, then the prior record when a
+   read the stage file, `plan.md` or a chore's `brief.md`, with its
+   checklist and Deviations, then the prior record when a
    path was given, so findings already resolved stay resolved; read
    the commits in the range you were given with `git log` and `git
    show` in the code root, and run the project's test suite; grade

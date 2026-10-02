@@ -972,6 +972,13 @@ def test_reference_files_exist_for_every_stage():
         assert "\n## Review\n" in text, f"{reference} has no Review section"
 
 
+def test_brief_reference_names_the_reviewer_and_its_own_record():
+    text = (REFERENCES / quest.BRIEF).read_text()
+    review = text[text.index("\n## Review\n"):]
+    for word in ("review-loop.md", "questlog:review-goal", quest.BRIEF_RECORD, "- [ ]"):
+        assert word in text if word == "- [ ]" else word in review, word
+
+
 def test_review_sections_state_the_stop_rule():
     """The loop, the tiers, and the caps live once, in review-loop.md; each stage's Review section points at it and keeps its own names."""
     loop = (REFERENCES / "review-loop.md").read_text().lower()

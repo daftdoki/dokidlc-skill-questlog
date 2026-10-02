@@ -4,7 +4,7 @@ A Claude Code plugin that tracks your agent's work as quests and chores, with yo
 
 A quest moves through one flat machine of states, from draft goal to evaluate goal. The agent writes each state's document and moves the quest into review; you read it, you iterate together, and the quest moves on when you say so. Each quest is a directory under `docs/quests/active/`, `backlog/`, `completed/`, or `abandoned/`, holding a `quest.md` and its stage files. The directory moves when the state changes, so a file listing shows what is active, and the quest log at `docs/quests/README.md` lists what is open, one line each.
 
-Work comes in two sizes. A quest is a feature, a redesign, an investigation: anything worth thinking through before it is built. A chore is a bug fix, a small addition, a bit of upkeep. Both get an identifier, a directory, and a place in the log; they differ in which states they pass through. Research and design can be skipped, and each takes its review with it. Draft goal, plan, implement, and evaluate goal cannot be skipped.
+Work is captured first and shaped later. `quest new "Title"` records an idea in one line and asks nothing. When you start it you give it one of three sizes. A task is a change that fits one sentence: no document, no reviewer, the tests are the review. A chore is a bug fix, a small addition, a bit of upkeep: one document, the brief, which holds the goal and a checklist of steps. A quest is a feature, a redesign, an investigation: goal, research, design, and plan. All get an identifier, a directory, and a place in the log; they differ in which states they pass through. In a quest, research and design can be skipped, and each takes its review with it.
 
 ```
 draft goal -> review goal -> research -> review research -> design -> review design
@@ -61,7 +61,9 @@ Talk to the agent. Every command prints one line saying where the quest is and w
 
 - "What's open?" The agent runs `quest log` and reads you the list.
 - "What have we completed?" `quest history`, the last ten newest first. `--all` adds abandoned ones. Completed work stays out of the log and out of the session until you ask.
-- "Open a quest for discovering the bridge over mDNS." The agent asks for the goal and how you'll know it is done, shows you `quest new "Discover the bridge over mDNS" --goal "..." --done-when "..."`, runs it, and you approve the prompt. Add "chore" instead for the small version.
+- "Note this down: discover the bridge over mDNS." `quest new "Discover the bridge over mDNS"`. An idea is in the backlog, and nothing else is asked.
+- "Open a quest for discovering the bridge over mDNS." The agent asks for the goal and how you'll know it is done, shows you `quest new "Discover the bridge over mDNS" --quest --goal "..." --done-when "..."`, and runs it. Say "chore" or "task" for the smaller sizes.
+- "Start the bridge idea." The agent recommends a size in a sentence, and on your word runs `quest 2609051012-k3 start --chore`.
 - "Start the mDNS quest." `quest 2609051012-k3 start`. The quest is at draft goal.
 - "Draft the goal." The agent interviews you, writes `goal.md`, runs `quest 2609051012-k3 next`, runs the review loop, and asks: move on to researching?
 - "Change the second story." The agent revises, runs the loop again, and asks again, as many times as it takes.
@@ -73,14 +75,14 @@ Talk to the agent. Every command prints one line saying where the quest is and w
 The commands behind those sentences:
 
 ```
-quest new "Title" [--chore] [--goal TEXT] [--done-when TEXT]   open a quest or chore in the backlog
+quest new "Title" [--task|--chore|--quest] [--goal TEXT] [--done-when TEXT]   capture an idea, or open a shaped entry
 quest log                                   what is open, newest first
 quest history [--all] [--limit N]           what is completed, newest first, ten by default
 quest doctor [--fix] [--brief]              check the tracker; --fix migrates and repairs
 quest init                                  set up a repository; drops quest ask rules an older plugin wrote
 
 quest 2609051012-k3                         show one quest; a unique id prefix works
-quest 2609051012-k3 start                   leave the backlog; a deferred quest resumes where it was
+quest 2609051012-k3 start [--task|--chore|--quest]   leave the backlog; an idea needs its shape; a deferred entry resumes
 quest 2609051012-k3 defer                   back to the backlog; the state is kept
 quest 2609051012-k3 next [--confirmed]      the current state is done; enter the next one; refuses at a gate
 quest 2609051012-k3 accept                  your word at review goal, review design, and evaluate goal

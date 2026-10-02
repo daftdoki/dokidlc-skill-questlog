@@ -25,7 +25,8 @@ until the loop converges. Nothing else dispatches you.
    to run; the session makes every edit.
 2. For `Scope: full`:
    read the Done when in `quest.md` and the Success looks like list in
-   `goal.md`, then `plan.md` with its Deviations, then the prior record
+   `goal.md` or the brief, then the stage file with its checklist and
+   Deviations, then the prior record
    when a path was given; for each Done when line, find the evidence in
    the code root and the commit range: the file, the command's output,
    the passing test, the measured number, and run what can be run. A

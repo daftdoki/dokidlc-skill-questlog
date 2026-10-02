@@ -10,7 +10,8 @@ docs/quests/
   active/                            every quest at a machine state, draft goal through evaluate goal
     2609051012-k3-discover-the-bridge/
       quest.md                       metadata, history, and the goal, owned by the verbs
-      goal.md  research.md  design.md  plan.md      written by the agent, read by you
+      goal.md  research.md  design.md  plan.md      a quest's documents, written by the agent, read by you
+      brief.md                       a chore's one document: the goal and the steps
       goal-review.md  design-review.md ...          one review record per review state, pass by pass
       result-review.md               evaluate goal's record
   backlog/                           opened or deferred, not started
@@ -26,8 +27,9 @@ time something lands in it. `ls docs/quests/active` is the shortest
 answer to "what is going on".
 
 Before the agent works a state it reads the plugin's reference for it,
-six files under the skill's `references/`, one per working state, each
-with the interview, the document's sections, and a review rubric.
+seven files under the skill's `references/`, one per working state and
+one for a chore's brief, each with the document's sections and a review
+rubric.
 `quest ID` prints the path. A file at `docs/quests/guidance/STAGE.md`
 adds your project's rules; the agent reads it after the plugin's file,
 and it wins where they differ. `quest doctor` checks that the directory
@@ -48,7 +50,9 @@ the loop up from the last pass.
 ---
 id: 2609051012-k3
 title: Discover the bridge over mDNS
-kind: quest                # or chore
+kind: quest                # or chore, task, idea
+checklist:                 # the plan's or brief's steps as accepted, recorded on entering implement
+- 3f2a9c81d0
 state: review plan         # a state name, or backlog, completed, abandoned
 resume: review plan        # only while deferred; start removes it
 history:
@@ -73,6 +77,14 @@ What you want.
 
 How you will know.
 ```
+
+An idea is a captured title with one history entry; `quest ID start
+--task`, `--chore`, or `--quest` shapes it and writes the kind's skips
+into the history. A task skips every state but implement and evaluate
+goal and has no document. A chore skips research, design, and plan and
+writes `brief.md`. The implementer ticks the `- [ ]` items under `##
+Steps` in `plan.md` or `brief.md`; `quest ID next` out of implement
+compares them with `checklist` and refuses an unticked or reworded step.
 
 Every state the quest entered or skipped is one history entry with its
 time; an abandoned entry carries the reason as its note. The quest log is

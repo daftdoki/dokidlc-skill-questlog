@@ -15,10 +15,10 @@ these parts, in this order: What exists, Steps, Files touched, Commits
 expected, Tests, What could go wrong, Out of scope, and Deviations, kept
 empty here and filled during implementation.
 
-For a quest, the plan turns the design's Implementation plan into steps.
-For a chore, there is no design; the plan is the whole plan for the fix,
-written from the chore's Goal, and it is the one document the creator
-reads before the work.
+The plan turns the design's Implementation plan into steps. A chore
+writes no plan: its steps are in `brief.md`, and `brief.md` in these
+references is its guide. A chore opened before the brief existed still
+plans here, from its Goal.
 
 ## Before you write
 
@@ -36,10 +36,23 @@ numbered, with a recommended answer, and wait.
 
 What exists states the code as it is, in the words the steps will use.
 
-Each step names what changes, in which files, and which test proves it.
-Steps are in the order they will run. A step that another depends on
-comes first. Each step ends where a commit lands, and the commit leaves
-the tests passing.
+Steps is a checklist, in the order the steps will run. One item per
+step:
+
+```
+## Steps
+
+- [ ] 1. `bin/quest`: print the `document:` line.
+  Test: `test_guidance_names_the_document` in `tests/test_quest.py`;
+  red: no `document:` line.
+```
+
+Each item names what changes, in which files, and the test that fails
+first and proves it. A step that another depends on comes first. Each
+step ends where a commit lands, and the commit leaves the tests passing.
+Only items sit under Steps. When the quest enters implement, `quest`
+records each item; from then the implementer ticks a box and changes no
+step's words, and a step that must change is written under Deviations.
 
 Files touched is the full list, new and changed, so the creator sees the
 blast radius.
@@ -73,8 +86,9 @@ Rubric for plan.
    edits a function the code does not have and no step adds.
 3. Blocking. The steps cover every line of the quest's Done when. Fail:
    Done when names a document update no step touches.
-4. Clarification. Every step names its files and the test that proves
-   it. Fail: "update the skill" with no file and no test.
+4. Clarification. Steps is a checklist: every step is a `- [ ]` item
+   that names its files and the test that proves it. Fail: a numbered
+   list with no boxes, or "update the skill" with no file and no test.
 5. Clarification. Every risk under What could go wrong has a response.
    Fail: a risk with no check and no fallback.
 6. Clarification. For a quest, the commits match the design's

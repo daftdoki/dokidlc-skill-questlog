@@ -1,6 +1,6 @@
 ---
 name: quest
-description: Track work as quests and chores through one flat machine of states with three creator gates. Use when the creator asks to open, start, defer, accept, skip, or abandon work, when a state's file is written and the quest should move, or when a session needs to know what is open or completed.
+description: Track work as ideas, tasks, chores, and quests through one flat machine of states with three creator gates. Use when the creator asks to capture, open, start, defer, accept, skip, or abandon work, when a state's file is written and the quest should move, or when a session needs to know what is open or completed.
 ---
 
 # Quest
@@ -47,10 +47,23 @@ implementation, evaluate goal, then completed. Backlog sits before it
 and abandoned beside it. Research and design can be skipped, and each
 takes its review with it; every review state can be skipped, and
 skipping a creator gate is the creator accepting without a review;
-draft goal, plan, implement, and evaluate goal cannot. A chore is a quest
-opened with research and design already marked skipped, so it runs draft
-goal, review goal, plan, review plan, implement, review implementation,
-evaluate goal.
+draft goal, plan, implement, and evaluate goal cannot.
+
+An entry has one of four kinds, and the kind decides which states it
+passes over. The skips are written into its history when it is shaped.
+
+| Kind | For | States | Document |
+|---|---|---|---|
+| idea | a captured description, not yet shaped | none; it waits in the backlog | none |
+| task | a change that fits one sentence and about three files | implement, evaluate goal | none; the commits are the record |
+| chore | a Goal that fits two sentences and needs no design | draft goal, review goal, implement, review implementation, evaluate goal | `brief.md`: the goal and the steps |
+| quest | anything else | all | `goal.md`, `research.md`, `design.md`, `plan.md` |
+
+A chore's draft goal writes `brief.md` under `references/brief.md`, and
+its review goal records into `brief-review.md`. A task has no reviewer
+at any state. A chore opened before the brief existed keeps its recorded
+skips and still writes `goal.md` and `plan.md`; `quest ID` names the
+file either way.
 
 | State | Writes | Reference | Reviewer | Record | Gate |
 |---|---|---|---|---|---|
@@ -78,8 +91,8 @@ they differ.
 The creator accepts the goal, and you run: research, its review,
 design, and you stop at review design. The creator accepts the design,
 and you run: plan, its review, implement, its review, and you stop at
-evaluate goal. For a chore, accepting the goal runs plan through review
-implementation. A quest with research or design skipped runs the
+evaluate goal. For a chore, accepting the brief runs implement and its
+review. A task runs implement and stops at evaluate goal. A quest with research or design skipped runs the
 states that remain. Between gates you do not ask the creator whether
 to move on; the state line says `next` and you run it.
 
@@ -121,10 +134,18 @@ creator with its evidence:
 
 ## Walk-throughs for creator verbs
 
-When the creator asks to open work, gather in conversation: the title;
-quest or chore; the Goal, what they want to accomplish; and Done when,
-how we will know. Then show and run `quest new "Title" --goal "..."
---done-when "..."`, with `--chore` for a chore.
+When the creator gives a bare description to record, capture it: show
+and run `quest new "Title"`. That is an idea; ask nothing more.
+
+When the creator asks to open work and knows its shape, gather the
+title, the Goal, and the Done when, then show and run `quest new "Title"
+--task`, `--chore`, or `--quest`, with `--goal "..." --done-when "..."`.
+
+When the creator says to start an idea, recommend a shape from the table
+above and the code, in one sentence, and wait for their word. Then show
+and run `quest ID start --task`, `--chore`, or `--quest`. An entry that
+never started can be reshaped the same way; one that started resumes
+with plain `quest ID start`.
 
 When the creator says to move on at a gate, name the state and
 summarize in one line what they are accepting, then show and run
@@ -153,10 +174,13 @@ refuses an empty one.
   the script prints the memory prompt: write one page per finding you
   established on your own, citing the stage file with `--ref`, before
   you run the next state.
-- A chore is for small features, troubleshooting, and other chores. When
-  the creator is unsure which to open, recommend a chore if the Goal fits
-  in two sentences and needs no design. A chore still gets a goal and a
-  plan.
+- When the creator is unsure of the shape, recommend the smallest that
+  fits: a task if the diff fits one sentence, a chore if the Goal fits
+  two sentences and needs no design, a quest otherwise. Work that
+  outgrows its shape goes to the creator: a task that needs steps is a
+  chore, a chore that needs a decision between alternatives is a quest.
+- At implement, tick each step as its commit lands and leave its words
+  as accepted; `quest ID next` refuses an unticked or changed checklist.
 - Picking an abandoned idea up again is a new quest with a new id.
 - If `quest` refuses with "newer questlog", tell the creator to update
   the plugin. If `quest doctor` reports stale ask rules, an older
