@@ -66,8 +66,9 @@ The quest log header records `questlog format N` and the plugin commit.
 `FORMAT` in `bin/quest` is the version the code understands. A format 6
 tracker is migrated by `quest doctor --fix`; older ones are refused with a
 pointer to the git tag `format-6`, the last version that carried their
-migrations; newer data is refused with exit 2. Bump `FORMAT` only with a
-migration.
+migrations; newer data is refused with exit 2. Bump `FORMAT` when an
+older plugin would write the tracker wrongly, with a migration when
+anything moves.
 
 - Format 2 added the plan stage; the migration marks `plan_skipped` on
   work that had already reached implement.
@@ -93,6 +94,11 @@ migration.
   sits in another; the doctor's placement row names such an entry and
   `--fix` moves it. The migration is that same move, run over the
   entries at the root of `docs/quests/`.
+- Format 8 added the kinds `idea` and `task`, the chore's `brief.md`, and
+  the `checklist` key. Nothing moved, so a format 7 tracker reads as is
+  and the header is rewritten on the next write or at `doctor --fix`; the
+  bump exists so an older plugin refuses the tracker instead of starting
+  an idea as a quest or ignoring the checklist.
 
 The format number is read from the log header, but what a format changes
 lives in `quest.md` or in where it sits. `check_format` runs on every

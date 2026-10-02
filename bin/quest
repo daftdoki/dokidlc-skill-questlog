@@ -29,7 +29,7 @@ from pathlib import Path
 
 import yaml
 
-FORMAT = 7
+FORMAT = 8                                   # 8: ideas and tasks as kinds, the brief, and the checklist key; nothing moved, so 7 reads as is
 ROOT_NAME = "docs/quests"
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 # Lowercase alphanumerics without the characters that read alike: 0 1 i l o.
@@ -848,9 +848,12 @@ def doctor_checks(root: Path) -> list[Row]:
         rows.append(row(False, label, "quest doctor --fix", regenerate_tracker, tuple(f"{fm['id']} -> {bucket(fm)}/" for _, fm in root_entries)))
     elif found is None:
         rows.append(row(False, "quest log exists", "quest doctor --fix", regenerate_tracker))
+    elif found == 7:
+        # 7 reads as is; the header is rewritten so an older plugin refuses a tracker that now holds ideas, tasks, and checklists
+        rows.append(row(False, f"quest log header says format 7; this plugin writes {FORMAT} and nothing moves", "quest doctor --fix", regenerate_tracker))
     else:
         rows.append(row(True, f"quest log format {found}"))
-    format_ok = rows[-1][0]
+    format_ok = rows[-1][0] or found == 7
     if format_ok:
         out_of_place = misplaced(qdir)
         detail = "; ".join(f"{fm['id']} ({d.parent.name}/ -> {bucket(fm)}/)" for d, fm in out_of_place)

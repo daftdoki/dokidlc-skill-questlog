@@ -1604,3 +1604,24 @@ def test_doctor_asks_for_no_settings_file(tmp_path, monkeypatch, capsys):
         quest.main(["doctor"])
     out = capsys.readouterr().out
     assert e.value.code == 0 and "settings.json is" not in out and "settings.json does" not in out and "ok   settings.json carries no quest ask rules" in out
+
+
+def test_format_7_reads_as_is_and_the_header_moves_to_8(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    quest.main(["init"]); quest.main(["new", "Thing", "--task"]); _git_commit_all(tmp_path)
+    log = tmp_path / "docs/quests/README.md"
+    log.write_text(log.read_text().replace(f"format {quest.FORMAT}", "format 7"))
+    assert quest.FORMAT == 8
+    quest.main(["log"]); capsys.readouterr()                                  # a 7 header refuses nothing
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor"])
+    out = capsys.readouterr().out
+    assert e.value.code == 1 and "FAIL quest log header says format 7; this plugin writes 8 and nothing moves  (quest doctor --fix)" in out
+    assert "ok   every entry sits under the directory named for its state" in out
+    with pytest.raises(SystemExit) as e:
+        quest.main(["doctor", "--fix"])
+    assert e.value.code == 0 and "format 8" in log.read_text()
+    log.write_text(log.read_text().replace("format 8", "format 7"))
+    qid = quest.load_quests(tmp_path / "docs/quests")[0][1]["id"]
+    quest.main([qid, "start"])                                                # any write rewrites the header
+    assert "format 8" in log.read_text()

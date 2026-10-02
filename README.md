@@ -19,7 +19,7 @@ A tracker aimed at people, whether GitHub issues or Taskwarrior, records that wo
 
 The cost is ceremony. A one-line fix does not want a goal document, and if your agent mostly answers questions rather than building things, this will feel like paperwork. It suits a project where the same agent returns to the same work across many sessions.
 
-Status: maintained, used daily since 2026-09-05. The tracker format is at version 7; `quest doctor --fix` migrates a format 6 tracker, and older ones need the `format-6` git tag first.
+Status: maintained, used daily since 2026-09-05. The tracker format is at version 8; `quest doctor --fix` migrates a format 6 tracker, and older ones need the `format-6` git tag first.
 
 ## Requirements
 

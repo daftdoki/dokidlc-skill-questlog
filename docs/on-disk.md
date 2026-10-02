@@ -129,8 +129,11 @@ repository cannot point those at another file.
 
 ## Migrating from an older format
 
-The quest log's header names its format. This plugin writes format 7. A
-format 6 tracker, its entries flat under `docs/quests/`, is refused by
+The quest log's header names its format. This plugin writes format 8. A
+format 7 tracker reads as it is; its entries sit where format 8 puts
+them, and the header moves to 8 on the next write or at `quest doctor
+--fix`, so that an older plugin refuses a tracker that now holds ideas,
+tasks, and the `checklist` key. A format 6 tracker, its entries flat under `docs/quests/`, is refused by
 every verb until `quest doctor --fix` moves each entry into the directory
 its state names; plain `quest doctor` first lists the moves, one `ID ->
 STATE/` line each, so you can read them before anything moves. A tracker
