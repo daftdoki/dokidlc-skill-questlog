@@ -7,6 +7,12 @@ Review section at the end is the completion criterion for review design;
 read it before you write, and run its loop once `quest ID next` has
 entered review design.
 
+Design decides, with reasons, and is the document a reader opens later
+to learn how and why; the order of the build belongs to plan and the
+code belongs to implement. It reads the goal, the research, the code,
+and `decision` memory pages. It ends when no decision an implementer
+would need is open.
+
 ## What the stage produces
 
 `design.md` is specific enough that implementation can begin from it

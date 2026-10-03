@@ -6,6 +6,12 @@ this one and wins where they differ. The Review section at the end is
 the completion criterion for evaluate goal; read it before you present,
 and run its loop before you ask the creator whether the goal is met.
 
+Evaluate goal checks the result against Done when, the documentation,
+and the tree; fixing a step belongs to implement, reached on the
+creator's word. It reads `quest.md`, the goal or the brief, the
+checklist, and the commits. It ends when every Done when line is met or
+marked and the creator accepts.
+
 ## What the stage produces
 
 The creator reads the result against the quest's Done when and says

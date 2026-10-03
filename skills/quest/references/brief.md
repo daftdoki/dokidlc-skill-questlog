@@ -7,6 +7,12 @@ they differ. The Review section at the end is the completion criterion
 for review goal; read it before you write, and run its loop once `quest
 ID next` has entered review goal.
 
+A brief states a chore's goal and its steps in one document; a
+decision between alternatives belongs to a quest's design. It reads
+`quest.md`, the code the steps touch, and the creator. It ends when
+every question in the readiness table is answered and every step names
+its files and its test.
+
 ## What the stage produces
 
 `brief.md` is a chore's one document: what the creator wants, how the

@@ -7,6 +7,11 @@ differ. The Review section at the end is the completion criterion for
 review goal; read it before you write, and run its loop once `quest ID
 next` has entered review goal.
 
+Draft goal states the outcome, the stories, and what done means; how
+to build it belongs to design and plan. It reads `quest.md`, memory,
+and the creator. It ends when every question in the readiness table is
+answered.
+
 ## What the stage produces
 
 `goal.md` records what the creator wants and how the finished work will be

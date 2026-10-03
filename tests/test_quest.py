@@ -988,6 +988,15 @@ def test_brief_reference_names_the_reviewer_and_its_own_record():
         assert word in text if word == "- [ ]" else word in review, word
 
 
+def test_references_open_with_their_job():
+    """The paragraph before "What the stage produces" states the job, names the stage that owns the rest, and says what the stage reads and what ends it."""
+    for reference in {s.reference for s in quest.STATES} | {quest.BRIEF}:
+        text = (REFERENCES / reference).read_text()
+        head = text[: text.index("\n## What the stage produces")]
+        job = head.strip().split("\n\n")[-1]
+        assert "belongs to" in job and "reads" in job and "ends when" in job, f"{reference} opens without its job: {job[:60]!r}"
+
+
 def test_review_sections_state_the_stop_rule():
     """The loop, the tiers, and the caps live once, in review-loop.md; each stage's Review section points at it and keeps its own names."""
     loop = (REFERENCES / "review-loop.md").read_text().lower()

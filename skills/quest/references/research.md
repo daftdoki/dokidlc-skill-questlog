@@ -7,6 +7,11 @@ Review section at the end is the completion criterion for review research;
 read it before you write, and run its loop once `quest ID next` has
 entered review research.
 
+Research opens the design space, what exists, the options, and the
+evidence; the decision belongs to design. It reads the goal, related
+quests, memory, and the web. It ends when every design question has
+its options or is deferred to design.
+
 ## What the stage produces
 
 Research opens the design space; design narrows it. `research.md` gives

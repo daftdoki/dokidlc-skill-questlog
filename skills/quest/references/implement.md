@@ -7,6 +7,11 @@ differ. The Review section at the end is the completion criterion for
 review implementation; read it before you start, and run its loop once
 `quest ID next` has entered review implementation.
 
+Implement works the checklist, a failing test, the least code, a
+commit, a tick; what to build belongs to the plan or the brief. It
+reads the checklist and the code. It ends when every step is ticked
+and the suite passes.
+
 ## What the stage produces
 
 Commits, in the order the Steps checklist lists, each step ticked, and a
