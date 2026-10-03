@@ -98,3 +98,6 @@ Rubric for design.
    interview never recorded.
 7. Clarification. Every section is present, in order. Fail: Out of
    scope missing.
+8. Clarification, belongs to implement. A function body written out
+   where a signature, a purpose, and an example would do. Fail: a2
+   design pass 1, a body using helper names the design never defined.

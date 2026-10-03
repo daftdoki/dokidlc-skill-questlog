@@ -995,6 +995,10 @@ def test_references_open_with_their_job():
         head = text[: text.index("\n## What the stage produces")]
         job = head.strip().split("\n\n")[-1]
         assert "belongs to" in job and "reads" in job and "ends when" in job, f"{reference} opens without its job: {job[:60]!r}"
+    for reference in ("goal.md", "research.md", "design.md", "plan.md"):
+        text = (REFERENCES / reference).read_text()
+        review = text[text.index("\n## Review\n"):]
+        assert "belongs to" in review, f"{reference} rubric has no boundary row"
 
 
 def test_review_sections_state_the_stop_rule():

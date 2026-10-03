@@ -100,3 +100,6 @@ Rubric for plan.
 6. Clarification. For a quest, the commits match the design's
    Implementation plan or the difference is named. Fail: four commits
    where the design listed two, unexplained.
+7. Clarification, belongs to design. An alternative weighed inside a
+   step. Fail, constructed: a step that reads "or, if that proves
+   slow, a cache".
