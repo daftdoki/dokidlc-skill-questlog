@@ -18,8 +18,9 @@ its files and its test.
 `brief.md` is a chore's one document: what the creator wants, how the
 result will be judged, and the steps that build it. The creator reads it
 once, at review goal, and the implementer ticks its Steps. It has these
-parts, in this order: Goal, Background, Coverage, Questions and answers,
-Success looks like, Steps, Out of scope, and Deviations, kept empty here
+parts, in this order: Goal, Background, Ready to start when, Questions
+and answers,
+How we will know it is done, Steps, Out of scope, and Deviations from plan, kept empty here
 and filled during implementation.
 
 ## Before you write
@@ -37,9 +38,9 @@ creator alone knows, numbered, each with a recommended answer, opening
 with the convention that a bare "yes" takes the recommendation. A fact
 that lives in the code, the docs, or memory goes to
 `questlog:fact-finder`, and the round does not wait for it. The brief's
-coverage table has the goal's rows plus one, steps; `quest ID next`
-refuses while a row is Missing, and a Partial row carries its
-assumption.
+readiness table asks the goal's first five questions and a sixth:
+"Are the steps clear?" `quest ID next` refuses while a question is
+answered by nobody, and an answer by assumption carries its note.
 
 ## Writing
 
@@ -48,13 +49,15 @@ Goal is two sentences, in the creator's words where they gave them.
 Background says what exists today, in a few lines, with the files that
 show it and the result of any test you ran.
 
-Coverage is the table `references/goal.md` shows, with a sixth row,
-steps: Clear when every step names its files and its test.
+The readiness table, `## Ready to start when`, is the one
+`references/goal.md` shows, with questions 1 to 5 and a sixth:
+"Are the steps clear?" It is answered by the creator once every step
+names its files and its test.
 
 Questions and answers records each as `Q: ... A: ...`, the answer in the
 creator's words.
 
-Success looks like is a list. Each item can be judged true or false
+How we will know it is done is a list. Each item can be judged true or false
 against the finished work by someone who did not do it.
 
 Steps is a checklist, in the order the steps will run. One item per
@@ -74,7 +77,7 @@ first and proves it, and ends where a commit lands with the tests
 passing. Only items sit under Steps. When the creator accepts the brief,
 `quest` records each item; from then the implementer ticks a box and
 changes no step's words, and a step that must change is written under
-Deviations.
+Deviations from plan.
 
 Out of scope names what the chore leaves alone.
 
@@ -92,7 +95,7 @@ finding at the row's tier, and the fail beside each row is an example.
 
 1. Blocking. Every Answer matches the creator's words. Fail: an answer
    recorded as "yes" where the creator wrote "your call".
-2. Blocking. Every item under Success looks like can be judged true or
+2. Blocking. Every item under How we will know it is done can be judged true or
    false against the finished work. Fail: "the offer works well".
 3. Blocking. No step contradicts the code, and each step's commit leaves
    the tests passing. Fail: a step edits a function the code does not

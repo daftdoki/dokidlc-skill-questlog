@@ -17,7 +17,7 @@ when line has a step and every step names its files and its test.
 `plan.md` says what will happen during implementation, in order, before
 anything is built. The creator reads it and adjusts it first. It has
 these parts, in this order: What exists, Steps, Files touched, Commits
-expected, Tests, What could go wrong, Out of scope, and Deviations, kept
+expected, Tests, What could go wrong, Out of scope, and Deviations from plan, kept
 empty here and filled during implementation.
 
 The plan turns the design's Implementation plan into steps. A chore
@@ -32,8 +32,8 @@ each step touches, so the plan names real functions and real files.
 Search memory for each tool the plan touches: the build, the test runner,
 the package manager, the deploy path.
 
-Plan runs without the creator; the goal's coverage row "how the build
-should be broken up" is its instruction. A fact that lives in the code,
+Plan runs without the creator; the goal's readiness question "How
+should the build be broken up?" is its instruction. A fact that lives in the code,
 the docs, or memory goes to `questlog:fact-finder`. A question the design and the
 goal do not answer and only the creator can pauses the run: ask it,
 numbered, with a recommended answer, and wait.
@@ -58,7 +58,7 @@ first and proves it. A step that another depends on comes first. Each
 step ends where a commit lands, and the commit leaves the tests passing.
 Only items sit under Steps. When the quest enters implement, `quest`
 records each item; from then the implementer ticks a box and changes no
-step's words, and a step that must change is written under Deviations.
+step's words, and a step that must change is written under Deviations from plan.
 
 Files touched is the full list, new and changed, so the creator sees the
 blast radius.

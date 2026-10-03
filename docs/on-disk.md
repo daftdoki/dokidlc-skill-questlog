@@ -88,8 +88,9 @@ goal and has no document. A chore skips research, design, and plan and
 writes `brief.md`. The implementer ticks the `- [ ]` items under `##
 Steps` in `plan.md` or `brief.md`; `quest ID next` out of implement
 compares them with `checklist` and refuses an unticked or reworded step.
-`quest ID next` out of draft goal refuses while a row of the `## Coverage`
-table in `goal.md` or `brief.md` is Missing. The body of `quest.md` may
+`quest ID next` out of draft goal refuses while a question in the
+`## Ready to start when` table of `goal.md` or `brief.md` is answered
+by nobody. The body of `quest.md` may
 carry `## Learned`, the paragraph a prototype writes before it is
 accepted and `new --from` copies into the next entry.
 

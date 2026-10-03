@@ -24,9 +24,9 @@ until the loop converges. Nothing else dispatches you.
    the four tiers, the diff pass, and the rubric. Use Bash to read and
    to run; the session makes every edit.
 2. For `Scope: full`:
-   read the Done when in `quest.md` and the Success looks like list in
+   read the Done when in `quest.md` and the How we will know it is done list in
    `goal.md` or the brief, then the stage file with its checklist and
-   Deviations, then the prior record
+   Deviations from plan, then the prior record
    when a path was given; for each Done when line, find the evidence in
    the code root and the commit range: the file, the command's output,
    the passing test, the measured number, and run what can be run. A

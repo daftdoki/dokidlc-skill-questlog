@@ -112,7 +112,7 @@ returned. It reads nothing else of the document.
 
 At review implementation and evaluate goal the document is `plan.md`
 and the work is commits. A diff pass there reads two diffs: `git diff
-HASH1 HASH2` on `plan.md`, which is the Deviations the session added,
+HASH1 HASH2` on `plan.md`, which is the Deviations from plan the session added,
 and `git log` and `git diff` over the commits since the prior pass's
 range end, which the Scope line carries as `diff from HASH1, commits
 B..C`. It checks each prior finding against those commits, runs the

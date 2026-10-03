@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import random
+import re
 import subprocess
 from datetime import UTC, datetime
 from importlib.machinery import SourceFileLoader
@@ -1001,6 +1002,18 @@ def test_references_open_with_their_job():
         assert "belongs to" in review, f"{reference} rubric has no boundary row"
 
 
+def test_references_use_the_plain_names():
+    """The readiness table and two section titles carry the names the creator chose on 2026-10-03; the old ones appear nowhere an agent reads."""
+    for path in list(REFERENCES.glob("*.md")) + list((ROOT / "agents").glob("*.md")) + [ROOT / "skills" / "quest" / "SKILL.md"]:
+        text = path.read_text()
+        for old in ("Coverage", "Success looks like", "Where the work left", "| Clear |", "Partial |", "Missing |"):
+            assert old not in text, f"{path.name} still says {old!r}"
+        assert not re.search(r"\bDeviations\b(?! from plan)", text), f"{path.name} says Deviations without 'from plan'"
+    goal = (REFERENCES / "goal.md").read_text(); brief = (REFERENCES / quest.BRIEF).read_text()
+    assert goal.count("?") >= 8 and "## Ready to start when" in goal and "## Ready to start when" in brief
+    assert "Are the steps clear?" in brief and "constraints research must respect" not in brief
+
+
 def test_review_sections_state_the_stop_rule():
     """The loop, the tiers, and the caps live once, in review-loop.md; each stage's Review section points at it and keeps its own names."""
     loop = (REFERENCES / "review-loop.md").read_text().lower()
@@ -1649,19 +1662,19 @@ def test_format_7_reads_as_is_and_the_header_moves_to_8(tmp_path, monkeypatch, c
     assert "format 8" in log.read_text()
 
 
-GOAL_WITH_COVERAGE = """# Goal
+GOAL_WITH_READINESS = """# Goal
 
-## Coverage
+## Ready to start when
 
-| Row | Status | Note |
+| Question | Answered by | Note |
 |---|---|---|
-| outcome | Clear | |
-| success measure | Clear | |
-| out of scope | Partial | assumed: eviction stays out |
-| decisions already made | Clear | |
-| constraints | {missing} | |
+| What should exist when this is done? | creator | |
+| How will we know it works? | creator | |
+| What is left out? | assumption | eviction stays out |
+| What has already been decided? | creator | |
+| What can the repository not tell me? | {missing} | |
 
-## Success looks like
+## How we will know it is done
 
 - it runs
 """
@@ -1689,28 +1702,28 @@ def test_start_records_the_interview_depth_and_the_prototype(tmp_path, monkeypat
     assert f"{ids['C']} is at implement. Build the throwaway on a branch named after the id, commit, then run: quest {ids['C']} next" in out
 
 
-def test_coverage_gates_next_out_of_draft_goal(tmp_path, monkeypatch, capsys):
+def test_readiness_gates_next_out_of_draft_goal(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _fresh(tmp_path, monkeypatch)
     quest.main([qid, "start"]); d = _at(qdir, qid)
-    (d / "goal.md").write_text(GOAL_WITH_COVERAGE.format(missing="Missing")); capsys.readouterr()
-    quest.main([qid]); assert "coverage: 3 clear, 1 partial, 1 missing" in capsys.readouterr().out
+    (d / "goal.md").write_text(GOAL_WITH_READINESS.format(missing="nobody")); capsys.readouterr()
+    quest.main([qid]); assert "ready: 3 by the creator, 1 assumed, 1 open" in capsys.readouterr().out
     with pytest.raises(SystemExit) as e:
         quest.main([qid, "next"])
     err = capsys.readouterr().err
-    assert e.value.code == 1 and "coverage: 1 row is Missing" in err and f"quest {qid} next --confirmed" in err
-    (d / "goal.md").write_text(GOAL_WITH_COVERAGE.format(missing="Partial"))
+    assert e.value.code == 1 and "ready to start when: 1 question answered by nobody" in err and f"quest {qid} next --confirmed" in err
+    (d / "goal.md").write_text(GOAL_WITH_READINESS.format(missing="assumption"))
     quest.main([qid, "next"])
     out = capsys.readouterr().out
-    assert _fm(d)["state"] == "review goal" and "coverage: 3 clear, 2 partial, 0 missing" in out
-    assert quest.coverage("# Goal\n\nno table\n") is None and quest.coverage("## Coverage\n\n| a | b |\n|---|---|\n") == (0, 0, 0)
+    assert _fm(d)["state"] == "review goal" and "ready: 3 by the creator, 2 assumed, 0 open" in out
+    assert quest.readiness("# Goal\n\nno table\n") is None and quest.readiness("## Ready to start when\n\n| a | b |\n|---|---|\n") == (0, 0, 0)
     # --confirmed passes a Missing row on the creator's word; a goal without the table is not gated by the script
     qdir2, d2, qid2 = _fresh(tmp_path / "two", monkeypatch)
     quest.main([qid2, "start"]); d2 = _at(qdir2, qid2)
-    (d2 / "goal.md").write_text(GOAL_WITH_COVERAGE.format(missing="Missing"))
+    (d2 / "goal.md").write_text(GOAL_WITH_READINESS.format(missing="nobody"))
     quest.main([qid2, "next", "--confirmed"]); assert _fm(d2)["state"] == "review goal"
     qdir3, d3, qid3 = _fresh(tmp_path / "three", monkeypatch)
     quest.main([qid3, "start"]); d3 = _at(qdir3, qid3); (d3 / "goal.md").write_text("# Goal\n")
-    capsys.readouterr(); quest.main([qid3, "next"]); assert "coverage:" not in capsys.readouterr().out and _fm(d3)["state"] == "review goal"
+    capsys.readouterr(); quest.main([qid3, "next"]); assert "ready:" not in capsys.readouterr().out and _fm(d3)["state"] == "review goal"
 
 
 def test_prototype_needs_a_learned_paragraph_and_from_copies_it(tmp_path, monkeypatch, capsys):
@@ -1760,11 +1773,11 @@ def test_the_desktop_notifier_picks_a_backend(monkeypatch, capsys):
 def test_stops_and_gates_wake_the_creator(tmp_path, monkeypatch, capsys, desktop_notifications):
     qdir, d, qid = _fresh(tmp_path, monkeypatch)
     quest.main([qid, "start"]); d = _at(qdir, qid)
-    (d / "goal.md").write_text(GOAL_WITH_COVERAGE.format(missing="Missing")); desktop_notifications.clear()
+    (d / "goal.md").write_text(GOAL_WITH_READINESS.format(missing="nobody")); desktop_notifications.clear()
     with pytest.raises(SystemExit):
         quest.main([qid, "next"])                                              # a stop: one notification, the first line of the reason
-    assert desktop_notifications == [(f"quest {qid}", "coverage: 1 row is Missing")]
-    (d / "goal.md").write_text(GOAL_WITH_COVERAGE.format(missing="Clear")); desktop_notifications.clear()
+    assert desktop_notifications == [(f"quest {qid}", "ready to start when: 1 question answered by nobody")]
+    (d / "goal.md").write_text(GOAL_WITH_READINESS.format(missing="creator")); desktop_notifications.clear()
     quest.main([qid, "next"])                                                  # draft goal to review goal is the agent's own move
     assert desktop_notifications == []
     quest.main([qid, "accept"]); (d / "research.md").write_text("x\n"); quest.main([qid, "next"]); quest.main([qid, "next"])

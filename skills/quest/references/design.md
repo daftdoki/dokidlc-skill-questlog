@@ -18,7 +18,7 @@ would need is open.
 `design.md` is specific enough that implementation can begin from it
 without another design decision. It has these parts, in this order: Goal,
 Stories, Current state, Decisions, Design, Test changes, Implementation
-plan, Out of scope, and Deviations, a section kept empty here and filled
+plan, Out of scope, and Deviations from plan, a section kept empty here and filled
 during implementation.
 
 ## Before you write
@@ -35,8 +35,8 @@ anything; a past decision stands until the creator reverses it.
 
 Then settle every decision that shapes the design. Map them as a tree:
 each decision branches into the decisions that hang off it. Settle each
-from the goal's Questions and answers and its coverage row "decisions
-made for design", the research's Recommendation, the code, and
+from the goal's Questions and answers and its readiness question "What
+is decided for design?", the research's Recommendation, the code, and
 `decision` memory pages; a fact goes to `questlog:fact-finder`. Record
 each as a Decision with its reason. A decision that none of those
 settle and only the creator can pauses the run: ask the whole frontier

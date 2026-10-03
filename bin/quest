@@ -1052,18 +1052,19 @@ def checklist(text: str) -> list[tuple[bool, str]]:
     return items
 
 
-COVERAGE_HEADING = "## Coverage"
-COVERAGE_WORDS = ("clear", "partial", "missing")
+READY_HEADING = "## Ready to start when"
+READY_WORDS = ("creator", "assumption", "nobody")        # who answered each question: the creator, an assumption the note states, nobody yet
 
 
-def coverage(text: str) -> tuple[int, int, int] | None:
-    """(clear, partial, missing) from the table under `## Coverage`: the second cell of each row names the status. None without the table."""
+def readiness(text: str) -> tuple[int, int, int] | None:
+    """(by the creator, assumed, open) from the table under `## Ready to start when`: the second cell of each row says who answered.
+    None without the table."""
     lines = text.splitlines()
     try:
-        start = next(i for i, l in enumerate(lines) if l.strip() == COVERAGE_HEADING) + 1
+        start = next(i for i, l in enumerate(lines) if l.strip() == READY_HEADING) + 1
     except StopIteration:
         return None
-    counts = {w: 0 for w in COVERAGE_WORDS}
+    counts = {w: 0 for w in READY_WORDS}
     seen = False
     for line in lines[start:]:
         if line.startswith("## "):
@@ -1077,16 +1078,16 @@ def coverage(text: str) -> tuple[int, int, int] | None:
         word = cells[1].lower()
         if word in counts:
             counts[word] += 1
-    return tuple(counts[w] for w in COVERAGE_WORDS) if seen else None
+    return tuple(counts[w] for w in READY_WORDS) if seen else None
 
 
-def coverage_state(d: Path, fm: dict) -> tuple[int, int, int] | None:
-    """The goal's or brief's coverage at draft goal and review goal; None elsewhere or without the table."""
+def readiness_state(d: Path, fm: dict) -> tuple[int, int, int] | None:
+    """The goal's or brief's readiness at draft goal and review goal; None elsewhere or without the table."""
     s = state_of(fm)
     if not s or s.name not in ("draft goal", "review goal"):
         return None
     doc = file_for(BY_NAME["draft goal"], fm)
-    return coverage((d / doc).read_text()) if doc and (d / doc).is_file() else None
+    return readiness((d / doc).read_text()) if doc and (d / doc).is_file() else None
 
 
 def checklist_state(d: Path, fm: dict) -> tuple[int, int, int] | None:
@@ -1123,9 +1124,9 @@ def print_guidance(fm: dict, root: Path, d: Path) -> None:
         print(f"checklist: {steps[0]} of {steps[1]} ticked" + (f", {steps[2]} changed since accepted" if steps[2] else ""))
     if s.name in ("draft goal", "review goal") and fm.get("interview"):
         print(f"interview: {fm['interview']}")
-    rows = coverage_state(d, fm)
+    rows = readiness_state(d, fm)
     if rows:
-        print(f"coverage: {rows[0]} clear, {rows[1]} partial, {rows[2]} missing")
+        print(f"ready: {rows[0]} by the creator, {rows[1]} assumed, {rows[2]} open")
     overlay = quests_dir(root) / GUIDANCE_DIR / reference_for(s, fm)
     if overlay.is_file():
         print(f"overlay: {overlay}")
@@ -1285,15 +1286,15 @@ def cmd_next(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     file = file_for(s, fm)
     if file and not (d / file).is_file():
         die(f"{d.name}/{file} does not exist yet")
-    rows = coverage_state(d, fm) if s.name == "draft goal" and not rest else None
+    rows = readiness_state(d, fm) if s.name == "draft goal" and not rest else None
     if rows and rows[2]:
-        stop(fm, f"coverage: {rows[2]} {'row is' if rows[2] == 1 else 'rows are'} Missing\nask the creator or write the assumption and mark the row Partial, then run next; "
-            f"on the creator's word to go without: quest {fm['id']} next --confirmed")
+        stop(fm, f"ready to start when: {rows[2]} {'question' if rows[2] == 1 else 'questions'} answered by nobody\nask the creator, or write the assumption "
+            f"in the note and mark it answered by assumption, then run next; on the creator's word to go without: quest {fm['id']} next --confirmed")
     steps = checklist_state(d, fm) if s.name == "implement" and not rest else None
     if steps and (steps[0] < steps[1] or steps[2]):
         ticked, n, changed = steps
         what = "; ".join(x for x in (f"{n - ticked} of {n} steps unticked" if ticked < n else "", f"{changed} changed since accepted" if changed else "") if x)
-        stop(fm, f"checklist: {what}\ntick each step as its commit lands, and write a step that changed under Deviations with the original restored; "
+        stop(fm, f"checklist: {what}\ntick each step as its commit lands, and write a step that changed under Deviations from plan with the original restored; "
             f"a step that cannot be done goes to the creator, then run: quest {fm['id']} next --confirmed")
     if reviewer_for(s, fm) and not rest:
         verdict = last_verdict(d, record_for(s, fm))

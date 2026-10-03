@@ -15,7 +15,7 @@ and the suite passes.
 ## What the stage produces
 
 Commits, in the order the Steps checklist lists, each step ticked, and a
-Deviations section that says where the work left the steps and why. The
+Deviations from plan section that says where the work left the steps and why. The
 checklist is in `plan.md` for a quest and in `brief.md` for a chore;
 `document:` names the file. The checklist is the contract; the design,
 for a quest, is the source of truth for what to build. A task has no
@@ -23,7 +23,7 @@ checklist; its section is at the end.
 
 ## Before you build
 
-Read the document `document:` names and its Deviations. `quest` recorded
+Read the document `document:` names and its Deviations from plan. `quest` recorded
 each step when the quest entered implement, and `quest ID` prints
 `checklist: N of M ticked`: a ticked step is done, so on a resumption you
 continue from the first unticked one. Run `git log --oneline -20` in the
@@ -44,7 +44,7 @@ Work the steps in order, and keep going between steps. For each step:
    what capability the commit adds. Stage the files the step touched.
 3. Tick the step: `- [ ]` becomes `- [x]`, and nothing else on the item
    changes. Done when `quest ID` counts it.
-4. Record any departure in the Deviations section in the same turn, with
+4. Record any departure in the Deviations from plan section in the same turn, with
    the date: a step split, a helper the step did not name, an order that
    worked better. The step's words stay as the creator accepted them;
    `quest ID next` refuses a checklist whose words changed.
@@ -102,17 +102,17 @@ or a chore's `brief.md`, and the prompt names the
 root of the code repository and the commit range, from the earliest
 commit newer than the `implement` entry's time in the `history` list of
 `quest.md` to HEAD, found with `git log --since=TIME` on the working
-branch. The reviewer reads the checklist and the Deviations, the record,
+branch. The reviewer reads the checklist and the Deviations from plan, the record,
 and the commits, and runs the suite.
 
 Rubric for implement.
 
 1. Blocking. Each commit does what its step says, every step is ticked,
    or a Deviation says why not. Fail: step 3's commit adds a flag the step never named
-   and Deviations is silent.
+   and Deviations from plan is silent.
 2. Blocking. Every test the plan named exists and passes, and the suite
    passes. Fail: a test the plan promised is absent.
-3. Blocking. Every claim in Deviations holds against the code. Fail: a
+3. Blocking. Every claim in Deviations from plan holds against the code. Fail: a
    Deviation says a helper was reused where the commit adds a new one.
 4. Clarification. Every document the plan promised is updated. Fail:
    the README section the plan named is unchanged.

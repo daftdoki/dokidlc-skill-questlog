@@ -82,7 +82,7 @@ file either way.
 `quest ID` and `quest ID start` print `guidance:` with the reference to
 read first, `document:` with the absolute path of the file under
 review, `gate:` with who leaves the state, `reviewer:` and `record:` in
-a review state, `interview:` and `coverage:` at the goal states,
+a review state, `interview:` and `ready:` at the goal states,
 `checklist:` from implement on, and `overlay:` when the project has
 `docs/quests/guidance/STAGE.md`, which is read second and wins where
 they differ.
@@ -106,7 +106,7 @@ the creator with its evidence:
 - A Blocking finding still open after the loop's last pass: the
   `last pass:` line.
 - A Deviation that touches a Done when line or a Success item: the
-  Deviations section.
+  Deviations from plan section.
 - A question the stage files do not answer and only the creator can: the
   numbered question, with a recommended answer.
 - An action outside the repository that cannot be undone: the command,
