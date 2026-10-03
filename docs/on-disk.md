@@ -134,6 +134,27 @@ settings file, and a `CLAUDE.md` link that leaves the project or names a
 file the script manages, before it reads or writes anything, so a cloned
 repository cannot point those at another file.
 
+## The stage contract
+
+One row per state: the job, what the stage reads, what it writes, what
+ends it, and who leaves it. The job line is the one each reference opens
+with. Reads is what the stage takes in; Exit is what `next` or `accept`
+checks.
+
+| State | Job | Reads | Writes | Exit | Gate |
+|---|---|---|---|---|---|
+| draft goal | the outcome, the stories, what done means; how to build it belongs to design and plan | `quest.md`, memory, the creator | `goal.md`, or `brief.md` for a chore, with the readiness table | every readiness question answered | agent |
+| review goal | grade the goal | the goal, the rubric | `goal-review.md` or `brief-review.md` | one pass, Blocking fixed, Clarifications as questions | creator: `accept` |
+| research | open the design space; the decision belongs to design | goal, related quests, memory, the web | `research.md` | every design question has its options or is deferred | agent |
+| review research | grade the research | the research, the rubric, the code | `research-review.md` | one pass, Blocking fixed, Clarifications answered and recorded | agent |
+| design | decide with reasons, the document a reader opens later; the build order belongs to plan, the code to implement | goal, research, the code, `decision` memory pages | `design.md` | no decision an implementer would need is open | agent |
+| review design | grade the design against the code | the design, the rubric, the code | `design-review.md` | one pass, Blocking fixed, Clarifications as questions | creator: `accept` |
+| plan | order the build, a failing test per step; decisions belong to design | design, the code | `plan.md` with a Steps checklist | every Done when line has a step and every step names its files and test | agent |
+| review plan | grade the plan against the design and the code | the plan, the rubric, the design, the code | `plan-review.md` | one pass, Blocking fixed, Clarifications answered and recorded; checklist hashes recorded | agent |
+| implement | work the checklist; what to build belongs to the plan or the brief | the checklist, the code | commits, ticks, deviations | every box ticked, suite passing | agent |
+| review implementation | commits against steps | the checklist, the commits, the suite | `implement-review.md` | the loop converges or three passes are spent | agent |
+| evaluate goal | the result against Done when, the docs, the tree; fixing belongs to implement | `quest.md`, the goal or brief, the checklist, the commits | `result-review.md`, the Done when table | every line met or marked, and the creator accepts | creator: `accept` |
+
 ## Migrating from an older format
 
 The quest log's header names its format. This plugin writes format 8. A
