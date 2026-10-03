@@ -138,9 +138,11 @@ repository cannot point those at another file.
 ## The stage contract
 
 One row per state: the job, what the stage reads, what it writes, what
-ends it, and who leaves it. The job line is the one each reference opens
-with. Reads is what the stage takes in; Exit is what `next` or `accept`
-checks.
+ends it, and who leaves it. The Job cell condenses the job paragraph
+each reference carries after its reading instruction. Reads is what
+the stage takes in. Exit is the stage's own completion criterion: the
+script checks the readiness table, the ticks, and the record's
+verdict, and the session and the reviewer judge the rest.
 
 | State | Job | Reads | Writes | Exit | Gate |
 |---|---|---|---|---|---|
