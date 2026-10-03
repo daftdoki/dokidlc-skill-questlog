@@ -117,5 +117,5 @@ Rubric for research.
    Fail: two starred columns, or none.
 7. Clarification, belongs to plan. A count, a line number, or a code
    claim that no option's viability rests on. Fail: a2 research
-   counting the verb-first test calls three ways in passes 2, 3, and 5:
-   58, then 61, then 45 plus 16.
+   giving the verb-first test call count three ways across passes 2, 3,
+   and 5: 58, then 45 plus 16, then 61 plus four built in loops.

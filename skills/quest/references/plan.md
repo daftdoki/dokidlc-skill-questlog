@@ -7,9 +7,8 @@ Review section at the end is the completion criterion for review plan;
 read it before you write, and run its loop once `quest ID next` has
 entered review plan.
 
-Plan orders the build into steps with a failing test each; the
-decisions belong to design and weighing alternatives belongs to
-research. It reads the design and the code. It ends when every Done
+Plan orders the build into steps with a failing test each; a decision,
+and the weighing of alternatives, belongs to design. It reads the design and the code. It ends when every Done
 when line has a step and every step names its files and its test.
 
 ## What the stage produces

@@ -1710,13 +1710,13 @@ def test_readiness_gates_next_out_of_draft_goal(tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit) as e:
         quest.main([qid, "next"])
     err = capsys.readouterr().err
-    assert e.value.code == 1 and "ready to start when: 1 question answered by nobody" in err and f"quest {qid} next --confirmed" in err
+    assert e.value.code == 1 and "ready to start when: 1 question answered by nobody: What can the repository not tell me?" in err and f"quest {qid} next --confirmed" in err
     (d / "goal.md").write_text(GOAL_WITH_READINESS.format(missing="assumption"))
     quest.main([qid, "next"])
     out = capsys.readouterr().out
     assert _fm(d)["state"] == "review goal" and "ready: 3 by the creator, 2 assumed, 0 open" in out
     assert quest.readiness("# Goal\n\nno table\n") is None and quest.readiness("## Ready to start when\n\n| a | b |\n|---|---|\n") == (0, 0, 0)
-    # --confirmed passes a Missing row on the creator's word; a goal without the table is not gated by the script
+    # --confirmed passes a question answered by nobody on the creator's word; a goal without the table is not gated by the script
     qdir2, d2, qid2 = _fresh(tmp_path / "two", monkeypatch)
     quest.main([qid2, "start"]); d2 = _at(qdir2, qid2)
     (d2 / "goal.md").write_text(GOAL_WITH_READINESS.format(missing="nobody"))
@@ -1776,7 +1776,7 @@ def test_stops_and_gates_wake_the_creator(tmp_path, monkeypatch, capsys, desktop
     (d / "goal.md").write_text(GOAL_WITH_READINESS.format(missing="nobody")); desktop_notifications.clear()
     with pytest.raises(SystemExit):
         quest.main([qid, "next"])                                              # a stop: one notification, the first line of the reason
-    assert desktop_notifications == [(f"quest {qid}", "ready to start when: 1 question answered by nobody")]
+    assert desktop_notifications == [(f"quest {qid}", "ready to start when: 1 question answered by nobody: What can the repository not tell me?")]
     (d / "goal.md").write_text(GOAL_WITH_READINESS.format(missing="creator")); desktop_notifications.clear()
     quest.main([qid, "next"])                                                  # draft goal to review goal is the agent's own move
     assert desktop_notifications == []

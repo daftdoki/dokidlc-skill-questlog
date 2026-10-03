@@ -1056,16 +1056,14 @@ READY_HEADING = "## Ready to start when"
 READY_WORDS = ("creator", "assumption", "nobody")        # who answered each question: the creator, an assumption the note states, nobody yet
 
 
-def readiness(text: str) -> tuple[int, int, int] | None:
-    """(by the creator, assumed, open) from the table under `## Ready to start when`: the second cell of each row says who answered.
-    None without the table."""
+def open_questions(text: str) -> list[str] | None:
+    """The questions under `## Ready to start when` by who answered them, as (question, word) pairs; None without the table."""
     lines = text.splitlines()
     try:
         start = next(i for i, l in enumerate(lines) if l.strip() == READY_HEADING) + 1
     except StopIteration:
         return None
-    counts = {w: 0 for w in READY_WORDS}
-    seen = False
+    rows = []
     for line in lines[start:]:
         if line.startswith("## "):
             break
@@ -1074,11 +1072,17 @@ def readiness(text: str) -> tuple[int, int, int] | None:
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
         if len(cells) < 2 or set(cells[1]) <= set("-: "):
             continue
-        seen = True
-        word = cells[1].lower()
-        if word in counts:
-            counts[word] += 1
-    return tuple(counts[w] for w in READY_WORDS) if seen else None
+        rows.append((cells[0], cells[1].lower()))
+    return rows
+
+
+def readiness(text: str) -> tuple[int, int, int] | None:
+    """(by the creator, assumed, open) from the table under `## Ready to start when`: the second cell of each row says who answered.
+    None without the table."""
+    rows = open_questions(text)
+    if rows is None:
+        return None
+    return tuple(sum(1 for _, w in rows if w == word) for word in READY_WORDS) if rows else None
 
 
 def readiness_state(d: Path, fm: dict) -> tuple[int, int, int] | None:
@@ -1288,8 +1292,10 @@ def cmd_next(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
         die(f"{d.name}/{file} does not exist yet")
     rows = readiness_state(d, fm) if s.name == "draft goal" and not rest else None
     if rows and rows[2]:
-        stop(fm, f"ready to start when: {rows[2]} {'question' if rows[2] == 1 else 'questions'} answered by nobody\nask the creator, or write the assumption "
-            f"in the note and mark it answered by assumption, then run next; on the creator's word to go without: quest {fm['id']} next --confirmed")
+        doc = file_for(s, fm) or ""
+        named = "; ".join(q for q, w in open_questions((d / doc).read_text()) or [] if w == "nobody")
+        stop(fm, f"ready to start when: {rows[2]} {'question' if rows[2] == 1 else 'questions'} answered by nobody: {named}\nask the creator, or write the "
+            f"assumption in the note and mark it answered by assumption, then run next; on the creator's word to go without: quest {fm['id']} next --confirmed")
     steps = checklist_state(d, fm) if s.name == "implement" and not rest else None
     if steps and (steps[0] < steps[1] or steps[2]):
         ticked, n, changed = steps
