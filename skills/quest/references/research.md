@@ -9,7 +9,7 @@ entered review research.
 
 Research opens the design space, what exists, the options, and the
 evidence; the decision belongs to design. It reads the goal, related
-quests, memory, and the web. It ends when every design question has
+quests, engrams, and the web. It ends when every design question has
 its options or is deferred to design.
 
 ## What the stage produces
@@ -25,13 +25,13 @@ and Decisions for design.
 ## Before you write
 
 Read the research and design of related quests first, so this document
-builds on them instead of repeating them. Search memory for each design
+builds on them instead of repeating them. Search engrams for each design
 question as you form it.
 
 Research runs after the creator accepted the goal, without the creator.
 Take the assumptions that would change every downstream option from
 the goal's Questions and answers and its readiness question "What must
-research respect?"; a fact that lives in the code, the docs, or memory
+research respect?"; a fact that lives in the code, the docs, or engrams
 goes to `questlog:fact-finder`. Only a question the goal does not
 answer and only the creator can pauses the run: ask it, numbered, with
 a recommended answer, and wait.

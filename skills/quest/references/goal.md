@@ -8,7 +8,7 @@ review goal; read it before you write, and run its loop once `quest ID
 next` has entered review goal.
 
 Draft goal states the outcome, the stories, and what done means; how
-to build it belongs to design and plan. It reads `quest.md`, memory,
+to build it belongs to design and plan. It reads `quest.md`, engrams,
 and the creator. It ends when every question in the readiness table is
 answered.
 
@@ -62,7 +62,7 @@ changes the work, each numbered with a recommended answer. The round
 opens with the convention: a bare "yes" takes the recommendation, and a
 yes-or-no question is worded so that "yes" is it. A question whose
 answer depends on another in the same round belongs to the next round.
-A fact that lives in the code, the docs, or memory goes to
+A fact that lives in the code, the docs, or engrams goes to
 `questlog:fact-finder`, and the round does not wait for it. The
 interview ends when every question is answered by the creator, or
 after two rounds with the open ones answered by assumption.
@@ -101,7 +101,7 @@ none the creator did not give.
 After explore, `## Options seen` lists one line per option the
 conversation raised, with why it stayed or fell. The design reviewer
 and a later session read it, and research deepens the survivors instead
-of reopening the space. Each piece of prior art found gets a memory page
+of reopening the space. Each piece of prior art found gets an engram page
 cited to its source.
 
 ## Review

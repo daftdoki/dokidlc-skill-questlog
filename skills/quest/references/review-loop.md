@@ -94,9 +94,9 @@ written as the command that produces it or with the commit it was
 taken at. A passage that narrates the document's own revisions is a
 Polish finding. Report; the session edits.
 
-A memory page is read with `memory read NAME`, so it arrives with its
-trust markers; the file under `.memory/` stays closed. A document that
-names a memory page is a Clarification finding: memory cites documents,
+An engram page is read with `engrams read NAME`, so it arrives with its
+trust markers; the file under `.engrams/` stays closed. A document that
+names an engram page is a Clarification finding: engrams cite documents,
 a document cites the source the page cites.
 
 ## The diff pass

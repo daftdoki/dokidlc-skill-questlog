@@ -181,18 +181,18 @@ refuses an empty one.
 
 ## Rules
 
-- A fact that the code, the docs, or memory holds goes to
+- A fact that the code, the docs, or engrams hold goes to
   `questlog:fact-finder`, and the creator is asked only what the creator
   alone knows.
 - A numbered question carries a recommended answer, and a bare "yes"
   from the creator takes it. Word a yes-or-no question so that "yes" is
   the recommendation.
-- If the project has the memory plugin: `quest ID start` and `quest ID`
-  name matching memory pages; read them. Search memory again at each
+- If the project has the engrams plugin: `quest ID start` and `quest ID`
+  name matching engram pages; read them. Search engrams again at each
   state: the title before draft goal, each design question during
   research, `decision` pages before recommending in design, and each
   tool the plan touches. When `next` leaves research, design, or plan,
-  the script prints the memory prompt: write one page per finding you
+  the script prints the engrams prompt: write one page per finding you
   established on your own, citing the stage file with `--ref`, before
   you run the next state.
 - When the creator is unsure of the shape, recommend the smallest that

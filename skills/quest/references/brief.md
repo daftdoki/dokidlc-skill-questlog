@@ -26,7 +26,7 @@ and filled during implementation.
 ## Before you write
 
 Read the Goal and Done when in `quest.md`, and the code each step will
-touch, so the steps name real functions and real files. Search memory
+touch, so the steps name real functions and real files. Search engrams
 for the title and for each tool the steps touch.
 
 A chore that turns on an untested hypothesis runs the test now, and its
@@ -36,7 +36,7 @@ alternatives is a quest: tell the creator before you write.
 Ask the creator one round of at most five questions: only what the
 creator alone knows, numbered, each with a recommended answer, opening
 with the convention that a bare "yes" takes the recommendation. A fact
-that lives in the code, the docs, or memory goes to
+that lives in the code, the docs, or engrams goes to
 `questlog:fact-finder`, and the round does not wait for it. The brief's
 readiness table asks the goal's first five questions and a sixth:
 "Are the steps clear?" `quest ID next` refuses while a question is

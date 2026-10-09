@@ -10,7 +10,7 @@ entered review design.
 Design decides, with reasons, and is the document a reader opens later
 to learn how and why; the order of the build belongs to plan and the
 code belongs to implement. It reads the goal, the research, the code,
-and `decision` memory pages. It ends when no decision an implementer
+and `decision` engram pages. It ends when no decision an implementer
 would need is open.
 
 ## What the stage produces
@@ -30,14 +30,14 @@ they did not give.
 
 Explore the code the design touches: the modules, functions, data
 structures, and tests it builds on or changes, and the patterns earlier
-work set. Search memory for `decision` pages before you recommend
+work set. Search engrams for `decision` pages before you recommend
 anything; a past decision stands until the creator reverses it.
 
 Then settle every decision that shapes the design. Map them as a tree:
 each decision branches into the decisions that hang off it. Settle each
 from the goal's Questions and answers and its readiness question "What
 is decided for design?", the research's Recommendation, the code, and
-`decision` memory pages; a fact goes to `questlog:fact-finder`. Record
+`decision` engram pages; a fact goes to `questlog:fact-finder`. Record
 each as a Decision with its reason. A decision that none of those
 settle and only the creator can pauses the run: ask the whole frontier
 of such decisions in one numbered round with a recommended answer each,
