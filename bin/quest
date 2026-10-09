@@ -59,7 +59,7 @@ class State:
     reference: str        # file under skills/quest/references/
     doing: str            # gerund phrase, "reviewing the plan"; fills {next} in the previous state's say
     say: str              # printed after "ID is at NAME. "; {id} and {next} are filled
-    nudge: bool = False   # print the engrams write prompt on entry
+    nudge: bool = False   # print the iirc write prompt on entry
     creator: bool = False # a creator gate: only `accept`, on the creator's word, leaves it; `next` refuses
 
 
@@ -961,25 +961,25 @@ def cmd_doctor(rest: list[str]) -> None:
     sys.exit(refused or (1 if failed else 0))
 
 
-# --- engrams -----------------------------------------------------------------
+# --- iirc -----------------------------------------------------------------
 
 
-def engrams_hits(query: str) -> list[str]:
-    """Top three engram pages for a query, when the engrams plugin is on PATH. Fail open."""
-    if not shutil.which("engrams"):
+def iirc_hits(query: str) -> list[str]:
+    """Top three iirc pages for a query, when the iirc plugin is on PATH. Fail open."""
+    if not shutil.which("iirc"):
         return []
     try:
-        proc = subprocess.run(["engrams", "search", "--json", query], capture_output=True, text=True, timeout=8)
+        proc = subprocess.run(["iirc", "search", "--json", query], capture_output=True, text=True, timeout=8)
         rows = json.loads(proc.stdout[proc.stdout.find("["):]) if "[" in proc.stdout else []
     except (subprocess.SubprocessError, json.JSONDecodeError, OSError, ValueError):
         return []
-    return [f"`engrams read {r['filename']}` ({str(r.get('summary', ''))[:80]})" for r in rows[:3] if r.get("filename")]
+    return [f"`iirc read {r['filename']}` ({str(r.get('summary', ''))[:80]})" for r in rows[:3] if r.get("filename")]
 
 
-def print_engrams_hits(query: str) -> None:
-    hits = engrams_hits(query)
+def print_iirc_hits(query: str) -> None:
+    hits = iirc_hits(query)
     if hits:
-        print("engrams: " + " · ".join(hits))
+        print("iirc: " + " · ".join(hits))
 
 
 # --- the writing skill ------------------------------------------------------
@@ -1230,7 +1230,7 @@ def cmd_show(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     files = sorted(p.name for p in d.iterdir() if p.is_file() and p.name != "quest.md")
     print("\nstage files: " + (", ".join(files) if files else "none"))
     print_guidance(fm, root, d)
-    print_engrams_hits(str(fm.get("title", "")))
+    print_iirc_hits(str(fm.get("title", "")))
 
 
 def cmd_start(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
@@ -1268,7 +1268,7 @@ def cmd_start(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     if line:
         print(line)
     print_guidance(fm, root, d)
-    print_engrams_hits(str(fm.get("title", "")))
+    print_iirc_hits(str(fm.get("title", "")))
 
 
 def cmd_defer(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
@@ -1387,8 +1387,8 @@ def enter_next(root: Path, d: Path, fm: dict, s: State) -> None:
     print_guidance(fm, root, d)
     if nxt in BY_NAME and BY_NAME[nxt].creator and s.name != "draft goal":
         notify_desktop(f"quest {fm['id']}", say(fm))     # a gate reached by the run; draft goal to review goal is the agent's own move
-    if nxt in BY_NAME and BY_NAME[nxt].nudge and file_for(s, fm) and shutil.which("engrams"):
-        print(f"engrams: what did you learn while {s.doing} on your own? One `engrams write` page per finding, `--ref {d.relative_to(root)}/{file_for(s, fm)}`, before you run the next state.")
+    if nxt in BY_NAME and BY_NAME[nxt].nudge and file_for(s, fm) and shutil.which("iirc"):
+        print(f"iirc: what did you learn while {s.doing} on your own? One `iirc write` page per finding, `--ref {d.relative_to(root)}/{file_for(s, fm)}`, before you run the next state.")
 
 
 def cmd_skip(root: Path, d: Path, fm: dict, rest: list[str]) -> None:

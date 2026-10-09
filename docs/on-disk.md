@@ -146,11 +146,11 @@ verdict, and the session and the reviewer judge the rest.
 
 | State | Job | Reads | Writes | Exit | Gate |
 |---|---|---|---|---|---|
-| draft goal | the outcome, the stories, what done means; how to build it belongs to design and plan | `quest.md`, engrams, the creator | `goal.md`, or `brief.md` for a chore, with the readiness table | every readiness question answered | agent |
+| draft goal | the outcome, the stories, what done means; how to build it belongs to design and plan | `quest.md`, iirc, the creator | `goal.md`, or `brief.md` for a chore, with the readiness table | every readiness question answered | agent |
 | review goal | grade the goal | the goal, the rubric | `goal-review.md` or `brief-review.md` | one pass, Blocking fixed, Clarifications as questions | creator: `accept` |
-| research | open the design space; the decision belongs to design | goal, related quests, engrams, the web | `research.md` | every design question has its options or is deferred | agent |
+| research | open the design space; the decision belongs to design | goal, related quests, iirc, the web | `research.md` | every design question has its options or is deferred | agent |
 | review research | grade the research | the research, the rubric, the code | `research-review.md` | one pass, Blocking fixed, Clarifications answered and recorded | agent |
-| design | decide with reasons, the document a reader opens later; the build order belongs to plan, the code to implement | goal, research, the code, `decision` engram pages | `design.md` | no decision an implementer would need is open | agent |
+| design | decide with reasons, the document a reader opens later; the build order belongs to plan, the code to implement | goal, research, the code, `decision` iirc pages | `design.md` | no decision an implementer would need is open | agent |
 | review design | grade the design against the code | the design, the rubric, the code | `design-review.md` | one pass, Blocking fixed, Clarifications as questions | creator: `accept` |
 | plan | order the build, a failing test per step; decisions belong to design | design, the code | `plan.md` with a Steps checklist | every Done when line has a step and every step names its files and test | agent |
 | review plan | grade the plan against the design and the code | the plan, the rubric, the design, the code | `plan-review.md` | one pass, Blocking fixed, Clarifications answered and recorded; checklist hashes recorded | agent |
@@ -180,7 +180,7 @@ enabled. Six are reviewers, `review-goal` through `review-plan`,
 evaluate goal; each reads `references/review-loop.md` and then its
 stage's Review section, and reports.
 The seventh, `fact-finder`, answers a factual question from the code, the
-docs, engrams, or the web, so the agent asks you only what you alone know.
+docs, iirc, or the web, so the agent asks you only what you alone know.
 Each agent's model and effort are set in its own file under `agents/`;
 all inherit the session's until you change one.
 

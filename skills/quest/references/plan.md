@@ -29,12 +29,12 @@ plans here, from its Goal.
 
 Read the design, or for a chore the Goal and Done when. Read the code
 each step touches, so the plan names real functions and real files.
-Search engrams for each tool the plan touches: the build, the test runner,
+Search iirc for each tool the plan touches: the build, the test runner,
 the package manager, the deploy path.
 
 Plan runs without the creator; the goal's readiness question "How
 should the build be broken up?" is its instruction. A fact that lives in the code,
-the docs, or engrams goes to `questlog:fact-finder`. A question the design and the
+the docs, or iirc goes to `questlog:fact-finder`. A question the design and the
 goal do not answer and only the creator can pauses the run: ask it,
 numbered, with a recommended answer, and wait.
 

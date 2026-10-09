@@ -608,26 +608,26 @@ def test_doctor_brief(tmp_path, monkeypatch, capsys):
     assert "questlog: ok, 1 open" in capsys.readouterr().out
 
 
-def test_engrams_hits_fail_open_and_parse(monkeypatch):
+def test_iirc_hits_fail_open_and_parse(monkeypatch):
     monkeypatch.setattr(quest.shutil, "which", lambda name: None)
-    assert quest.engrams_hits("anything") == []
-    monkeypatch.setattr(quest.shutil, "which", lambda name: "/x/engrams" if name == "engrams" else None)
+    assert quest.iirc_hits("anything") == []
+    monkeypatch.setattr(quest.shutil, "which", lambda name: "/x/iirc" if name == "iirc" else None)
     class P: stdout = 'embedding failed: x\n[{"filename": "a.md", "summary": "A"}, {"filename": "b.md", "summary": "B"}]\n'
     monkeypatch.setattr(quest.subprocess, "run", lambda *a, **k: P())
-    assert quest.engrams_hits("q") == ["`engrams read a.md` (A)", "`engrams read b.md` (B)"]
+    assert quest.iirc_hits("q") == ["`iirc read a.md` (A)", "`iirc read b.md` (B)"]
 
 
-def test_next_prints_engrams_nudge_after_a_document_state(tmp_path, monkeypatch, capsys):
+def test_next_prints_iirc_nudge_after_a_document_state(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", chore=True)
     quest.main([qid, "start"]); d = _at(qdir, qid); (d / "goal.md").write_text("# Goal\n"); quest.main([qid, "next"]); quest.main([qid, "accept"])
     (d / "plan.md").write_text("# Plan\n"); capsys.readouterr()
-    monkeypatch.setattr(quest.shutil, "which", lambda name: "/x/engrams" if name == "engrams" else None)
-    monkeypatch.setattr(quest, "engrams_hits", lambda q: [])
+    monkeypatch.setattr(quest.shutil, "which", lambda name: "/x/iirc" if name == "iirc" else None)
+    monkeypatch.setattr(quest, "iirc_hits", lambda q: [])
     quest.main([qid, "next"])
     out = capsys.readouterr().out
-    assert "engrams: what did you learn while planning on your own?" in out and "`engrams write`" in out and f"--ref docs/quests/active/{d.name}/plan.md" in out
+    assert "iirc: what did you learn while planning on your own?" in out and "`iirc write`" in out and f"--ref docs/quests/active/{d.name}/plan.md" in out
     quest.main([qid, "next"])
-    assert "engrams:" not in capsys.readouterr().out            # implement gets no write prompt
+    assert "iirc:" not in capsys.readouterr().out            # implement gets no write prompt
 
 
 def test_terminal_table_aligns():

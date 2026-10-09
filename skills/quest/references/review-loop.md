@@ -94,9 +94,9 @@ written as the command that produces it or with the commit it was
 taken at. A passage that narrates the document's own revisions is a
 Polish finding. Report; the session edits.
 
-An engram page is read with `engrams read NAME`, so it arrives with its
-trust markers; the file under `.engrams/` stays closed. A document that
-names an engram page is a Clarification finding: engrams cite documents,
+An iirc page is read with `iirc read NAME`, so it arrives with its
+trust markers; the file under `.iirc/` stays closed. A document that
+names an iirc page is a Clarification finding: iirc pages cite documents,
 a document cites the source the page cites.
 
 ## The diff pass
