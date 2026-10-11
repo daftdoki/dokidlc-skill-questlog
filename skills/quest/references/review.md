@@ -40,14 +40,8 @@ gap, fix it, commit, and show the fix.
 
 ## Release
 
-The creator's accept at evaluate goal authorizes each item under
-`## Release` in the document `document:` names, as written. Do the items
-in order, and tick each one as it is done; `quest ID` prints `release: N
-of M ticked`. An item that needs more than its words say goes to the
-creator. `quest ID next` refuses while an item is unticked and completes
-the quest once every item is ticked. An item the creator drops is
-written under Deviations from plan, and `quest ID next --confirmed` runs
-on their word.
+An item the creator drops is written under Deviations from plan, and
+`quest ID next --confirmed` runs on their word.
 
 ## Review
 
@@ -56,9 +50,7 @@ reviewer rules, and the record template are in `review-loop.md`, read
 before this section. The reviewer is `questlog:review-result` and the
 record is `result-review.md`. Evaluate goal runs the long loop and is a
 creator gate: run the loop before you ask the creator whether the goal
-is met, and put open Clarifications beside that question. The creator's
-`quest ID accept` enters release when the document has Release items,
-and completes the quest otherwise.
+is met, and put open Clarifications beside that question.
 
 Dispatch adds: the file `document:` names is the stage file, `plan.md`
 or a chore's `brief.md`, and the prompt names `quest.md` for the Done

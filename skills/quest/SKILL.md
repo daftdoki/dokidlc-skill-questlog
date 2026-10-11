@@ -48,8 +48,8 @@ before it and abandoned beside it. Research and design can be skipped,
 and each takes its review with it; every review state can be skipped,
 and skipping a creator gate is the creator accepting without a review;
 draft goal, plan, implement, evaluate goal, and release cannot. Release
-does the items under `## Release` in `plan.md` or `brief.md`: whatever
-publishes or reaches other people. Accept at evaluate goal enters
+does the items under `## Release` in `plan.md` or `brief.md`, the work
+that publishes or reaches other people. Accept at evaluate goal enters
 release when the document has Release items, and completes the quest
 when it has none.
 

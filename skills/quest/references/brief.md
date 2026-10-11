@@ -79,20 +79,8 @@ passing. Only items sit under Steps. When the creator accepts the brief,
 changes no step's words, and a step that must change is written under
 Deviations from plan.
 
-Release is a checklist of what publishes or reaches other people: a
-marketplace pin, update-plugins, installing for other projects, a
-deploy, a tag. Each is a `- [ ]` item, written like a step:
-
-```
-## Release
-
-- [ ] 1. Pin questlog in the marketplace at the commit whose CI passed.
-```
-
-Implement does the Steps only. The creator's accept at evaluate goal
-enters release, and the agent does each Release item then and ticks it.
-A document with nothing to publish leaves the section out, and accept
-completes the entry.
+`## Release` holds what publishes or reaches other people, as `- [ ]`
+items; write it as the Release paragraph of `references/plan.md` says.
 
 Out of scope names what the chore leaves alone.
 

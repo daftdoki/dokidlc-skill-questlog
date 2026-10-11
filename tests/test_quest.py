@@ -185,10 +185,11 @@ def test_new_log_show_end_to_end(tmp_path, monkeypatch, capsys):
     assert "guidance:" not in capsys.readouterr().out          # a finished entry
 
 
-def _fresh(tmp_path, monkeypatch, title="Build", chore=False):
+def _fresh(tmp_path, monkeypatch, title="Build", chore=False, brief=False):
+    """A quest; with chore=True a chore opened before the brief, which skips research and design and still writes goal.md and plan.md;
+    with brief=True a chore that writes brief.md."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    """A quest, or with chore=True a chore opened before the brief, which skips research and design and still writes goal.md and plan.md."""
-    quest.main(["new", title, "--chore" if chore else "--quest"])
+    quest.main(["new", title, "--chore" if chore or brief else "--quest"])
     qdir = tmp_path / "docs" / "quests"
     d, fm = quest.load_quests(qdir)[0]
     if chore:
@@ -1580,14 +1581,17 @@ def test_checklist_reads_the_release_section_apart(tmp_path):
     assert quest.release_items(tmp_path, fm) == [] and quest.release_items(tmp_path, {"kind": "task", "history": [quest.entry(STAMP, n, skipped=True) for n in quest.KIND_SKIPS["task"]]}) == []
 
 
-def _brief_chore_at_evaluate_goal(tmp_path, monkeypatch, capsys, text):
-    """A chore with a brief of `text`, its Steps ticked, at evaluate goal."""
-    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    quest.main(["new", "Fix", "--chore"])
-    qdir = tmp_path / "docs" / "quests"
-    qid = quest.load_quests(qdir)[0][1]["id"]
+def _brief_chore_at_implement(tmp_path, monkeypatch, text):
+    """A chore with a brief of `text`, accepted, at implement."""
+    qdir, d, qid = _fresh(tmp_path, monkeypatch, "Fix", brief=True)
     quest.main([qid, "start"]); d = _at(qdir, qid)
     (d / "brief.md").write_text(text); quest.main([qid, "next"]); quest.main([qid, "accept"])
+    return qdir, d, qid
+
+
+def _brief_chore_at_evaluate_goal(tmp_path, monkeypatch, capsys, text):
+    """A chore with a brief of `text`, its Steps ticked, at evaluate goal."""
+    qdir, d, qid = _brief_chore_at_implement(tmp_path, monkeypatch, text)
     (d / "brief.md").write_text(text.replace("- [ ] 1. Add", "- [x] 1. Add").replace("- [ ] 2.", "- [x] 2."))
     quest.main([qid, "next"]); quest.main([qid, "next"])
     assert _fm(d)["state"] == "evaluate goal"
@@ -1620,12 +1624,7 @@ def test_release_waits_for_every_item(tmp_path, monkeypatch, capsys):
 
 
 def test_implement_refuses_a_ticked_release_item(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    quest.main(["new", "Fix", "--chore"])
-    qdir = tmp_path / "docs" / "quests"
-    qid = quest.load_quests(qdir)[0][1]["id"]
-    quest.main([qid, "start"]); d = _at(qdir, qid)
-    (d / "brief.md").write_text(RELEASE_TEXT); quest.main([qid, "next"]); quest.main([qid, "accept"])
+    qdir, d, qid = _brief_chore_at_implement(tmp_path, monkeypatch, RELEASE_TEXT)
     (d / "brief.md").write_text(RELEASE_TEXT.replace("- [ ] ", "- [x] "))
     capsys.readouterr()
     for rest in ([], ["--confirmed"]):                                            # the creator's word to go on does not pass a published item

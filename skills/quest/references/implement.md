@@ -23,8 +23,7 @@ checklist; its section is at the end.
 
 Implement does the Steps only. The items under `## Release` publish or
 reach other people, and they wait for the release state, after the
-creator accepts the result. `quest ID next` refuses a ticked Release
-item at implement, even with `--confirmed`.
+creator accepts the result.
 
 ## Before you build
 
