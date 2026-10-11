@@ -90,7 +90,7 @@ STATES = (
           "Run the review-result loop into result-review.md, then ask the creator: is the goal met? On their word, run: quest {id} accept", creator=True),
     State("release", None, False, None, None, "review.md", "releasing",
           "Do each item under ## Release in plan.md, tick it, then run: quest {id} next",
-          applies=lambda d, fm: bool(release_items(d, fm)), absent="no Release section"),
+          applies=lambda d, fm: bool(release_items(d, fm)), absent="no Release items"),
 )
 BY_NAME = {s.name: s for s in STATES}
 # What each kind passes over, written into the history as skipped entries when the entry is shaped. The history is the record:

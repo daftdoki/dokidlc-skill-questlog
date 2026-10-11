@@ -1680,7 +1680,7 @@ def test_entry_without_release_completes_on_accept(tmp_path, monkeypatch, capsys
     quest.main([qid, "accept"])
     fm = _fm(_at(qdir, qid))
     assert fm["state"] == "completed"
-    assert [(e["state"], e.get("note")) for e in fm["history"] if e.get("skipped")][-1] == ("release", "no Release section")
+    assert [(e["state"], e.get("note")) for e in fm["history"] if e.get("skipped")][-1] == ("release", "no Release items")
 
 
 def test_release_applies_only_with_release_items_on_every_path(tmp_path, monkeypatch, capsys):
@@ -1691,7 +1691,15 @@ def test_release_applies_only_with_release_items_on_every_path(tmp_path, monkeyp
     assert "evaluate goal cannot be skipped" in capsys.readouterr().err
     quest.enter_next(tmp_path, d, _fm(d), quest.BY_NAME["evaluate goal"])
     fm = _fm(_at(qdir, qid))
-    assert fm["state"] == "completed" and [(e["state"], e.get("note")) for e in fm["history"] if e.get("skipped")][-1] == ("release", "no Release section")
+    assert fm["state"] == "completed" and [(e["state"], e.get("note")) for e in fm["history"] if e.get("skipped")][-1] == ("release", "no Release items")
+
+
+def test_release_section_of_prose_alone_completes_on_accept(tmp_path, monkeypatch, capsys):
+    text = BRIEF_TEXT.replace("## Out of scope", "## Release\n\nNothing to publish.\n\n## Out of scope")
+    qdir, d, qid = _brief_chore_at_evaluate_goal(tmp_path, monkeypatch, capsys, text)
+    quest.main([qid, "accept"])
+    fm = _fm(_at(qdir, qid))
+    assert fm["state"] == "completed" and [e.get("note") for e in fm["history"] if e["state"] == "release"] == ["no Release items"]
 
 
 def test_task_completes_on_accept(tmp_path, monkeypatch, capsys):
