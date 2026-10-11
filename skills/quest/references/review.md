@@ -1,6 +1,7 @@
 # Evaluate goal
 
-Read this when the quest reaches evaluate goal. If `quest ID` or `quest
+Read this when the quest reaches evaluate goal, and again at release.
+If `quest ID` or `quest
 ID start` printed an `overlay:` line, read that file next; it adds to
 this one and wins where they differ. The Review section at the end is
 the completion criterion for evaluate goal; read it before you present,
@@ -16,8 +17,9 @@ marked and the creator accepts.
 
 The creator reads the result against the quest's Done when and says
 whether the goal is met. You present the result, answer questions, and
-fix what the creator finds. The creator's `quest ID accept` completes
-the quest.
+fix what the creator finds. The creator's `quest ID accept` enters
+release when the document has items under `## Release`, and completes
+the quest when it has none.
 
 ## Presenting the result
 
@@ -36,6 +38,17 @@ show it beside the commits; `accept` refuses without it.
 Answer each question with the evidence, and where a question finds a
 gap, fix it, commit, and show the fix.
 
+## Release
+
+The creator's accept at evaluate goal authorizes each item under
+`## Release` in the document `document:` names, as written. Do the items
+in order, and tick each one as it is done; `quest ID` prints `release: N
+of M ticked`. An item that needs more than its words say goes to the
+creator. `quest ID next` refuses while an item is unticked and completes
+the quest once every item is ticked. An item the creator drops is
+written under Deviations from plan, and `quest ID next --confirmed` runs
+on their word.
+
 ## Review
 
 The loop, the tiers, the session's steps, the dispatch list, the
@@ -44,7 +57,8 @@ before this section. The reviewer is `questlog:review-result` and the
 record is `result-review.md`. Evaluate goal runs the long loop and is a
 creator gate: run the loop before you ask the creator whether the goal
 is met, and put open Clarifications beside that question. The creator's
-`quest ID accept` completes the quest.
+`quest ID accept` enters release when the document has Release items,
+and completes the quest otherwise.
 
 Dispatch adds: the file `document:` names is the stage file, `plan.md`
 or a chore's `brief.md`, and the prompt names `quest.md` for the Done

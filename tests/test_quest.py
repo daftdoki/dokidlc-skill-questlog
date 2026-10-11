@@ -1014,6 +1014,16 @@ def test_references_use_the_plain_names():
     assert "Are the steps clear?" in brief and "constraints research must respect" not in brief
 
 
+def test_references_carry_the_release_section():
+    """brief.md and plan.md show the Release section and fail a step that publishes; implement.md fails a commit that does a Release item."""
+    for reference in (quest.BRIEF, "plan.md"):
+        text = (REFERENCES / reference).read_text()
+        review = text[text.index("\n## Review\n"):]
+        assert "## Release" in text and "Release" in review, reference
+    implement = (REFERENCES / "implement.md").read_text()
+    assert "Release" in implement[implement.index("\n## Review\n"):]
+
+
 def test_review_sections_state_the_stop_rule():
     """The loop, the tiers, and the caps live once, in review-loop.md; each stage's Review section points at it and keeps its own names."""
     loop = (REFERENCES / "review-loop.md").read_text().lower()

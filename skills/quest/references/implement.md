@@ -21,6 +21,11 @@ checklist is in `plan.md` for a quest and in `brief.md` for a chore;
 for a quest, is the source of truth for what to build. A task has no
 checklist; its section is at the end.
 
+Implement does the Steps only. The items under `## Release` publish or
+reach other people, and they wait for the release state, after the
+creator accepts the result. `quest ID next` refuses a ticked Release
+item at implement, even with `--confirmed`.
+
 ## Before you build
 
 Read the document `document:` names and its Deviations from plan. `quest` recorded
@@ -114,9 +119,11 @@ Rubric for implement.
    passes. Fail: a test the plan promised is absent.
 3. Blocking. Every claim in Deviations from plan holds against the code. Fail: a
    Deviation says a helper was reused where the commit adds a new one.
-4. Clarification. Every document the plan promised is updated. Fail:
+4. Blocking. No commit in the range does a Release item. Fail: a
+   commit that moves a marketplace pin, or a Release item ticked.
+5. Clarification. Every document the plan promised is updated. Fail:
    the README section the plan named is unchanged.
-5. Clarification. Each deviation carries its date and reason, and the
+6. Clarification. Each deviation carries its date and reason, and the
    project's code review ran where the project has one. Fail: a
    Deviation with no date.
 

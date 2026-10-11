@@ -43,11 +43,15 @@ run on the creator's word too.
 
 One machine, in order: draft goal, review goal, research, review
 research, design, review design, plan, review plan, implement, review
-implementation, evaluate goal, then completed. Backlog sits before it
-and abandoned beside it. Research and design can be skipped, and each
-takes its review with it; every review state can be skipped, and
-skipping a creator gate is the creator accepting without a review;
-draft goal, plan, implement, and evaluate goal cannot.
+implementation, evaluate goal, release, then completed. Backlog sits
+before it and abandoned beside it. Research and design can be skipped,
+and each takes its review with it; every review state can be skipped,
+and skipping a creator gate is the creator accepting without a review;
+draft goal, plan, implement, evaluate goal, and release cannot. Release
+does the items under `## Release` in `plan.md` or `brief.md`: whatever
+publishes or reaches other people. Accept at evaluate goal enters
+release when the document has Release items, and completes the quest
+when it has none.
 
 An entry has one of four kinds, and the kind decides which states it
 passes over. The skips are written into its history when it is shaped.
@@ -56,7 +60,7 @@ passes over. The skips are written into its history when it is shaped.
 |---|---|---|---|
 | idea | a captured description, not yet shaped | none; it waits in the backlog | none |
 | task | a change that fits one sentence and about three files | implement, evaluate goal | none; the commits are the record |
-| chore | a Goal that fits two sentences and needs no design | draft goal, review goal, implement, review implementation, evaluate goal | `brief.md`: the goal and the steps |
+| chore | a Goal that fits two sentences and needs no design | draft goal, review goal, implement, review implementation, evaluate goal, release | `brief.md`: the goal and the steps |
 | quest | anything else | all | `goal.md`, `research.md`, `design.md`, `plan.md` |
 
 A chore's draft goal writes `brief.md` under `references/brief.md`, and
@@ -78,12 +82,13 @@ file either way.
 | implement | commits, deviations in `plan.md` | `references/implement.md` | | | agent |
 | review implementation | | `references/implement.md` | `questlog:review-implement` | `implement-review.md` | agent |
 | evaluate goal | the result, against Done when | `references/review.md` | `questlog:review-result` | `result-review.md` | creator |
+| release | the Release items, each ticked | `references/review.md` | | | agent |
 
 `quest ID` and `quest ID start` print `guidance:` with the reference to
 read first, `document:` with the absolute path of the file under
 review, `gate:` with who leaves the state, `reviewer:` and `record:` in
 a review state, `interview:` and `ready:` at the goal states,
-`checklist:` from implement on, and `overlay:` when the project has
+`checklist:` from implement on, `release:` at release, and `overlay:` when the project has
 `docs/quests/guidance/STAGE.md`, which is read second and wins where
 they differ.
 
@@ -93,8 +98,10 @@ The creator accepts the goal, and you run: research, its review,
 design, and you stop at review design. The creator accepts the design,
 and you run: plan, its review, implement, its review, and you stop at
 evaluate goal. For a chore, accepting the brief runs implement and its
-review. A task runs implement and stops at evaluate goal. A quest with research or design skipped runs the
-states that remain. Between gates you do not ask the creator whether
+review. A task runs implement and stops at evaluate goal. A quest with
+research or design skipped runs the states that remain. The creator
+accepts the result, and you run release when the document has Release
+items; then the entry is completed. Between gates you do not ask the creator whether
 to move on; the state line says `next` and you run it.
 
 The run pauses for four things and nothing else. The script wakes the
@@ -111,6 +118,10 @@ the creator with its evidence:
   numbered question, with a recommended answer.
 - An action outside the repository that cannot be undone: the command,
   shown and not run.
+
+The creator's accept at evaluate goal authorizes the Release items as
+written, so release runs without a pause. An item that needs more than
+its words say goes to the creator.
 
 ## A state
 
@@ -201,7 +212,8 @@ refuses an empty one.
   outgrows its shape goes to the creator: a task that needs steps is a
   chore, a chore that needs a decision between alternatives is a quest.
 - At implement, tick each step as its commit lands and leave its words
-  as accepted; `quest ID next` refuses an unticked or changed checklist.
+  as accepted; `quest ID next` refuses an unticked or changed checklist,
+  and a ticked Release item.
 - Picking an abandoned idea up again is a new quest with a new id.
 - If `quest` refuses with "newer questlog", tell the creator to update
   the plugin. If `quest doctor` reports stale ask rules, an older

@@ -16,9 +16,9 @@ every step names its files and its test.
 
 `plan.md` says what will happen during implementation, in order, before
 anything is built. The creator reads it and adjusts it first. It has
-these parts, in this order: What exists, Steps, Files touched, Commits
-expected, Tests, What could go wrong, Out of scope, and Deviations from plan, kept
-empty here and filled during implementation.
+these parts, in this order: What exists, Steps, Release, Files touched,
+Commits expected, Tests, What could go wrong, Out of scope, and
+Deviations from plan, kept empty here and filled during implementation.
 
 The plan turns the design's Implementation plan into steps. A chore
 writes no plan: its steps are in `brief.md`, and `brief.md` in these
@@ -60,6 +60,21 @@ Only items sit under Steps. When the quest enters implement, `quest`
 records each item; from then the implementer ticks a box and changes no
 step's words, and a step that must change is written under Deviations from plan.
 
+Release is a checklist of what publishes or reaches other people: a
+marketplace pin, update-plugins, installing for other projects, a
+deploy, a tag. Each is a `- [ ]` item, written like a step:
+
+```
+## Release
+
+- [ ] 1. Pin questlog in the marketplace at the commit whose CI passed.
+```
+
+Implement does the Steps only. The creator's accept at evaluate goal
+enters release, and the agent does each Release item then and ticks it.
+A document with nothing to publish leaves the section out, and accept
+completes the entry.
+
 Files touched is the full list, new and changed, so the creator sees the
 blast radius.
 
@@ -92,14 +107,16 @@ Rubric for plan.
    edits a function the code does not have and no step adds.
 3. Blocking. The steps cover every line of the quest's Done when. Fail:
    Done when names a document update no step touches.
-4. Clarification. Steps is a checklist: every step is a `- [ ]` item
+4. Blocking. No step publishes or reaches other people; that work is
+   a Release item. Fail: a step that moves a marketplace pin.
+5. Clarification. Steps is a checklist: every step is a `- [ ]` item
    that names its files and the test that proves it. Fail: a numbered
    list with no boxes, or "update the skill" with no file and no test.
-5. Clarification. Every risk under What could go wrong has a response.
+6. Clarification. Every risk under What could go wrong has a response.
    Fail: a risk with no check and no fallback.
-6. Clarification. For a quest, the commits match the design's
+7. Clarification. For a quest, the commits match the design's
    Implementation plan or the difference is named. Fail: four commits
    where the design listed two, unexplained.
-7. Clarification, belongs to design. An alternative weighed inside a
+8. Clarification, belongs to design. An alternative weighed inside a
    step. Fail, constructed: a step that reads "or, if that proves
    slow, a cache".

@@ -20,8 +20,8 @@ result will be judged, and the steps that build it. The creator reads it
 once, at review goal, and the implementer ticks its Steps. It has these
 parts, in this order: Goal, Background, Ready to start when, Questions
 and answers,
-How we will know it is done, Steps, Out of scope, and Deviations from plan, kept empty here
-and filled during implementation.
+How we will know it is done, Steps, Release, Out of scope, and
+Deviations from plan, kept empty here and filled during implementation.
 
 ## Before you write
 
@@ -79,6 +79,21 @@ passing. Only items sit under Steps. When the creator accepts the brief,
 changes no step's words, and a step that must change is written under
 Deviations from plan.
 
+Release is a checklist of what publishes or reaches other people: a
+marketplace pin, update-plugins, installing for other projects, a
+deploy, a tag. Each is a `- [ ]` item, written like a step:
+
+```
+## Release
+
+- [ ] 1. Pin questlog in the marketplace at the commit whose CI passed.
+```
+
+Implement does the Steps only. The creator's accept at evaluate goal
+enters release, and the agent does each Release item then and ticks it.
+A document with nothing to publish leaves the section out, and accept
+completes the entry.
+
 Out of scope names what the chore leaves alone.
 
 ## Review
@@ -102,11 +117,13 @@ finding at the row's tier, and the fail beside each row is an example.
    have and no step adds.
 4. Blocking. The steps cover every line of the Done when in `quest.md`.
    Fail: Done when names a document update no step touches.
-5. Clarification. Steps is a checklist: every step is a `- [ ]` item
+5. Blocking. No step publishes or reaches other people; that work is
+   a Release item. Fail: a step that moves a marketplace pin.
+6. Clarification. Steps is a checklist: every step is a `- [ ]` item
    that names its files and its test. Fail: a numbered list with no
    boxes, or "update the skill" with no file.
-6. Clarification. A hypothesis the chore turns on has its test and
+7. Clarification. A hypothesis the chore turns on has its test and
    result in Background. Fail: "if the hook can match the id" with no
    test run.
-7. Clarification. No decision between alternatives is left open. Fail:
+8. Clarification. No decision between alternatives is left open. Fail:
    a step that reads "pick a viewer".

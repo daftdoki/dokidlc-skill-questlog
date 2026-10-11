@@ -6,7 +6,7 @@
 """Quests and chores with staged review.
 
 A quest moves through one flat machine of states, from draft goal to
-evaluate goal. The agent writes each state's file and moves on; the creator
+evaluate goal and release. The agent writes each state's file and moves on; the creator
 reviews and moves on. Every quest or chore is a directory under
 docs/quests/STATE/, where STATE is active, backlog, completed, or abandoned,
 holding quest.md and its stage files; the verbs move the directory when the
@@ -135,7 +135,7 @@ USAGE = """Usage:
   quest ID notify [TEXT]         the state line, and a desktop notification where the platform has one
   quest ID defer                 back to the backlog; the state is kept
   quest ID next [--confirmed]    the current state is done; enter the next one; refuses at a creator gate
-  quest ID accept                the creator's word at review goal, review design, and evaluate goal
+  quest ID accept                the creator's word at review goal, review design, and evaluate goal; evaluate goal enters release when the document has Release items
   quest ID skip                  skip the current state; research and design take their review with them
   quest ID abandon "reason"      terminal; files stay, the entry leaves the log
 
