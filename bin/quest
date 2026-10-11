@@ -1312,6 +1312,9 @@ def cmd_next(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     file = file_for(s, fm)
     if file and not (d / file).is_file():
         die(f"{d.name}/{file} does not exist yet")
+    if s.name == "implement" and any(done for done, _ in release_items(d, fm)):     # before the checks --confirmed passes: a published item stays published
+        stop(fm, f"release: an item is ticked during implement\nimplement does the Steps only, and release runs after the creator accepts the result. "
+            f"Tell the creator which item ran; on their word, untick it, write it under Deviations from plan, then run: quest {fm['id']} next")
     rows = readiness_state(d, fm) if s.name == "draft goal" and not rest else None
     if rows and rows[2]:
         doc = file_for(s, fm) or ""
@@ -1324,6 +1327,11 @@ def cmd_next(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
         what = "; ".join(x for x in (f"{n - ticked} of {n} steps unticked" if ticked < n else "", f"{changed} changed since accepted" if changed else "") if x)
         stop(fm, f"checklist: {what}\ntick each step as its commit lands, and write a step that changed under Deviations from plan with the original restored; "
             f"a step that cannot be done goes to the creator, then run: quest {fm['id']} next --confirmed")
+    release = release_items(d, fm) if s.name == "release" and not rest else []
+    unticked = sum(1 for done, _ in release if not done)
+    if unticked:
+        stop(fm, f"release: {unticked} of {len(release)} items unticked\ndo each item and tick it; an item the creator drops goes to the creator, "
+            f"then run: quest {fm['id']} next --confirmed")
     if reviewer_for(s, fm) and not rest:
         verdict = last_verdict(d, record_for(s, fm))
         line = last_pass_line(d, s, fm)

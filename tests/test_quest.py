@@ -1594,6 +1594,37 @@ def test_accept_prints_the_release_section(tmp_path, monkeypatch, capsys):
     assert "- [ ] 1. Pin the plugin in the marketplace." in out and "release: 0 of 1 ticked" in out and "gate: agent" in out
 
 
+def test_release_waits_for_every_item(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _brief_chore_at_evaluate_goal(tmp_path, monkeypatch, capsys, RELEASE_TEXT)
+    quest.main([qid, "accept"]); d = _at(qdir, qid); capsys.readouterr()
+    with pytest.raises(SystemExit) as e:
+        quest.main([qid, "next"])
+    assert e.value.code == 1 and "release: 1 of 1 items unticked" in capsys.readouterr().err and _fm(d)["state"] == "release"
+    (d / "brief.md").write_text((d / "brief.md").read_text().replace("- [ ] 1. Pin", "- [x] 1. Pin"))
+    quest.main([qid]); assert "release: 1 of 1 ticked" in capsys.readouterr().out
+    quest.main([qid, "next"])
+    assert _fm(_at(qdir, qid))["state"] == "completed"
+    qdir2, d2, qid2 = _brief_chore_at_evaluate_goal(tmp_path / "second", monkeypatch, capsys, RELEASE_TEXT)
+    quest.main([qid2, "accept"]); quest.main([qid2, "next", "--confirmed"])         # the creator drops an item
+    assert _fm(_at(qdir2, qid2))["state"] == "completed"
+
+
+def test_implement_refuses_a_ticked_release_item(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    quest.main(["new", "Fix", "--chore"])
+    qdir = tmp_path / "docs" / "quests"
+    qid = quest.load_quests(qdir)[0][1]["id"]
+    quest.main([qid, "start"]); d = _at(qdir, qid)
+    (d / "brief.md").write_text(RELEASE_TEXT); quest.main([qid, "next"]); quest.main([qid, "accept"])
+    (d / "brief.md").write_text(RELEASE_TEXT.replace("- [ ] ", "- [x] "))
+    capsys.readouterr()
+    for rest in ([], ["--confirmed"]):                                            # the creator's word to go on does not pass a published item
+        with pytest.raises(SystemExit) as e:
+            quest.main([qid, "next", *rest])
+        assert e.value.code == 1 and "release: an item is ticked during implement" in capsys.readouterr().err
+    assert _fm(d)["state"] == "implement"
+
+
 def test_entry_without_release_completes_on_accept(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _brief_chore_at_evaluate_goal(tmp_path, monkeypatch, capsys, BRIEF_TEXT)
     quest.main([qid, "accept"])
