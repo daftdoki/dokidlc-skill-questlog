@@ -1031,24 +1031,34 @@ RELEASE_HEADING = "## Release"                           # what publishes or rea
 ITEM_RE = re.compile(r"^- \[([ xX])\] ")
 
 
+def section_lines(text: str, heading: str) -> list[str] | None:
+    """The lines under `heading`, to the next `## ` heading; None without the heading."""
+    lines = text.splitlines()
+    start = next((i for i, l in enumerate(lines) if l.strip() == heading), None)
+    if start is None:
+        return None
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+    return lines[start + 1:end]
+
+
+def section(text: str, heading: str) -> str:
+    """The heading line and the lines under it; "" without the heading."""
+    lines = section_lines(text, heading)
+    return "" if lines is None else "\n".join([heading, *lines]).rstrip()
+
+
 def checklist(text: str, heading: str = STEPS_HEADING) -> list[tuple[bool, str]]:
     """The items under `heading`, `## Steps` by default: (ticked, hash). An item is its `- [ ]` line and the indented or blank lines under it; the hash is of
     its words, so a rewrap or a tick leaves it and a changed word moves it."""
-    lines = text.splitlines()
-    try:
-        start = next(i for i, l in enumerate(lines) if l.strip() == heading) + 1
-    except StopIteration:
-        return []
-    end = next((i for i in range(start, len(lines)) if lines[i].startswith("## ")), len(lines))
-    items, block, ticked = [], None, False
+    items, block, checked = [], None, False
     def close():
         if block is not None:
-            items.append((ticked, hashlib.sha1(" ".join(" ".join(block).split()).encode()).hexdigest()[:10]))
-    for line in lines[start:end]:
+            items.append((checked, hashlib.sha1(" ".join(" ".join(block).split()).encode()).hexdigest()[:10]))
+    for line in section_lines(text, heading) or []:
         m = ITEM_RE.match(line)
         if m:
             close()
-            block, ticked = [line[m.end():]], m.group(1) != " "
+            block, checked = [line[m.end():]], m.group(1) != " "
         elif block is not None and (not line.strip() or line[0] in " \t"):
             block.append(line)
         else:
@@ -1058,21 +1068,21 @@ def checklist(text: str, heading: str = STEPS_HEADING) -> list[tuple[bool, str]]
     return items
 
 
+def ticked(items: list[tuple[bool, str]]) -> int:
+    return sum(1 for done, _ in items if done)
+
+
 READY_HEADING = "## Ready to start when"
 READY_WORDS = ("creator", "assumption", "nobody")        # who answered each question: the creator, an assumption the note states, nobody yet
 
 
 def open_questions(text: str) -> list[str] | None:
     """The questions under `## Ready to start when` by who answered them, as (question, word) pairs; None without the table."""
-    lines = text.splitlines()
-    try:
-        start = next(i for i, l in enumerate(lines) if l.strip() == READY_HEADING) + 1
-    except StopIteration:
+    lines = section_lines(text, READY_HEADING)
+    if lines is None:
         return None
     rows = []
-    for line in lines[start:]:
-        if line.startswith("## "):
-            break
+    for line in lines:
         if not line.lstrip().startswith("|"):
             continue
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
@@ -1100,32 +1110,50 @@ def readiness_state(d: Path, fm: dict) -> tuple[int, int, int] | None:
     return readiness((d / doc).read_text()) if doc and (d / doc).is_file() else None
 
 
-def section(text: str, heading: str) -> str:
-    """The heading line and the lines under it, to the next `## ` heading; "" without the heading."""
-    lines = text.splitlines()
-    start = next((i for i, l in enumerate(lines) if l.strip() == heading), None)
-    if start is None:
-        return ""
-    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
-    return "\n".join(lines[start:end]).rstrip()
+def checklist_text(d: Path, fm: dict) -> str:
+    """The text of the document that holds the Steps and Release checklists, plan.md or brief.md; "" for a task or a missing file."""
+    doc = document_for(BY_NAME["implement"], fm)
+    return (d / doc).read_text() if doc and (d / doc).is_file() else ""
 
 
 def release_items(d: Path, fm: dict) -> list[tuple[bool, str]]:
     """The items under `## Release` in the entry's plan.md or brief.md; [] without the document or the section."""
-    doc = document_for(BY_NAME["implement"], fm)
-    return checklist((d / doc).read_text(), RELEASE_HEADING) if doc and (d / doc).is_file() else []
+    return checklist(checklist_text(d, fm), RELEASE_HEADING)
 
 
-def checklist_state(d: Path, fm: dict) -> tuple[int, int, int] | None:
-    """(ticked, items, changed since recorded) for an entry whose checklist was recorded on entering implement; None otherwise.
-    Changed counts the recorded hashes the document no longer holds and the new ones it gained."""
+def checklist_state(fm: dict, text: str) -> tuple[int, int, int] | None:
+    """(ticked, items, changed since recorded) of the Steps in `text` for an entry whose checklist was recorded on entering implement;
+    None otherwise. Changed counts the recorded hashes the document no longer holds and the new ones it gained."""
     recorded = fm.get("checklist")
-    doc = document_for(BY_NAME["implement"], fm)
-    if not recorded or not doc or not (d / doc).is_file():
+    if not recorded or not text:
         return None
-    items = checklist((d / doc).read_text())
-    now = [h for _, h in items]
-    return sum(1 for done, _ in items if done), len(items), len(set(recorded) ^ set(now))
+    items = checklist(text)
+    return ticked(items), len(items), len(set(recorded) ^ {h for _, h in items})
+
+
+# The state whose `next` waits on a checklist: (heading, the line's label, the noun counted, what to do).
+CHECKLIST_AT = {
+    "implement": (STEPS_HEADING, "checklist", "steps", "tick each step as its commit lands, and write a step that changed under Deviations from plan "
+                  "with the original restored; a step that cannot be done goes to the creator"),
+    "release": (RELEASE_HEADING, "release", "items", "do each item and tick it; an item the creator drops goes to the creator"),
+}
+
+
+def checklist_refusal(s: State, fm: dict, text: str) -> str | None:
+    """Why `next` at implement or release refuses: unticked items, or for the Steps a changed one; None when the checklist is done."""
+    if s.name not in CHECKLIST_AT:
+        return None
+    heading, label, noun, todo = CHECKLIST_AT[s.name]
+    if heading == STEPS_HEADING:
+        state = checklist_state(fm, text)
+        if not state:
+            return None
+        done, n, changed = state
+    else:
+        items = checklist(text, heading)
+        done, n, changed = ticked(items), len(items), 0
+    what = "; ".join(x for x in (f"{n - done} of {n} {noun} unticked" if done < n else "", f"{changed} changed since accepted" if changed else "") if x)
+    return f"{label}: {what}\n{todo}, then run: quest {fm['id']} next --confirmed" if what else None
 
 
 def print_guidance(fm: dict, root: Path, d: Path) -> None:
@@ -1145,12 +1173,15 @@ def print_guidance(fm: dict, root: Path, d: Path) -> None:
     if reviewer_for(s, fm):
         print(f"reviewer: questlog:{s.reviewer}")
         print(f"record: {record_for(s, fm)}")
-    steps = checklist_state(d, fm)
+    text = checklist_text(d, fm)
+    steps = checklist_state(fm, text)
     if steps:
         print(f"checklist: {steps[0]} of {steps[1]} ticked" + (f", {steps[2]} changed since accepted" if steps[2] else ""))
     if s.name == "release":
-        items = release_items(d, fm)
-        print(f"release: {sum(1 for done, _ in items if done)} of {len(items)} ticked")
+        items = checklist(text, RELEASE_HEADING)
+        print(f"release: {ticked(items)} of {len(items)} ticked")
+        if items:
+            print(section(text, RELEASE_HEADING))
     if s.name in ("draft goal", "review goal") and fm.get("interview"):
         print(f"interview: {fm['interview']}")
     rows = readiness_state(d, fm)
@@ -1315,7 +1346,8 @@ def cmd_next(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     file = file_for(s, fm)
     if file and not (d / file).is_file():
         die(f"{d.name}/{file} does not exist yet")
-    if s.name == "implement" and any(done for done, _ in release_items(d, fm)):     # before the checks --confirmed passes: a published item stays published
+    text = checklist_text(d, fm)
+    if s.name == "implement" and ticked(checklist(text, RELEASE_HEADING)):     # before the checks --confirmed passes: a published item stays published
         stop(fm, f"release: an item is ticked during implement\nimplement does the Steps only, and release runs after the creator accepts the result. "
             f"Tell the creator which item ran; on their word, untick it, write it under Deviations from plan, then run: quest {fm['id']} next")
     rows = readiness_state(d, fm) if s.name == "draft goal" and not rest else None
@@ -1324,17 +1356,9 @@ def cmd_next(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
         named = "; ".join(q for q, w in open_questions((d / doc).read_text()) or [] if w == "nobody")
         stop(fm, f"ready to start when: {rows[2]} {'question' if rows[2] == 1 else 'questions'} answered by nobody: {named}\nask the creator, or write the "
             f"assumption in the note and mark it answered by assumption, then run next; on the creator's word to go without: quest {fm['id']} next --confirmed")
-    steps = checklist_state(d, fm) if s.name == "implement" and not rest else None
-    if steps and (steps[0] < steps[1] or steps[2]):
-        ticked, n, changed = steps
-        what = "; ".join(x for x in (f"{n - ticked} of {n} steps unticked" if ticked < n else "", f"{changed} changed since accepted" if changed else "") if x)
-        stop(fm, f"checklist: {what}\ntick each step as its commit lands, and write a step that changed under Deviations from plan with the original restored; "
-            f"a step that cannot be done goes to the creator, then run: quest {fm['id']} next --confirmed")
-    release = release_items(d, fm) if s.name == "release" and not rest else []
-    unticked = sum(1 for done, _ in release if not done)
-    if unticked:
-        stop(fm, f"release: {unticked} of {len(release)} items unticked\ndo each item and tick it; an item the creator drops goes to the creator, "
-            f"then run: quest {fm['id']} next --confirmed")
+    refusal = checklist_refusal(s, fm, text) if not rest else None
+    if refusal:
+        stop(fm, refusal)
     if reviewer_for(s, fm) and not rest:
         verdict = last_verdict(d, record_for(s, fm))
         line = last_pass_line(d, s, fm)
@@ -1403,10 +1427,8 @@ def accepted_steps(d: Path, fm: dict, nxt: str) -> dict:
     From here the implementer ticks them, and a changed step is a Deviation. `fm` carries the history the entry will have."""
     if nxt != "implement":
         return {}
-    doc = document_for(BY_NAME[nxt], fm)
-    if not doc or not (d / doc).is_file():
-        return {}
-    return {"checklist": [h for _, h in checklist((d / doc).read_text())] or None}
+    text = checklist_text(d, fm)
+    return {"checklist": [h for _, h in checklist(text)] or None} if text else {}
 
 
 def advance(d: Path, fm: dict, name: str, at: str | None = None) -> tuple[list[dict], str]:
@@ -1428,8 +1450,6 @@ def enter_next(root: Path, d: Path, fm: dict, s: State) -> None:
     d = move_entry(quests_dir(root), d, fm)
     write_log(root)
     print(say(fm))
-    if nxt == "release":
-        print(section((d / document_for(BY_NAME[nxt], fm)).read_text(), RELEASE_HEADING))
     print_guidance(fm, root, d)
     if nxt in BY_NAME and BY_NAME[nxt].creator and s.name != "draft goal":
         notify_desktop(f"quest {fm['id']}", say(fm))     # a gate reached by the run; draft goal to review goal is the agent's own move

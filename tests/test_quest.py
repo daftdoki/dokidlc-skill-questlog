@@ -1635,6 +1635,16 @@ def test_implement_refuses_a_ticked_release_item(tmp_path, monkeypatch, capsys):
     assert _fm(d)["state"] == "implement"
 
 
+def test_show_at_release_prints_the_section_and_survives_a_missing_document(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _brief_chore_at_evaluate_goal(tmp_path, monkeypatch, capsys, RELEASE_TEXT)
+    quest.main([qid, "accept"]); d = _at(qdir, qid); capsys.readouterr()
+    quest.main([qid])
+    assert "- [ ] 1. Pin the plugin in the marketplace." in capsys.readouterr().out
+    (d / "brief.md").unlink()
+    quest.main([qid])
+    assert "release: 0 of 0 ticked" in capsys.readouterr().out
+
+
 def test_entry_without_release_completes_on_accept(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _brief_chore_at_evaluate_goal(tmp_path, monkeypatch, capsys, BRIEF_TEXT)
     quest.main([qid, "accept"])
