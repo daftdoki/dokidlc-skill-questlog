@@ -61,6 +61,8 @@ class State:
     say: str              # printed after "ID is at NAME. "; {id} and {next} are filled
     nudge: bool = False   # print the iirc write prompt on entry
     creator: bool = False # a creator gate: only `accept`, on the creator's word, leaves it; `next` refuses
+    applies: Callable[[Path, dict], bool] | None = None   # (entry dir, frontmatter) -> whether the state has work; None is always
+    absent: str = ""      # the note on the skipped entry written when `applies` says no
 
 
 STATES = (
@@ -87,7 +89,8 @@ STATES = (
     State("evaluate goal", None, False, "review-result", "result-review.md", "review.md", "evaluating the goal",
           "Run the review-result loop into result-review.md, then ask the creator: is the goal met? On their word, run: quest {id} accept", creator=True),
     State("release", None, False, None, None, "review.md", "releasing",
-          "Do each item under ## Release in plan.md, tick it, then run: quest {id} next"),
+          "Do each item under ## Release in plan.md, tick it, then run: quest {id} next",
+          applies=lambda d, fm: bool(release_items(d, fm)), absent="no Release section"),
 )
 BY_NAME = {s.name: s for s in STATES}
 # What each kind passes over, written into the history as skipped entries when the entry is shaped. The history is the record:
@@ -1392,8 +1395,6 @@ def cmd_accept(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     line = last_pass_line(d, s, fm)
     if line:
         print(line)
-    if s.name == "evaluate goal" and "release" not in skipped(fm) and not release_items(d, fm):
-        fm = {**fm, "history": append_history(fm, "release", skipped=True, note="no Release section")}     # nothing to publish: accept completes
     enter_next(root, d, fm, s)
 
 
@@ -1408,8 +1409,19 @@ def accepted_steps(d: Path, fm: dict, nxt: str) -> dict:
     return {"checklist": [h for _, h in checklist((d / doc).read_text())] or None}
 
 
+def advance(d: Path, fm: dict, name: str, at: str | None = None) -> tuple[list[dict], str]:
+    """The history and the state after `name`, passing over each state whose `applies` says it has no work, with a skipped entry."""
+    history = fm.get("history") or []
+    nxt = successor(fm, name)
+    while nxt in BY_NAME and BY_NAME[nxt].applies and not BY_NAME[nxt].applies(d, {**fm, "history": history}):
+        history = append_history({"history": history}, nxt, skipped=True, note=BY_NAME[nxt].absent, at=at)
+        nxt = successor({"history": history}, nxt)
+    return history, nxt
+
+
 def enter_next(root: Path, d: Path, fm: dict, s: State) -> None:
-    nxt = successor(fm, s.name)
+    history, nxt = advance(d, fm, s.name)
+    fm = {**fm, "history": history}
     # the page is written first and the directory follows it: an interruption between the two leaves a page whose
     # state names one bucket while it sits in another, which the doctor's placement row names and --fix moves
     fm = update_quest(d, {"state": nxt, "history": append_history(fm, nxt), **accepted_steps(d, fm, nxt)})
@@ -1434,7 +1446,7 @@ def cmd_skip(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     history = append_history(fm, s.name, skipped=True, at=at)
     if s.name in REVIEW_OF:
         history = append_history({"history": history}, REVIEW_OF[s.name], skipped=True, at=at)
-    nxt = successor({"history": history}, s.name)
+    history, nxt = advance(d, {**fm, "history": history}, s.name, at)
     history = append_history({"history": history}, nxt, at=at)
     fm = update_quest(d, {"state": nxt, "history": history, **accepted_steps(d, {**fm, "history": history}, nxt)})
     move_entry(quests_dir(root), d, fm)

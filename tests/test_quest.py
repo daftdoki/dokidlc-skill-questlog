@@ -1643,6 +1643,17 @@ def test_entry_without_release_completes_on_accept(tmp_path, monkeypatch, capsys
     assert [(e["state"], e.get("note")) for e in fm["history"] if e.get("skipped")][-1] == ("release", "no Release section")
 
 
+def test_release_applies_only_with_release_items_on_every_path(tmp_path, monkeypatch, capsys):
+    """The rule lives on the state: any move past evaluate goal passes over an empty release. Skip at evaluate goal still refuses."""
+    qdir, d, qid = _brief_chore_at_evaluate_goal(tmp_path, monkeypatch, capsys, BRIEF_TEXT)
+    with pytest.raises(SystemExit):
+        quest.main([qid, "skip"])
+    assert "evaluate goal cannot be skipped" in capsys.readouterr().err
+    quest.enter_next(tmp_path, d, _fm(d), quest.BY_NAME["evaluate goal"])
+    fm = _fm(_at(qdir, qid))
+    assert fm["state"] == "completed" and [(e["state"], e.get("note")) for e in fm["history"] if e.get("skipped")][-1] == ("release", "no Release section")
+
+
 def test_task_completes_on_accept(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     quest.main(["new", "Fix the typo", "--task"])
