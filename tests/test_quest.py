@@ -1025,6 +1025,12 @@ def test_references_carry_the_release_section():
     assert "Release" in implement[implement.index("\n## Review\n"):]
 
 
+def test_manifest_counts_the_states():
+    words = {11: "eleven", 12: "twelve", 13: "thirteen"}
+    description = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())["description"]
+    assert f"{words[len(quest.STATES)]} states from {quest.STATES[0].name} to {quest.STATES[-1].name}" in description
+
+
 def test_review_sections_state_the_stop_rule():
     """The loop, the tiers, and the caps live once, in review-loop.md; each stage's Review section points at it and keeps its own names."""
     loop = (REFERENCES / "review-loop.md").read_text().lower()
