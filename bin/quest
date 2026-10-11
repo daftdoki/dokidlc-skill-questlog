@@ -1347,6 +1347,8 @@ def cmd_next(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     if file and not (d / file).is_file():
         die(f"{d.name}/{file} does not exist yet")
     text = checklist_text(d, fm)
+    if s.name == "release" and not text:
+        die(f"{d.name}/{document_for(s, fm)} does not exist or is empty; the Release items are in it")
     refuse_early_release(s, fm, text)               # before the checks --confirmed passes: a published item stays published
     rows = readiness_state(d, fm) if s.name == "draft goal" and not rest else None
     if rows and rows[2]:

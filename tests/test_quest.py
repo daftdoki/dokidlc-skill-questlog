@@ -1661,6 +1661,14 @@ def test_a_release_item_ticked_before_accept_is_refused_at_every_state(tmp_path,
     assert _fm(d2)["state"] == "review implementation"
 
 
+def test_next_at_release_refuses_without_the_document(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _brief_chore_at_evaluate_goal(tmp_path, monkeypatch, capsys, RELEASE_TEXT)
+    quest.main([qid, "accept"]); d = _at(qdir, qid); (d / "brief.md").unlink(); capsys.readouterr()
+    with pytest.raises(SystemExit):
+        quest.main([qid, "next"])
+    assert "brief.md does not exist" in capsys.readouterr().err and _fm(d)["state"] == "release"
+
+
 def test_entry_without_release_completes_on_accept(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _brief_chore_at_evaluate_goal(tmp_path, monkeypatch, capsys, BRIEF_TEXT)
     quest.main([qid, "accept"])
