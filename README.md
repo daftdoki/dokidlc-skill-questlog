@@ -2,14 +2,16 @@
 
 A Claude Code plugin that tracks your agent's work as ideas, tasks, chores, and quests, with you deciding at the goal, the design, and the result.
 
-A quest moves through one flat machine of states, from draft goal to evaluate goal. The agent writes each state's document, reviews it, and runs the states between your three gates; at a gate you read, you iterate together, and the quest moves on when you say so. Each quest is a directory under `docs/quests/active/`, `backlog/`, `completed/`, or `abandoned/`, holding a `quest.md` and its stage files. The directory moves when the state changes, so a file listing shows what is active, and the quest log at `docs/quests/README.md` lists what is open, one line each.
+A quest moves through one flat machine of states, from draft goal to release. The agent writes each state's document, reviews it, and runs the states between your three gates; at a gate you read, you iterate together, and the quest moves on when you say so. Each quest is a directory under `docs/quests/active/`, `backlog/`, `completed/`, or `abandoned/`, holding a `quest.md` and its stage files. The directory moves when the state changes, so a file listing shows what is active, and the quest log at `docs/quests/README.md` lists what is open, one line each.
 
 Work is captured first and shaped later. `quest new "Title"` records an idea in one line and asks nothing. When you start it you give it one of three sizes. A task is a change that fits one sentence: no document, no reviewer, the tests are the review. A chore is a bug fix, a small addition, a bit of upkeep: one document, the brief, which holds the goal and a checklist of steps. A quest is a feature, a redesign, an investigation: goal, research, design, and plan. All get an identifier, a directory, and a place in the log; they differ in which states they pass through. In a quest, research and design can be skipped, and each takes its review with it.
 
 ```
 draft goal -> review goal -> research -> review research -> design -> review design
-  -> plan -> review plan -> implement -> review implementation -> evaluate goal -> completed
+  -> plan -> review plan -> implement -> review implementation -> evaluate goal -> release -> completed
 ```
+
+Release runs the items under `## Release` in the plan or brief, such as a marketplace pin or a tag, only after you accept the result. With no Release items, your accept completes the entry.
 
 With the plugin enabled, the agent tells you what is open at the start of every session, reads a quest before working on it, writes the stage documents, and runs the states between your gates on its own. You decide at three gates: the goal, the design, and the result. Before you see a document it has already run a fresh-context reviewer over it and fixed what that found. It will not open, start, park, accept, skip, or abandon anything by itself. Those happen only when you ask, and the agent shows you the command before it runs it.
 
@@ -68,7 +70,7 @@ Talk to the agent. Every command prints one line saying where the quest is and w
 - "Start the mDNS quest." `quest 2609051012-k3 start`. The quest is at draft goal.
 - "Draft the goal." The agent interviews you, writes `goal.md`, runs `quest 2609051012-k3 next`, runs the review loop, and asks: move on to researching?
 - "Change the second story." The agent revises, runs the loop again, and asks again, as many times as it takes.
-- "Move on." The agent shows and runs `quest 2609051012-k3 accept`, then runs research, its review, and design on its own and stops at review design. After you accept the design it runs plan, its review, implement, and its review, and stops at evaluate goal. From there, accept completes the quest. It pauses in between only for a Blocking finding it could not fix, a deviation that touches Done when, a question only you can answer, or an irreversible action outside the repository.
+- "Move on." The agent shows and runs `quest 2609051012-k3 accept`, then runs research, its review, and design on its own and stops at review design. After you accept the design it runs plan, its review, implement, and its review, and stops at evaluate goal. From there, your accept starts release, where the agent does the Release items and ticks each one; with no Release items, accept completes the quest. It pauses in between only for a Blocking finding it could not fix, a deviation that touches Done when, a question only you can answer, or an irreversible action outside the repository.
 - "Skip research on this one." `quest 2609051012-k3 skip`; review research goes with it.
 - "Park the mDNS quest." `quest 2609051012-k3 defer`. The log shows `backlog, resume at review plan`, and `start` picks it up there.
 - "Abandon it, we're going with the bridge's own discovery." `quest 2609051012-k3 abandon "reason"`.
@@ -88,7 +90,7 @@ quest 2609051012-k3 start [--task [--prototype] | --chore | --quest [--define|--
 quest 2609051012-k3 notify [TEXT]           the state line, and a desktop notification where the platform has one
 quest 2609051012-k3 defer                   back to the backlog; the state is kept
 quest 2609051012-k3 next [--confirmed]      the current state is done; enter the next one; refuses at a gate
-quest 2609051012-k3 accept                  your word at review goal, review design, and evaluate goal
+quest 2609051012-k3 accept                  your word at review goal, review design, and evaluate goal; evaluate goal enters release when there are Release items
 quest 2609051012-k3 skip                    skip the current state
 quest 2609051012-k3 abandon "reason"        terminal; files stay, the entry leaves the log
 ```

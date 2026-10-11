@@ -7,7 +7,7 @@ docs/quests/
   README.md                          the quest log, generated
   guidance/                          optional; your project's own rules per state
     research.md  design.md
-  active/                            every quest at a machine state, draft goal through evaluate goal
+  active/                            every quest at a machine state, draft goal through release
     2609051012-k3-discover-the-bridge/
       quest.md                       metadata, history, and the goal, owned by the verbs
       goal.md  research.md  design.md  plan.md      a quest's documents, written by the agent, read by you
@@ -21,7 +21,8 @@ docs/quests/
 ```
 
 A verb that changes the state moves the directory: `start` from
-`backlog/` to `active/`, `defer` back, the last `next` to `completed/`,
+`backlog/` to `active/`, `defer` back, the last `next`, or `accept` at
+evaluate goal when the document has no Release items, to `completed/`,
 `abandon` to `abandoned/`. Each of the four directories appears the first
 time something lands in it. `ls docs/quests/active` is the shortest
 answer to "what is going on".
@@ -156,7 +157,8 @@ verdict, and the session and the reviewer judge the rest.
 | review plan | grade the plan against the design and the code | the plan, the rubric, the design, the code | `plan-review.md` | one pass, Blocking fixed, Clarifications answered and recorded; checklist hashes recorded | agent |
 | implement | work the checklist; what to build belongs to the plan or the brief | the checklist, the code | commits, ticks, deviations | every box ticked, suite passing | agent |
 | review implementation | commits against steps | the checklist, the commits, the suite | `implement-review.md` | the loop converges or three passes are spent | agent |
-| evaluate goal | the result against Done when, the docs, the tree; fixing belongs to implement | `quest.md`, the goal or brief, the checklist, the commits | `result-review.md`, the Done when table | every line met or marked, and the creator accepts | creator: `accept` |
+| evaluate goal | the result against Done when, the docs, the tree; fixing belongs to implement | `quest.md`, the goal or brief, the checklist, the commits | `result-review.md`, the Done when table | every line met or marked, and the creator accepts; accept enters release when the document has Release items, else completes | creator: `accept` |
+| release | do what publishes or reaches other people, on the creator's accept; skipped when the document has no Release items | the items under `## Release` in `plan.md` or `brief.md` | ticks | every Release item ticked | agent |
 
 ## Migrating from an older format
 
