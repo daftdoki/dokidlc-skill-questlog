@@ -1555,6 +1555,21 @@ def test_checklist_reads_the_steps_section_only():
     assert quest.checklist("# Plan\n\n1. a step\n") == []
 
 
+RELEASE_TEXT = BRIEF_TEXT.replace("## Out of scope", "## Release\n\n- [ ] 1. Pin the plugin in the marketplace.\n\n## Out of scope")
+
+
+def test_checklist_reads_the_release_section_apart(tmp_path):
+    steps = quest.checklist(RELEASE_TEXT)
+    release = quest.checklist(RELEASE_TEXT, "## Release")
+    assert quest.RELEASE_HEADING == "## Release" and len(steps) == 2 and len(release) == 1 and release[0][0] is False
+    assert [h for _, h in steps] == [h for _, h in quest.checklist(BRIEF_TEXT)]     # the Release section moves no Steps hash
+    fm = {"kind": "chore", "history": [quest.entry(STAMP, n, skipped=True) for n in quest.KIND_SKIPS["chore"]]}
+    (tmp_path / "brief.md").write_text(RELEASE_TEXT)
+    assert quest.release_items(tmp_path, fm) == release
+    (tmp_path / "brief.md").write_text(BRIEF_TEXT)
+    assert quest.release_items(tmp_path, fm) == [] and quest.release_items(tmp_path, {"kind": "task", "history": [quest.entry(STAMP, n, skipped=True) for n in quest.KIND_SKIPS["task"]]}) == []
+
+
 def test_chore_writes_one_brief_and_ticks_its_checklist(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     quest.main(["new", "Fix", "--chore"])

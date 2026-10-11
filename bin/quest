@@ -1022,15 +1022,16 @@ def document_for(s: State, fm: dict) -> str | None:
 
 
 STEPS_HEADING = "## Steps"
+RELEASE_HEADING = "## Release"                           # what publishes or reaches other people: done after the creator accepts the result
 ITEM_RE = re.compile(r"^- \[([ xX])\] ")
 
 
-def checklist(text: str) -> list[tuple[bool, str]]:
-    """The items under `## Steps`: (ticked, hash). An item is its `- [ ]` line and the indented or blank lines under it; the hash is of
+def checklist(text: str, heading: str = STEPS_HEADING) -> list[tuple[bool, str]]:
+    """The items under `heading`, `## Steps` by default: (ticked, hash). An item is its `- [ ]` line and the indented or blank lines under it; the hash is of
     its words, so a rewrap or a tick leaves it and a changed word moves it."""
     lines = text.splitlines()
     try:
-        start = next(i for i, l in enumerate(lines) if l.strip() == STEPS_HEADING) + 1
+        start = next(i for i, l in enumerate(lines) if l.strip() == heading) + 1
     except StopIteration:
         return []
     end = next((i for i in range(start, len(lines)) if lines[i].startswith("## ")), len(lines))
@@ -1092,6 +1093,12 @@ def readiness_state(d: Path, fm: dict) -> tuple[int, int, int] | None:
         return None
     doc = file_for(BY_NAME["draft goal"], fm)
     return readiness((d / doc).read_text()) if doc and (d / doc).is_file() else None
+
+
+def release_items(d: Path, fm: dict) -> list[tuple[bool, str]]:
+    """The items under `## Release` in the entry's plan.md or brief.md; [] without the document or the section."""
+    doc = document_for(BY_NAME["implement"], fm)
+    return checklist((d / doc).read_text(), RELEASE_HEADING) if doc and (d / doc).is_file() else []
 
 
 def checklist_state(d: Path, fm: dict) -> tuple[int, int, int] | None:
