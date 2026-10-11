@@ -1347,9 +1347,7 @@ def cmd_next(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     if file and not (d / file).is_file():
         die(f"{d.name}/{file} does not exist yet")
     text = checklist_text(d, fm)
-    if s.name == "implement" and ticked(checklist(text, RELEASE_HEADING)):     # before the checks --confirmed passes: a published item stays published
-        stop(fm, f"release: an item is ticked during implement\nimplement does the Steps only, and release runs after the creator accepts the result. "
-            f"Tell the creator which item ran; on their word, untick it, write it under Deviations from plan, then run: quest {fm['id']} next")
+    refuse_early_release(s, fm, text)               # before the checks --confirmed passes: a published item stays published
     rows = readiness_state(d, fm) if s.name == "draft goal" and not rest else None
     if rows and rows[2]:
         doc = file_for(s, fm) or ""
@@ -1408,6 +1406,16 @@ def cmd_notify(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     notify_desktop(f"quest {fm['id']}", text)
 
 
+BEFORE_RELEASE = tuple(s.name for s in STATES[STATES.index(BY_NAME["implement"]):STATES.index(BY_NAME["release"])])
+
+
+def refuse_early_release(s: State, fm: dict, text: str) -> None:
+    """Stop when a Release item is ticked from implement through evaluate goal: release runs only after the creator accepts the result."""
+    if s.name in BEFORE_RELEASE and ticked(checklist(text, RELEASE_HEADING)):
+        stop(fm, f"release: an item is ticked during {s.name}\nimplement does the Steps only, and release runs after the creator accepts the result. "
+            f"Tell the creator which item ran; on their word, untick it, write it under Deviations from plan, then run: quest {fm['id']} {'accept' if s.creator else 'next'}")
+
+
 def cmd_accept(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     """The creator's word at a creator gate. The verdict is printed and not enforced: the creator decides."""
     no_args(rest, "accept")
@@ -1416,6 +1424,7 @@ def cmd_accept(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
         die(f"{fm['id']} is at {s.name}, the agent's gate; run: quest {fm['id']} next")
     if s.name == "evaluate goal" and fm.get("prototype") and not learned(d):
         die(f"{fm['id']} is a prototype; write what was learned under {LEARNED} in quest.md before the creator accepts")
+    refuse_early_release(s, fm, checklist_text(d, fm))
     line = last_pass_line(d, s, fm)
     if line:
         print(line)

@@ -1644,6 +1644,23 @@ def test_show_at_release_prints_the_section_and_survives_a_missing_document(tmp_
     assert "release: 0 of 0 ticked" in capsys.readouterr().out
 
 
+def test_a_release_item_ticked_before_accept_is_refused_at_every_state(tmp_path, monkeypatch, capsys):
+    tick = lambda d: (d / "brief.md").write_text((d / "brief.md").read_text().replace("- [ ] 1. Pin", "- [x] 1. Pin"))
+    qdir, d, qid = _brief_chore_at_evaluate_goal(tmp_path, monkeypatch, capsys, RELEASE_TEXT)
+    tick(d)
+    with pytest.raises(SystemExit):                                               # at evaluate goal, accept refuses
+        quest.main([qid, "accept"])
+    assert "release: an item is ticked during evaluate goal" in capsys.readouterr().err and _fm(d)["state"] == "evaluate goal"
+    qdir2, d2, qid2 = _brief_chore_at_implement(tmp_path / "second", monkeypatch, RELEASE_TEXT)
+    (d2 / "brief.md").write_text(RELEASE_TEXT.replace("- [ ] 1. Add", "- [x] 1. Add").replace("- [ ] 2.", "- [x] 2."))
+    quest.main([qid2, "next"]); tick(d2); capsys.readouterr()
+    for rest in ([], ["--confirmed"]):                                            # at review implementation, next refuses
+        with pytest.raises(SystemExit):
+            quest.main([qid2, "next", *rest])
+        assert "release: an item is ticked during review implementation" in capsys.readouterr().err
+    assert _fm(d2)["state"] == "review implementation"
+
+
 def test_entry_without_release_completes_on_accept(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _brief_chore_at_evaluate_goal(tmp_path, monkeypatch, capsys, BRIEF_TEXT)
     quest.main([qid, "accept"])
