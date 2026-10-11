@@ -1032,12 +1032,17 @@ ITEM_RE = re.compile(r"^- \[([ xX])\] ")
 
 
 def section_lines(text: str, heading: str) -> list[str] | None:
-    """The lines under `heading`, to the next `## ` heading; None without the heading."""
-    lines = text.splitlines()
-    start = next((i for i, l in enumerate(lines) if l.strip() == heading), None)
+    """The lines under `heading`, to the next `## ` heading; None without the heading. A heading inside a ``` fence is an example, not a
+    section, so it neither starts nor ends one."""
+    lines, fenced, open_ = text.splitlines(), False, []
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        open_.append(not fenced and not line.lstrip().startswith("```"))
+    start = next((i for i, l in enumerate(lines) if open_[i] and l.strip() == heading), None)
     if start is None:
         return None
-    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+    end = next((i for i in range(start + 1, len(lines)) if open_[i] and lines[i].startswith("## ")), len(lines))
     return lines[start + 1:end]
 
 

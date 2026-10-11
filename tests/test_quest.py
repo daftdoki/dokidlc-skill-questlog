@@ -1605,6 +1605,14 @@ def _brief_chore_at_evaluate_goal(tmp_path, monkeypatch, capsys, text):
     return qdir, d, qid
 
 
+def test_a_fenced_heading_is_not_a_section():
+    fenced = "## Goal\n\nExample:\n\n```\n## Steps\n\n- [ ] 1. An example step.\n\n## Release\n\n- [ ] 1. An example item.\n```\n\n"
+    text = RELEASE_TEXT.replace("## Goal\n\nOne thing.\n\n", fenced)
+    assert quest.checklist(text) == quest.checklist(RELEASE_TEXT)
+    assert quest.checklist(text, quest.RELEASE_HEADING) == quest.checklist(RELEASE_TEXT, quest.RELEASE_HEADING)
+    assert "Pin the plugin" in quest.section(text, quest.RELEASE_HEADING)
+
+
 def test_accept_prints_the_release_section(tmp_path, monkeypatch, capsys):
     qdir, d, qid = _brief_chore_at_evaluate_goal(tmp_path, monkeypatch, capsys, RELEASE_TEXT)
     quest.main([qid, "accept"])
