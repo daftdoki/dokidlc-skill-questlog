@@ -86,6 +86,8 @@ STATES = (
           "Run the review-implement loop into implement-review.md, then run: quest {id} next"),
     State("evaluate goal", None, False, "review-result", "result-review.md", "review.md", "evaluating the goal",
           "Run the review-result loop into result-review.md, then ask the creator: is the goal met? On their word, run: quest {id} accept", creator=True),
+    State("release", None, False, None, None, "review.md", "releasing",
+          "Do each item under ## Release in plan.md, tick it, then run: quest {id} next"),
 )
 BY_NAME = {s.name: s for s in STATES}
 # What each kind passes over, written into the history as skipped entries when the entry is shaped. The history is the record:
@@ -93,7 +95,7 @@ BY_NAME = {s.name: s for s in STATES}
 KIND_SKIPS = {
     "quest": (),
     "chore": ("research", "review research", "design", "review design", "plan", "review plan"),
-    "task": ("draft goal", "review goal", "research", "review research", "design", "review design", "plan", "review plan", "review implementation"),
+    "task": ("draft goal", "review goal", "research", "review research", "design", "review design", "plan", "review plan", "review implementation", "release"),
 }
 SHAPES = tuple(KIND_SKIPS)
 BRIEF, BRIEF_RECORD = "brief.md", "brief-review.md"       # a chore's one document, in place of goal.md and plan.md
@@ -1095,6 +1097,16 @@ def readiness_state(d: Path, fm: dict) -> tuple[int, int, int] | None:
     return readiness((d / doc).read_text()) if doc and (d / doc).is_file() else None
 
 
+def section(text: str, heading: str) -> str:
+    """The heading line and the lines under it, to the next `## ` heading; "" without the heading."""
+    lines = text.splitlines()
+    start = next((i for i, l in enumerate(lines) if l.strip() == heading), None)
+    if start is None:
+        return ""
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+    return "\n".join(lines[start:end]).rstrip()
+
+
 def release_items(d: Path, fm: dict) -> list[tuple[bool, str]]:
     """The items under `## Release` in the entry's plan.md or brief.md; [] without the document or the section."""
     doc = document_for(BY_NAME["implement"], fm)
@@ -1133,6 +1145,9 @@ def print_guidance(fm: dict, root: Path, d: Path) -> None:
     steps = checklist_state(d, fm)
     if steps:
         print(f"checklist: {steps[0]} of {steps[1]} ticked" + (f", {steps[2]} changed since accepted" if steps[2] else ""))
+    if s.name == "release":
+        items = release_items(d, fm)
+        print(f"release: {sum(1 for done, _ in items if done)} of {len(items)} ticked")
     if s.name in ("draft goal", "review goal") and fm.get("interview"):
         print(f"interview: {fm['interview']}")
     rows = readiness_state(d, fm)
@@ -1369,6 +1384,8 @@ def cmd_accept(root: Path, d: Path, fm: dict, rest: list[str]) -> None:
     line = last_pass_line(d, s, fm)
     if line:
         print(line)
+    if s.name == "evaluate goal" and "release" not in skipped(fm) and not release_items(d, fm):
+        fm = {**fm, "history": append_history(fm, "release", skipped=True, note="no Release section")}     # nothing to publish: accept completes
     enter_next(root, d, fm, s)
 
 
@@ -1391,6 +1408,8 @@ def enter_next(root: Path, d: Path, fm: dict, s: State) -> None:
     d = move_entry(quests_dir(root), d, fm)
     write_log(root)
     print(say(fm))
+    if nxt == "release":
+        print(section((d / document_for(BY_NAME[nxt], fm)).read_text(), RELEASE_HEADING))
     print_guidance(fm, root, d)
     if nxt in BY_NAME and BY_NAME[nxt].creator and s.name != "draft goal":
         notify_desktop(f"quest {fm['id']}", say(fm))     # a gate reached by the run; draft goal to review goal is the agent's own move

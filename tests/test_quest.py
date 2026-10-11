@@ -71,7 +71,7 @@ def test_page_round_trip():
 def test_successor_skips_marked_states():
     quest_fm = {"history": [{"state": "backlog", "at": STAMP}]}
     assert quest.successor(quest_fm, "review goal") == "research"
-    assert quest.successor(quest_fm, "evaluate goal") == "completed"
+    assert quest.successor(quest_fm, "evaluate goal") == "release"
     chore_fm = {"history": [{"state": "backlog", "at": STAMP}] + [{"state": n, "at": STAMP, "skipped": True} for n in OLD_CHORE_SKIPS]}
     assert quest.successor(chore_fm, "review goal") == "plan"
     assert quest.successor(chore_fm, "draft goal") == "review goal"
@@ -249,7 +249,7 @@ def test_full_quest_lifecycle(tmp_path, monkeypatch):
         quest.main([qid, "next"])
     files = {"research": "research.md", "design": "design.md", "plan": "plan.md"}
     (d / "goal.md").write_text("# Goal\n")
-    for expected in NAMES[1:]:
+    for expected in NAMES[1 : NAMES.index("evaluate goal") + 1]:      # release follows only when the document has a Release section
         _go(d, qid)
         fm = _fm(d)
         assert fm["state"] == expected and fm["history"][-1]["state"] == expected
@@ -261,7 +261,7 @@ def test_full_quest_lifecycle(tmp_path, monkeypatch):
     d = _at(qdir, qid)
     fm = _fm(d)
     assert d.parent == qdir / "completed"
-    assert fm["state"] == "completed" and len(fm["history"]) == 13 and set(fm) == {"id", "title", "kind", "state", "history"}
+    assert fm["state"] == "completed" and len(fm["history"]) == 14 and set(fm) == {"id", "title", "kind", "state", "history"}
     assert qid not in (qdir / "README.md").read_text()
     with pytest.raises(SystemExit):          # terminal
         quest.main([qid, "start"])
@@ -1568,6 +1568,49 @@ def test_checklist_reads_the_release_section_apart(tmp_path):
     assert quest.release_items(tmp_path, fm) == release
     (tmp_path / "brief.md").write_text(BRIEF_TEXT)
     assert quest.release_items(tmp_path, fm) == [] and quest.release_items(tmp_path, {"kind": "task", "history": [quest.entry(STAMP, n, skipped=True) for n in quest.KIND_SKIPS["task"]]}) == []
+
+
+def _brief_chore_at_evaluate_goal(tmp_path, monkeypatch, capsys, text):
+    """A chore with a brief of `text`, its Steps ticked, at evaluate goal."""
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    quest.main(["new", "Fix", "--chore"])
+    qdir = tmp_path / "docs" / "quests"
+    qid = quest.load_quests(qdir)[0][1]["id"]
+    quest.main([qid, "start"]); d = _at(qdir, qid)
+    (d / "brief.md").write_text(text); quest.main([qid, "next"]); quest.main([qid, "accept"])
+    (d / "brief.md").write_text(text.replace("- [ ] 1. Add", "- [x] 1. Add").replace("- [ ] 2.", "- [x] 2."))
+    quest.main([qid, "next"]); quest.main([qid, "next"])
+    assert _fm(d)["state"] == "evaluate goal"
+    capsys.readouterr()
+    return qdir, d, qid
+
+
+def test_accept_prints_the_release_section(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _brief_chore_at_evaluate_goal(tmp_path, monkeypatch, capsys, RELEASE_TEXT)
+    quest.main([qid, "accept"])
+    out = capsys.readouterr().out; d = _at(qdir, qid)
+    assert _fm(d)["state"] == "release" and d.parent == qdir / "active"
+    assert f"{qid} is at release. Do each item under ## Release in brief.md, tick it, then run: quest {qid} next" in out
+    assert "- [ ] 1. Pin the plugin in the marketplace." in out and "release: 0 of 1 ticked" in out and "gate: agent" in out
+
+
+def test_entry_without_release_completes_on_accept(tmp_path, monkeypatch, capsys):
+    qdir, d, qid = _brief_chore_at_evaluate_goal(tmp_path, monkeypatch, capsys, BRIEF_TEXT)
+    quest.main([qid, "accept"])
+    fm = _fm(_at(qdir, qid))
+    assert fm["state"] == "completed"
+    assert [(e["state"], e.get("note")) for e in fm["history"] if e.get("skipped")][-1] == ("release", "no Release section")
+
+
+def test_task_completes_on_accept(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    quest.main(["new", "Fix the typo", "--task"])
+    qdir = tmp_path / "docs" / "quests"
+    qid = quest.load_quests(qdir)[0][1]["id"]
+    quest.main([qid, "start"]); quest.main([qid, "next"]); quest.main([qid, "accept"])
+    fm = _fm(_at(qdir, qid))
+    assert fm["state"] == "completed" and "release" in quest.KIND_SKIPS["task"]
+    assert [e.get("note") for e in fm["history"] if e["state"] == "release"] == ["task"]      # skipped by its kind, once
 
 
 def test_chore_writes_one_brief_and_ticks_its_checklist(tmp_path, monkeypatch, capsys):
